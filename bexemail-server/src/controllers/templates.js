@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-
+const { logHistory } = require('../utils/historyLogger');
 // Create Template
 exports.createTemplate = async (req, res) => {
   const { template_name, category, html_content, plain_text_content } = req.body;
@@ -10,6 +10,8 @@ exports.createTemplate = async (req, res) => {
       `INSERT INTO templates (template_name, category, html_content, plain_text_content) VALUES (?, ?, ?, ?)`,
       [template_name, category || 'General', html_content || '', plain_text_content || '']
     );
+    const newTemplate = { id: result.insertId, template_name, category: category || 'General', html_content: html_content || '', plain_text_content: plain_text_content || '' };
+    await logHistory('templates', result.insertId, 'add', null, newTemplate, req.headers['x-user-role']);
     res.status(201).json({ message: 'Template created successfully', id: result.insertId });
   } catch (error) {
     console.error(error);
@@ -47,11 +49,17 @@ exports.updateTemplate = async (req, res) => {
   const { template_name, category, html_content, plain_text_content } = req.body;
 
   try {
+    const [oldRows] = await pool.query('SELECT * FROM templates WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
     const [result] = await pool.query(
       `UPDATE templates SET template_name = ?, category = ?, html_content = ?, plain_text_content = ? WHERE id = ?`,
       [template_name, category, html_content, plain_text_content, id]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Template not found' });
+    
+    const newData = { ...oldData, template_name, category, html_content, plain_text_content };
+    await logHistory('templates', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'Template updated successfully' });
   } catch (error) {
     console.error(error);
@@ -63,8 +71,15 @@ exports.updateTemplate = async (req, res) => {
 exports.deleteTemplate = async (req, res) => {
   const { id } = req.params;
   try {
+    const [oldRows] = await pool.query('SELECT * FROM templates WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
     const [result] = await pool.query('DELETE FROM templates WHERE id = ?', [id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Template not found' });
+    
+    if (oldData) {
+      await logHistory('templates', id, 'delete', oldData, null, req.headers['x-user-role']);
+    }
     res.json({ message: 'Template deleted successfully' });
   } catch (error) {
     console.error(error);

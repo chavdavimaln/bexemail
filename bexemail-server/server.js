@@ -21,6 +21,9 @@ require('./src/workers/cron');
 require('./src/workers/cleanupCron');
 require('./src/workers/worker');
 
-app.listen(PORT, () => {
+const setupDB = require('./src/config/setup');
+
+app.listen(PORT, async () => {
+  await setupDB();
   console.log(`Server running on port ${PORT}`);
 });

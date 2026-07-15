@@ -1,10 +1,10 @@
 const pool = require('../config/db');
-
+const { logHistory } = require('../utils/historyLogger');
 exports.dispatchCampaign = async (req, res) => {
   const { campaignName, subject, htmlContent, listId, senderId, isAbTest, variantBSubject, variantBHtml } = req.body;
   const userRole = req.headers['x-user-role'] || 'Campaign Manager'; // MOCK RBAC header
 
-  if (!campaignName || !subject || !htmlContent || !listId || !senderId) {
+  if (!campaignName || !subject || !htmlContent || !listId) {
     return res.status(400).json({ error: 'Missing required campaign fields' });
   }
 
@@ -67,6 +67,8 @@ exports.dispatchCampaign = async (req, res) => {
     }
 
     await connection.commit();
+    const newCampaign = { id: campaignId, name: campaignName, subject, html_content: htmlContent, list_id: listId, sender_id: senderId, status: initialStatus, is_ab_test: isAbTest ? 1 : 0, variant_b_subject: variantBSubject || null, variant_b_html: variantBHtml || null };
+    await logHistory('campaigns', campaignId, 'add', null, newCampaign, req.headers['x-user-role']);
 
     res.status(200).json({ 
       message: initialStatus === 'sending' ? 'Campaign dispatched successfully' : 'Campaign submitted for review', 
@@ -110,12 +112,18 @@ exports.updateCampaign = async (req, res) => {
   const { campaignName, subject, htmlContent, listId, senderId, isAbTest, variantBSubject, variantBHtml } = req.body;
   
   try {
+    const [oldRows] = await pool.query('SELECT * FROM campaigns WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
     await pool.query(
       `UPDATE campaigns 
        SET name = ?, subject = ?, html_content = ?, list_id = ?, sender_id = ?, is_ab_test = ?, variant_b_subject = ?, variant_b_html = ?
        WHERE id = ?`,
       [campaignName, subject, htmlContent, listId, senderId, isAbTest ? 1 : 0, variantBSubject || null, variantBHtml || null, id]
     );
+    
+    const newData = { ...oldData, name: campaignName, subject, html_content: htmlContent, list_id: listId, sender_id: senderId, is_ab_test: isAbTest ? 1 : 0, variant_b_subject: variantBSubject || null, variant_b_html: variantBHtml || null };
+    await logHistory('campaigns', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'Campaign updated successfully' });
   } catch (error) {
     console.error('Update campaign error:', error);
@@ -190,7 +198,14 @@ exports.approveCampaign = async (req, res) => {
 exports.deleteCampaign = async (req, res) => {
   const { id } = req.params;
   try {
+    const [oldRows] = await pool.query('SELECT * FROM campaigns WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
     await pool.query('DELETE FROM campaigns WHERE id = ?', [id]);
+    
+    if (oldData) {
+      await logHistory('campaigns', id, 'delete', oldData, null, req.headers['x-user-role']);
+    }
     res.json({ message: 'Campaign deleted successfully' });
   } catch (error) {
     console.error('Delete campaign error:', error);

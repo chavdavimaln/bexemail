@@ -25,7 +25,8 @@ module.exports = {
   checkRole,
   ROLES: {
     SUPER_ADMIN: 'Super Admin',
-    CAMPAIGN_MANAGER: 'Campaign Manager',
-    AUDIENCE_MANAGER: 'Audience Manager'
+    SUB_ADMIN: 'Sub Admin',
+    USER: 'User',
+    SUBSCRIBER: 'Subscriber'
   }
 };

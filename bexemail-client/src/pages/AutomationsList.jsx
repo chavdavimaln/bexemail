@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Workflow, Plus, Power, PowerOff } from 'lucide-react';
+import { Workflow, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 
 const AutomationsList = () => {
   const [automations, setAutomations] = useState([]);
@@ -29,6 +29,17 @@ const AutomationsList = () => {
       fetchAutomations();
     } catch (error) {
       console.error('Error toggling status:', error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this automation?')) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/automations/${id}`);
+      fetchAutomations();
+    } catch (error) {
+      console.error('Error deleting automation:', error);
+      alert('Failed to delete automation');
     }
   };
 
@@ -76,13 +87,20 @@ const AutomationsList = () => {
                     {auto.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-right">
+                <td className="px-6 py-4 text-right space-x-3">
                   <button 
                     onClick={() => toggleStatus(auto.id, auto.status)}
                     className="text-gray-400 hover:text-gray-900 transition-colors"
                     title={auto.status === 'active' ? 'Deactivate' : 'Activate'}
                   >
                     {auto.status === 'active' ? <PowerOff size={20} className="text-red-500"/> : <Power size={20} className="text-green-500"/>}
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(auto.id)}
+                    className="text-gray-400 hover:text-red-600 transition-colors"
+                    title="Delete Automation"
+                  >
+                    <Trash2 size={20} />
                   </button>
                 </td>
               </tr>

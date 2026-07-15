@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-
+const { logHistory } = require('../utils/historyLogger');
 exports.getSenders = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM senders ORDER BY is_default DESC, name ASC');
@@ -33,11 +33,13 @@ exports.createSender = async (req, res) => {
     );
 
     await connection.commit();
-    res.status(201).json({ id: result.insertId, name, email, is_default: is_default || false });
+    const newSender = { id: result.insertId, name, email, is_default: is_default || false };
+    await logHistory('senders', result.insertId, 'add', null, newSender, req.headers['x-user-role']);
+    res.status(201).json(newSender);
   } catch (error) {
     if (connection) await connection.rollback();
     console.error('Create sender error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   } finally {
     if (connection) connection.release();
   }
@@ -56,12 +58,17 @@ exports.updateSender = async (req, res) => {
       await connection.query('UPDATE senders SET is_default = FALSE WHERE id != ?', [id]);
     }
 
+    const [oldRows] = await connection.query('SELECT * FROM senders WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+
     await connection.query(
       'UPDATE senders SET name = ?, email = ?, is_default = ? WHERE id = ?',
       [name, email, is_default, id]
     );
 
     await connection.commit();
+    const newData = { id, name, email, is_default };
+    await logHistory('senders', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'Sender updated successfully' });
   } catch (error) {
     if (connection) await connection.rollback();
@@ -75,7 +82,14 @@ exports.updateSender = async (req, res) => {
 exports.deleteSender = async (req, res) => {
   const { id } = req.params;
   try {
+    const [oldRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
     await pool.query('DELETE FROM senders WHERE id = ?', [id]);
+    
+    if (oldData) {
+      await logHistory('senders', id, 'delete', oldData, null, req.headers['x-user-role']);
+    }
     res.json({ message: 'Sender deleted successfully' });
   } catch (error) {
     console.error('Delete sender error:', error);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload, Settings2 } from 'lucide-react';
 
 const Contacts = () => {
   const [subscribers, setSubscribers] = useState([]);
@@ -230,7 +231,12 @@ const Contacts = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Target Lists *</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Target Lists *</label>
+                    <Link to="/lists" className="text-xs text-primary-600 hover:text-primary-700 flex items-center">
+                      <Settings2 size={14} className="mr-1"/> Manage Lists
+                    </Link>
+                  </div>
                   <div className="space-y-2 max-h-32 overflow-y-auto p-2.5 border border-gray-300 rounded-xl bg-gray-50/50">
                     {lists.map(list => (
                       <label key={list.id} className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 p-1.5 rounded transition-colors">
@@ -271,7 +277,12 @@ const Contacts = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Target Lists *</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Target Lists *</label>
+                    <button type="button" onClick={() => setShowListModal(true)} className="text-xs text-primary-600 hover:text-primary-700 flex items-center">
+                      <Settings2 size={14} className="mr-1"/> Manage Lists
+                    </button>
+                  </div>
                   <div className="space-y-2 max-h-32 overflow-y-auto p-2.5 border border-gray-300 rounded-xl bg-gray-50/50">
                     {lists.map(list => (
                       <label key={list.id} className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 p-1.5 rounded transition-colors">

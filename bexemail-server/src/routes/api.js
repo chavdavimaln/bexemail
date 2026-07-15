@@ -22,10 +22,12 @@ router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN]), sendersController.upd
 router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN]), sendersController.deleteSender);
 
 // Lists
-router.post('/lists', listsController.createList);
+router.post('/lists', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.createList);
 router.get('/lists', listsController.getLists);
-router.post('/lists/assign', listsController.assignSubscribers);
-router.put('/lists/sync', listsController.syncSubscriberLists);
+router.put('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.updateList);
+router.delete('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.deleteList);
+router.post('/lists/assign', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.assignSubscribers);
+router.post('/lists/sync', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.syncSubscriberLists);
 
 // Campaigns (Require Campaign Manager or Super Admin)
 router.get('/campaigns', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.getCampaigns);
@@ -58,11 +60,34 @@ const automationsController = require('../controllers/automations');
 router.post('/automations', automationsController.createAutomation);
 router.get('/automations', automationsController.getAutomations);
 router.put('/automations/:id/status', automationsController.updateAutomationStatus);
+router.delete('/automations/:id', automationsController.deleteAutomation);
 
 // API Keys
 const apiKeysController = require('../controllers/apiKeys');
 router.post('/api-keys', checkRole([ROLES.SUPER_ADMIN]), apiKeysController.generateKey);
 router.get('/api-keys', checkRole([ROLES.SUPER_ADMIN]), apiKeysController.getKeys);
 router.put('/api-keys/:id/revoke', checkRole([ROLES.SUPER_ADMIN]), apiKeysController.revokeKey);
+
+// History Routes
+const historyController = require('../controllers/history');
+router.get('/history', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), historyController.getHistory);
+router.post('/history/:id/restore', checkRole([ROLES.SUPER_ADMIN]), historyController.restoreHistory);
+router.post('/history/:id/restore-edited', checkRole([ROLES.SUPER_ADMIN]), historyController.restoreEditedHistory);
+router.get('/history/download', checkRole([ROLES.SUPER_ADMIN]), historyController.downloadHistory);
+
+// External Integrations (RBAC protected)
+const integrationsController = require('../controllers/integrations');
+router.get('/integrations', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), integrationsController.getIntegrations);
+router.post('/integrations', checkRole([ROLES.SUPER_ADMIN]), integrationsController.createIntegration);
+router.put('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsController.updateIntegration);
+router.delete('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsController.deleteIntegration);
+router.post('/integrations/:id/sync', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), integrationsController.syncIntegration);
+
+// Admin Users (RBAC protected - Super Admin only)
+const adminsController = require('../controllers/admins');
+router.get('/admins', checkRole([ROLES.SUPER_ADMIN]), adminsController.getAdmins);
+router.post('/admins', checkRole([ROLES.SUPER_ADMIN]), adminsController.createAdmin);
+router.put('/admins/:id', checkRole([ROLES.SUPER_ADMIN]), adminsController.updateAdmin);
+router.delete('/admins/:id', checkRole([ROLES.SUPER_ADMIN]), adminsController.deleteAdmin);
 
 module.exports = router;

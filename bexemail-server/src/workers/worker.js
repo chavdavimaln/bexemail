@@ -26,7 +26,7 @@ async function processQueue() {
        JOIN subscribers s ON q.recipient_id = s.id
        LEFT JOIN senders snd ON c.sender_id = snd.id
        WHERE q.status = 'pending' 
-       AND c.status = 'sending'
+       AND c.status IN ('sending', 'scheduled')
        AND (c.scheduled_at IS NULL OR c.scheduled_at <= NOW())
        ORDER BY q.created_at ASC
        LIMIT 1 FOR UPDATE`
@@ -41,8 +41,12 @@ async function processQueue() {
 
     try {
       // Send mail
+      const senderEmail = job.sender_email || process.env.SMTP_FROM;
+      const senderName = job.sender_name || 'BexEmail';
+      
       await transporter.sendMail({
-        from: `"${job.sender_name || 'BexEmail'}" <${job.sender_email || process.env.SMTP_FROM}>`,
+        from: `"${senderName}" <${senderEmail}>`,
+        replyTo: `"${senderName}" <${senderEmail}>`,
         to: job.email,
         subject: job.subject,
         html: job.html_content // In a real app, you might replace placeholders here

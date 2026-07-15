@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -10,9 +10,11 @@ const Sidebar = () => {
     { name: 'Automations', path: '/automations', icon: <Workflow size={20} /> },
     { name: 'Integrations', path: '/integrations', icon: <Code size={20} /> },
     { name: 'Contacts', path: '/contacts', icon: <Users size={20} /> },
+    { name: 'Target Lists', path: '/lists', icon: <ListIcon size={20} /> },
     { name: 'Templates', path: '/templates', icon: <LayoutTemplate size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
     { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
+    { name: 'History Logs', path: '/history', icon: <History size={20} /> },
     { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
   ];
 

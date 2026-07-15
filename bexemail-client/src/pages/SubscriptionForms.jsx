@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Code, Copy, Layout, CheckCircle2 } from 'lucide-react';
 
 const SubscriptionForms = () => {
-  const [listId, setListId] = useState('1');
+  const [listId, setListId] = useState('');
   const [copied, setCopied] = useState(false);
+  const [lists, setLists] = useState([]);
+
+  useEffect(() => {
+    const fetchLists = async () => {
+      try {
+        const res = await axios.get('http://localhost:5000/api/lists');
+        const activeLists = res.data || [];
+        setLists(activeLists);
+        if (activeLists.length > 0) {
+          setListId(activeLists[0].id.toString());
+        }
+      } catch (error) {
+        console.error('Failed to fetch lists:', error);
+      }
+    };
+    fetchLists();
+  }, []);
 
   const embedCode = `<form action="http://localhost:5000/api/webhooks/subscribe" method="POST" target="_blank" style="max-w-md mx-auto p-4 border rounded shadow-sm font-sans">
   <h3 style="margin-top:0;">Subscribe to our Newsletter</h3>
@@ -52,9 +70,10 @@ const SubscriptionForms = () => {
                   onChange={(e) => setListId(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 >
-                  <option value="1">All Subscribers (Default)</option>
-                  <option value="2">VIP Customers</option>
-                  <option value="3">Newsletter</option>
+                  {lists.map(list => (
+                    <option key={list.id} value={list.id}>{list.name}</option>
+                  ))}
+                  {lists.length === 0 && <option value="">No lists available</option>}
                 </select>
               </div>
               <p className="text-sm text-gray-500">

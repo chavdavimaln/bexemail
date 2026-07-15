@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logHistory } = require('../utils/historyLogger');
 
 // Create or Import Subscriber
 exports.createSubscriber = async (req, res) => {
@@ -90,10 +91,17 @@ exports.deleteSubscriber = async (req, res) => {
   const { id } = req.params;
 
   try {
+    const [oldRows] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+
     const [result] = await pool.query('DELETE FROM subscribers WHERE id = ?', [id]);
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Subscriber not found' });
+    }
+    
+    if (oldData) {
+      await logHistory('subscribers', id, 'delete', oldData, null, req.headers['x-user-role']);
     }
     
     res.json({ message: 'Subscriber deleted successfully' });

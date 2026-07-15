@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logHistory } = require('../utils/historyLogger');
 
 // Create a new List
 exports.createList = async (req, res) => {
@@ -10,18 +11,63 @@ exports.createList = async (req, res) => {
       `INSERT INTO lists (name, description) VALUES (?, ?)`,
       [name, description || null]
     );
-    res.status(201).json({ message: 'List created successfully', id: result.insertId });
+    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0 };
+    await logHistory('lists', result.insertId, 'add', null, newList, req.headers['x-user-role']);
+    res.status(201).json({ message: 'List created successfully', id: result.insertId, ...newList });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Database error' });
   }
 };
 
-// Get all Lists
+// Get all active Lists
 exports.getLists = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM lists ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM lists WHERE is_deleted = FALSE ORDER BY created_at DESC');
     res.json(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
+// Update a List
+exports.updateList = async (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+
+  try {
+    const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
+    await pool.query(
+      'UPDATE lists SET name = ?, description = ? WHERE id = ?',
+      [name, description || null, id]
+    );
+    
+    const newData = { ...oldData, name, description: description || null };
+    await logHistory('lists', id, 'edit', oldData, newData, req.headers['x-user-role']);
+    res.json({ message: 'List updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
+// Soft Delete a List
+exports.deleteList = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
+    const oldData = oldRows[0];
+    
+    await pool.query('UPDATE lists SET is_deleted = TRUE WHERE id = ?', [id]);
+    
+    if (oldData) {
+      await logHistory('lists', id, 'delete', oldData, null, req.headers['x-user-role']);
+    }
+    res.json({ message: 'List deleted successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Database error' });

@@ -9,8 +9,8 @@ const CampaignWizard = () => {
   const [success, setSuccess] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [senders, setSenders] = useState([]);
-  const [showAddSender, setShowAddSender] = useState(false);
-  const [newSender, setNewSender] = useState({ name: '', email: '' });
+  const [senderMode, setSenderMode] = useState('smtp'); // 'smtp', 'profile', 'custom'
+  const [customSender, setCustomSender] = useState({ name: '', email: '' });
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,22 +94,6 @@ const CampaignWizard = () => {
     fetchCampaignToEdit();
   }, [editId]);
 
-  const handleAddSender = async () => {
-    if (!newSender.name || !newSender.email) return;
-    try {
-      const response = await axios.post('http://localhost:5000/api/senders', newSender, {
-        headers: { 'x-user-role': 'Super Admin' }
-      });
-      const addedSender = response.data;
-      setSenders([...senders, addedSender]);
-      setFormData(prev => ({ ...prev, senderId: addedSender.id.toString() }));
-      setShowAddSender(false);
-      setNewSender({ name: '', email: '' });
-    } catch (error) {
-      alert('Failed to add sender');
-    }
-  };
-
   const handleNext = () => setStep(prev => Math.min(prev + 1, 5));
   const handleBack = () => setStep(prev => Math.max(prev - 1, 1));
 
@@ -120,8 +104,13 @@ const CampaignWizard = () => {
       setStep(1);
       return;
     }
-    if (!formData.senderId) {
-      alert('Sender Details are required. Please select a sender.');
+    if (senderMode === 'profile' && !formData.senderId) {
+      alert('Sender Details are required. Please select a sender profile.');
+      setStep(2);
+      return;
+    }
+    if (senderMode === 'custom' && (!customSender.name || !customSender.email)) {
+      alert('Please provide both name and email for the custom sender.');
       setStep(2);
       return;
     }
@@ -138,15 +127,32 @@ const CampaignWizard = () => {
 
     setLoading(true);
     try {
+      let finalSenderId = formData.senderId;
+      if (senderMode === 'smtp') {
+        finalSenderId = null;
+      } else if (senderMode === 'custom') {
+        // Automatically save the custom sender so it can be reused later
+        const response = await axios.post('http://localhost:5000/api/senders', customSender, {
+          headers: { 'x-user-role': 'Super Admin' }
+        });
+        finalSenderId = response.data.id.toString();
+        // Update local state in case they go back and forth
+        setSenders([...senders, response.data]);
+        updateForm('senderId', finalSenderId);
+        setSenderMode('profile');
+      }
+
+      const payload = { ...formData, senderId: finalSenderId };
       const headers = { 'x-user-role': userRole };
+      
       if (isEditing) {
-        await axios.put(`http://localhost:5000/api/campaigns/${editId}`, formData, { headers });
+        await axios.put(`http://localhost:5000/api/campaigns/${editId}`, payload, { headers });
         await axios.put(`http://localhost:5000/api/campaigns/${editId}/status`, { status: 'submitted_for_review' }, { headers });
         if (userRole === 'Super Admin') {
           await axios.put(`http://localhost:5000/api/campaigns/${editId}/approve`, {}, { headers });
         }
       } else {
-        await axios.post('http://localhost:5000/api/campaigns/dispatch', formData, { headers });
+        await axios.post('http://localhost:5000/api/campaigns/dispatch', payload, { headers });
       }
       setSuccess(true);
     } catch (error) {
@@ -284,71 +290,92 @@ const CampaignWizard = () => {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Sender Details</h3>
             
-            {!showAddSender ? (
-              <div className="space-y-4">
+            <div className="space-y-4">
+              <label className="flex items-start cursor-pointer p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="senderMode"
+                  value="smtp"
+                  checked={senderMode === 'smtp'}
+                  onChange={() => setSenderMode('smtp')}
+                  className="mt-1 mr-3 text-primary-600 focus:ring-primary-500"
+                />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Sender Profile</label>
-                  <select 
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.senderId}
-                    onChange={e => updateForm('senderId', e.target.value)}
-                  >
-                    <option value="">-- Choose a Sender --</option>
-                    {senders.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} &lt;{s.email}&gt; {s.is_default ? '(Default)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="block font-medium text-gray-900">System Default (SMTP)</span>
+                  <span className="block text-sm text-gray-500 mt-1">Use the global configured SMTP email address to send this campaign.</span>
                 </div>
-                <div>
-                  <button 
-                    onClick={() => setShowAddSender(true)}
-                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                  >
-                    + Add New Sender Profile
-                  </button>
+              </label>
+
+              <label className="flex items-start cursor-pointer p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="senderMode"
+                  value="profile"
+                  checked={senderMode === 'profile'}
+                  onChange={() => setSenderMode('profile')}
+                  className="mt-1 mr-3 text-primary-600 focus:ring-primary-500"
+                />
+                <div className="w-full">
+                  <span className="block font-medium text-gray-900">Select a Sender Profile</span>
+                  <span className="block text-sm text-gray-500 mt-1 mb-3">Choose from your pre-configured sender identities.</span>
+                  
+                  {senderMode === 'profile' && (
+                    <select 
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                      value={formData.senderId}
+                      onChange={e => updateForm('senderId', e.target.value)}
+                    >
+                      <option value="">-- Choose a Sender --</option>
+                      {senders.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} &lt;{s.email}&gt; {s.is_default ? '(Default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
-                <h4 className="text-sm font-semibold text-gray-900">Add New Sender Profile</h4>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. BexEmail Team"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={newSender.name}
-                    onChange={e => setNewSender({...newSender, name: e.target.value})}
-                  />
+              </label>
+
+              <label className="flex items-start cursor-pointer p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="senderMode"
+                  value="custom"
+                  checked={senderMode === 'custom'}
+                  onChange={() => setSenderMode('custom')}
+                  className="mt-1 mr-3 text-primary-600 focus:ring-primary-500"
+                />
+                <div className="w-full">
+                  <span className="block font-medium text-gray-900">Use Custom Email Address</span>
+                  <span className="block text-sm text-gray-500 mt-1 mb-3">Send this campaign from a custom name and email. (This will be saved as a profile for future use)</span>
+                  
+                  {senderMode === 'custom' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">From Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. BexEmail Team"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                          value={customSender.name}
+                          onChange={e => setCustomSender({...customSender, name: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">From Email</label>
+                        <input 
+                          type="email" 
+                          placeholder="e.g. hello@example.com"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                          value={customSender.email}
+                          onChange={e => setCustomSender({...customSender, email: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
-                  <input 
-                    type="email" 
-                    placeholder="e.g. hello@bexemail.com"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={newSender.email}
-                    onChange={e => setNewSender({...newSender, email: e.target.value})}
-                  />
-                </div>
-                <div className="flex space-x-3 pt-2">
-                  <button 
-                    onClick={handleAddSender}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium text-sm transition-colors"
-                  >
-                    Save & Use Sender
-                  </button>
-                  <button 
-                    onClick={() => setShowAddSender(false)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium text-sm transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+              </label>
+            </div>
           </div>
         )}
 
