@@ -16,14 +16,25 @@ import AutomationBuilder from './pages/AutomationBuilder';
 import SubscriptionForms from './pages/SubscriptionForms';
 import DeveloperAPI from './pages/DeveloperAPI';
 import HistoryLogs from './pages/HistoryLogs';
+import Profile from './pages/Profile';
+import Login from './pages/Login';
 import { NotificationProvider } from './components/NotificationContext';
+
+const ProtectedRoute = ({ children }) => {
+  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
 
 function App() {
   return (
     <NotificationProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="campaigns" element={<CampaignsList />} />
             <Route path="campaigns/new" element={<CampaignWizard />} />
@@ -39,6 +50,7 @@ function App() {
             <Route path="integrations" element={<SubscriptionForms />} />
             <Route path="developer" element={<DeveloperAPI />} />
             <Route path="history" element={<HistoryLogs />} />
+            <Route path="profile" element={<Profile />} />
             {/* Add more routes here later */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
