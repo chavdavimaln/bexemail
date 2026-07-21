@@ -2,16 +2,26 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn } from 'lucide-react';
 
+import axios from 'axios';
+
 const Login = () => {
   const [email, setEmail] = useState('vimal@bexcodeservices.com');
   const [password, setPassword] = useState('password123');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Simulate API call and login success
-    localStorage.setItem('isAuthenticated', 'true');
-    navigate('/');
+    setError('');
+    try {
+      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to login');
+    }
   };
 
   return (
@@ -32,6 +42,11 @@ const Login = () => {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl shadow-gray-200/50 sm:rounded-2xl sm:px-10 border border-gray-100">
           <form className="space-y-6" onSubmit={handleLogin}>
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm border border-red-100">
+                {error}
+              </div>
+            )}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address

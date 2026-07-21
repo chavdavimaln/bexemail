@@ -1,4 +1,5 @@
 const pool = require('./db');
+const setupAutomationDB = require('./setupAutomations');
 
 async function setupDB() {
   try {
@@ -45,7 +46,9 @@ async function setupDB() {
       )
     `);
 
-    console.log('Database setup complete (senders, data_history).');
+    await setupAutomationDB();
+
+    console.log('Database setup complete (core and automation tables).');
   } catch (error) {
     console.error('Database setup failed:', error);
   }

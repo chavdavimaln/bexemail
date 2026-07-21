@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Lock, Phone, Save, Camera } from 'lucide-react';
+import axios from 'axios';
 
 const Profile = () => {
   const [profileData, setProfileData] = useState({
-    firstName: 'Admin',
-    lastName: 'User',
-    email: 'vimal@bexcodeservices.com',
-    phone: '+1 234 567 8900',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
     avatar: null
   });
 
@@ -16,21 +17,49 @@ const Profile = () => {
     confirm: ''
   });
 
-  const handleProfileUpdate = (e) => {
-    e.preventDefault();
-    // Simulate API call
-    alert('Profile updated successfully!');
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/auth/me');
+      setProfileData(prev => ({
+        ...prev,
+        email: res.data.email,
+        firstName: res.data.role // Mock mapping for now
+      }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handlePasswordUpdate = (e) => {
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put('http://localhost:5000/api/auth/profile', { email: profileData.email });
+      alert('Profile updated successfully!');
+    } catch (err) {
+      alert('Failed to update profile.');
+    }
+  };
+
+  const handlePasswordUpdate = async (e) => {
     e.preventDefault();
     if (passwords.new !== passwords.confirm) {
       alert('New passwords do not match!');
       return;
     }
-    // Simulate API call
-    alert('Password updated successfully!');
-    setPasswords({ current: '', new: '', confirm: '' });
+    try {
+      await axios.put('http://localhost:5000/api/auth/password', {
+        currentPassword: passwords.current,
+        newPassword: passwords.new
+      });
+      alert('Password updated successfully!');
+      setPasswords({ current: '', new: '', confirm: '' });
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update password.');
+    }
   };
 
   const handleForgotPassword = () => {

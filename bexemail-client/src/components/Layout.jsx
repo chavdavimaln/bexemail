@@ -1,14 +1,26 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
+  const [openDropdowns, setOpenDropdowns] = React.useState({ automations: location.pathname.startsWith('/automations') });
+
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'Campaigns', path: '/campaigns', icon: <Megaphone size={20} /> },
-    { name: 'Automations', path: '/automations', icon: <Workflow size={20} /> },
+    { 
+      name: 'Automations', 
+      id: 'automations',
+      icon: <Workflow size={20} />,
+      subItems: [
+        { name: 'Dashboard', path: '/automations' },
+        { name: 'All Automations', path: '/automations/list' },
+        { name: 'Templates', path: '/automations/templates' },
+      ]
+    },
     { name: 'Integrations', path: '/integrations', icon: <Code size={20} /> },
+    { name: 'Forms', path: '/forms', icon: <Code size={20} /> },
     { name: 'Contacts', path: '/contacts', icon: <Users size={20} /> },
     { name: 'Target Lists', path: '/lists', icon: <ListIcon size={20} /> },
     { name: 'Templates', path: '/templates', icon: <LayoutTemplate size={20} /> },
@@ -25,6 +37,48 @@ const Sidebar = () => {
       </div>
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {navItems.map((item) => {
+          if (item.subItems) {
+            const isDropdownOpen = openDropdowns[item.id];
+            const isAnyChildActive = location.pathname.startsWith('/automations');
+            
+            return (
+              <div key={item.name} className="space-y-1">
+                <button
+                  onClick={() => setOpenDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isAnyChildActive && !isDropdownOpen ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <span className={`mr-3 ${isAnyChildActive && !isDropdownOpen ? 'text-primary-600' : 'text-gray-400'}`}>
+                      {item.icon}
+                    </span>
+                    {item.name}
+                  </div>
+                  {isDropdownOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+                {isDropdownOpen && (
+                  <div className="pl-10 pr-2 space-y-1">
+                    {item.subItems.map(sub => {
+                      const isSubActive = location.pathname === sub.path || (sub.path !== '/automations' && location.pathname.startsWith(sub.path));
+                      return (
+                        <Link
+                          key={sub.name}
+                          to={sub.path}
+                          className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isSubActive ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {sub.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           const isActive = location.pathname === item.path;
           return (
             <Link

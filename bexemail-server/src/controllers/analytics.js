@@ -70,7 +70,14 @@ exports.getCampaignAnalytics = async (req, res) => {
     // Unique Opens
     const [openStats] = await pool.query(
       `SELECT COUNT(DISTINCT subscriber_id) as unique_opens, COUNT(*) as total_opens 
-       FROM campaign_events WHERE campaign_id = ? AND event_type = 'open'`,
+       FROM campaign_opens WHERE campaign_id = ?`,
+      [campaignId]
+    );
+
+    // Clicks
+    const [clickStats] = await pool.query(
+      `SELECT COUNT(DISTINCT subscriber_id) as unique_clicks, COUNT(*) as total_clicks 
+       FROM campaign_clicks WHERE campaign_id = ?`,
       [campaignId]
     );
 
@@ -81,7 +88,10 @@ exports.getCampaignAnalytics = async (req, res) => {
       failed,
       unique_opens: openStats[0].unique_opens,
       total_opens: openStats[0].total_opens,
-      open_rate: sent > 0 ? ((openStats[0].unique_opens / sent) * 100).toFixed(2) : 0
+      unique_clicks: clickStats[0].unique_clicks,
+      total_clicks: clickStats[0].total_clicks,
+      open_rate: sent > 0 ? ((openStats[0].unique_opens / sent) * 100).toFixed(2) : 0,
+      click_rate: sent > 0 ? ((clickStats[0].unique_clicks / sent) * 100).toFixed(2) : 0
     });
 
   } catch (error) {
@@ -109,15 +119,24 @@ exports.getDashboardStats = async (req, res) => {
     );
 
     // 3. Campaign Performance (Global Opens/Clicks)
-    // For a real dashboard, we'd group this by date. We'll simulate timeline for Recharts.
+    // We combine campaign_opens and campaign_clicks by date
     const [timelineStats] = await pool.query(
       `SELECT 
-        DATE(created_at) as date,
-        SUM(CASE WHEN event_type = 'open' THEN 1 ELSE 0 END) as opens,
-        SUM(CASE WHEN event_type = 'click' THEN 1 ELSE 0 END) as clicks
-       FROM campaign_events
-       GROUP BY DATE(created_at)
-       ORDER BY date DESC
+        date_series.d as date,
+        COALESCE(o.opens, 0) as opens,
+        COALESCE(c.clicks, 0) as clicks
+       FROM (
+         SELECT DATE(NOW() - INTERVAL n DAY) as d FROM (
+           SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
+         ) days
+       ) date_series
+       LEFT JOIN (
+         SELECT DATE(created_at) as d, COUNT(*) as opens FROM campaign_opens GROUP BY DATE(created_at)
+       ) o ON date_series.d = o.d
+       LEFT JOIN (
+         SELECT DATE(created_at) as d, COUNT(*) as clicks FROM campaign_clicks GROUP BY DATE(created_at)
+       ) c ON date_series.d = c.d
+       ORDER BY date_series.d DESC
        LIMIT 7`
     );
 

@@ -3,13 +3,13 @@ const { logHistory } = require('../utils/historyLogger');
 
 // Create Automation
 exports.createAutomation = async (req, res) => {
-  const { name, trigger_type, workflow_json } = req.body;
+  const { name, trigger_type, workflow_json, workflow_graph } = req.body;
   if (!name || !trigger_type) return res.status(400).json({ error: 'Name and trigger_type are required' });
 
   try {
     const [result] = await pool.query(
       `INSERT INTO automations (name, trigger_type, workflow_json) VALUES (?, ?, ?)`,
-      [name, trigger_type, JSON.stringify(workflow_json || {})]
+      [name, trigger_type, JSON.stringify(workflow_graph || workflow_json || { nodes: [], edges: [] })]
     );
     res.status(201).json({ message: 'Automation created successfully', id: result.insertId });
   } catch (error) {

@@ -11,14 +11,44 @@ import TargetLists from './pages/TargetLists';
 import CampaignReport from './pages/CampaignReport';
 import PreferenceCenter from './pages/PreferenceCenter';
 import Settings from './pages/Settings';
-import AutomationsList from './pages/AutomationsList';
-import AutomationBuilder from './pages/AutomationBuilder';
 import SubscriptionForms from './pages/SubscriptionForms';
+import SubscriberForms from './modules/forms/SubscriberForms';
 import DeveloperAPI from './pages/DeveloperAPI';
 import HistoryLogs from './pages/HistoryLogs';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
+import { AutomationProvider, AutomationRoutes } from './modules/automations';
+import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
 import { NotificationProvider } from './components/NotificationContext';
+import axios from 'axios';
+
+// Keep relative API requests on the API server while running the Vite client.
+// In production, Nginx proxies /api requests on the current origin.
+axios.defaults.baseURL = import.meta.env.VITE_API_URL
+  || (import.meta.env.DEV ? 'http://localhost:5000' : undefined);
+
+// Global Axios Interceptor for JWT
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+axios.interceptors.response.use((response) => {
+  return response;
+}, (error) => {
+  if (error.response && error.response.status === 401) {
+    // Optionally trigger a logout if token expires
+    // localStorage.removeItem('isAuthenticated');
+    // localStorage.removeItem('token');
+    // window.location.href = '/login';
+  }
+  return Promise.reject(error);
+});
 
 const ProtectedRoute = ({ children }) => {
   const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
@@ -38,6 +68,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="campaigns" element={<CampaignsList />} />
             <Route path="campaigns/new" element={<CampaignWizard />} />
+            <Route path="create-campaign" element={<CampaignWizard />} />
             <Route path="contacts" element={<Contacts />} />
             <Route path="lists" element={<TargetLists />} />
             <Route path="templates" element={<TemplatesList />} />
@@ -45,9 +76,15 @@ function App() {
             <Route path="templates/:id/edit" element={<TemplateEditor />} />
             <Route path="reports/:id" element={<CampaignReport />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="automations" element={<AutomationsList />} />
-            <Route path="automations/new" element={<AutomationBuilder />} />
+            <Route path="automations/*" element={
+              <AutomationErrorBoundary>
+                <AutomationProvider>
+                  <AutomationRoutes />
+                </AutomationProvider>
+              </AutomationErrorBoundary>
+            } />
             <Route path="integrations" element={<SubscriptionForms />} />
+            <Route path="forms" element={<SubscriberForms />} />
             <Route path="developer" element={<DeveloperAPI />} />
             <Route path="history" element={<HistoryLogs />} />
             <Route path="profile" element={<Profile />} />

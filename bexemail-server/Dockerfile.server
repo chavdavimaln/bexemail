@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────
+# Stage 1: Build
+# ─────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY . .
+
+# ─────────────────────────────────────────────────
+# Stage 2: Production Image (API Server only)
+# ─────────────────────────────────────────────────
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy only node_modules and source from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/server.js ./server.js
+COPY package*.json ./
+
+# Expose API port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:5000/ || exit 1
+
+CMD ["node", "server.js"]

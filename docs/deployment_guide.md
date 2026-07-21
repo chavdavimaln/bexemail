@@ -56,13 +56,13 @@ Before starting, ensure your production server (e.g., VPS on DigitalOcean, AWS, 
 
 3. Initialize the database schema:
    ```bash
-   node index.js
+   node server.js
    # Note: Wait for the "Server running on port 5000" and "Setup Complete" logs, then press Ctrl+C to stop it.
    ```
 
 4. Start the server using PM2 (for production):
    ```bash
-   pm2 start index.js --name "bexemail-api"
+   pm2 start server.js --name "bexemail-api"
    pm2 save
    ```
 

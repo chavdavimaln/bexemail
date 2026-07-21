@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
+const webhookController = require('../controllers/webhookController');
 
 // External Webhook to Subscribe User
 // POST /api/webhooks/subscribe
@@ -45,6 +46,29 @@ router.post('/subscribe', async (req, res) => {
     }
 
     await connection.commit();
+    
+    // Trigger automations
+    try {
+      const { triggerAutomations } = require('../utils/automationTrigger');
+      if (list_id) {
+        await triggerAutomations(subscriberId, 'Subscriber joins list', { listId: list_id });
+      }
+      
+      const formType = req.body.form_type || 'Signup form submitted';
+      await triggerAutomations(subscriberId, formType, { listId: list_id });
+
+      for (const [key, value] of Object.entries(req.body)) {
+        if (!['email', 'redirectUrl', 'form_type', 'list_id', 'listId'].includes(key) && value) {
+          await triggerAutomations(subscriberId, 'Specific form field selected', {
+            listId: list_id,
+            fieldName: key,
+            fieldValue: String(value)
+          });
+        }
+      }
+    } catch (triggerError) {
+      console.error('Webhook automation trigger failed:', triggerError);
+    }
     
     // Check if it's a form submission expecting a redirect
     if (req.headers.accept && req.headers.accept.includes('text/html')) {
@@ -108,6 +132,25 @@ router.post('/email-events', async (req, res) => {
             `INSERT IGNORE INTO campaign_events (campaign_id, subscriber_id, event_type) VALUES (?, ?, 'open')`,
             [campaignId, subscriberId]
           );
+          
+          // Resume any automations waiting for an open
+          const [waiting] = await connection.query(
+              `SELECT automation_id, current_node_id FROM automation_contacts WHERE subscriber_id = ? AND status = 'waiting_condition' AND JSON_EXTRACT(context_json, '$.waitCondition') = 'opened_email'`,
+              [subscriberId]
+          );
+          
+          if (waiting.length > 0) {
+            const { Queue } = require('bullmq');
+            const IORedis = require('ioredis');
+            const redisConn = new IORedis({ host: process.env.REDIS_HOST, port: process.env.REDIS_PORT, maxRetriesPerRequest: null });
+            const autoQueue = new Queue('automationQueue', { connection: redisConn });
+            
+            for (const w of waiting) {
+                await connection.query(`UPDATE automation_contacts SET status = 'processing' WHERE subscriber_id = ? AND automation_id = ?`, [subscriberId, w.automation_id]);
+                await connection.query(`INSERT INTO automation_logs (automation_id, subscriber_id, node_id, action_taken) VALUES (?, ?, ?, ?)`, [w.automation_id, subscriberId, w.current_node_id, 'Resumed: Opened email via webhook']);
+                await autoQueue.add('process_step', { automation_id: w.automation_id, subscriber_id: subscriberId, current_node_id: w.current_node_id });
+            }
+          }
         }
         break;
 
@@ -123,5 +166,9 @@ router.post('/email-events', async (req, res) => {
     if (connection) connection.release();
   }
 });
+
+// Automation Webhook
+// POST /api/webhooks/automation/:automationId/:triggerId
+router.post('/automation/:automationId/:triggerId', webhookController.receiveWebhook);
 
 module.exports = router;

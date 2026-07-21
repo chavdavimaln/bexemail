@@ -40,6 +40,29 @@ async function processQueue() {
     console.log(`Processing job ${job.id} for ${job.email}`);
 
     try {
+      // 1. Process HTML for tracking
+      const cheerio = require('cheerio');
+      const $ = cheerio.load(job.html_content || '');
+      
+      // Replace all links with click tracking endpoint
+      const baseUrl = process.env.API_URL || 'http://localhost:5000';
+      $('a').each((i, link) => {
+        const originalHref = $(link).attr('href');
+        if (originalHref && !originalHref.startsWith('mailto:') && !originalHref.startsWith('tel:')) {
+          const encodedUrl = encodeURIComponent(originalHref);
+          // Assuming track_wizard is mapped via trackRoutes
+          // In trackRoutes.js, it's /open/:campaignId/:subscriberId and /click/...
+          const trackingLink = `${baseUrl}/api/track/click/${job.campaign_id}/${job.recipient_id}?url=${encodedUrl}`;
+          $(link).attr('href', trackingLink);
+        }
+      });
+
+      // Append 1x1 open tracking pixel
+      const pixelUrl = `${baseUrl}/api/track/open/${job.campaign_id}/${job.recipient_id}`;
+      $('body').append(`<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none;" />`);
+
+      const finalHtml = $.html();
+
       // Send mail
       const senderEmail = job.sender_email || process.env.SMTP_FROM;
       const senderName = job.sender_name || 'BexEmail';
@@ -49,7 +72,7 @@ async function processQueue() {
         replyTo: `"${senderName}" <${senderEmail}>`,
         to: job.email,
         subject: job.subject,
-        html: job.html_content // In a real app, you might replace placeholders here
+        html: finalHtml 
       });
 
       // Mark as sent
