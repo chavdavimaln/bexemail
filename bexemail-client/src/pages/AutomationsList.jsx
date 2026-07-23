@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Workflow, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const AutomationsList = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [automations, setAutomations] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,13 +35,19 @@ const AutomationsList = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this automation?')) return;
+    const isOk = await confirm({
+      title: 'Delete Automation',
+      message: 'Are you sure you want to delete this automation?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/automations/${id}`);
       fetchAutomations();
     } catch (error) {
       console.error('Error deleting automation:', error);
-      alert('Failed to delete automation');
+      customAlert({ title: 'Error', message: 'Failed to delete automation', type: 'danger' });
     }
   };
 

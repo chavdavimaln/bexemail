@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload, Settings2 } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const Contacts = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [subscribers, setSubscribers] = useState([]);
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,11 @@ const Contacts = () => {
   const handleAddContact = async (e) => {
     e.preventDefault();
     if (!newEmail || selectedListIds.length === 0) {
-      alert("Please enter email and select at least one list.");
+      customAlert({
+        title: 'Validation Error',
+        message: 'Please enter email and select at least one list.',
+        type: 'warning'
+      });
       return;
     }
 
@@ -73,11 +79,19 @@ const Contacts = () => {
 
       setNewEmail('');
       setNewName('');
-      fetchData(); 
-      alert('Contact added successfully!');
+      await fetchData(); 
+      customAlert({
+        title: 'Success',
+        message: 'Contact added successfully!',
+        type: 'success'
+      });
     } catch (error) {
       console.error(error);
-      alert('Failed to add contact.');
+      customAlert({
+        title: 'Error',
+        message: error.response?.data?.error || 'Failed to add contact.',
+        type: 'danger'
+      });
     } finally {
       setAdding(false);
     }
@@ -86,7 +100,11 @@ const Contacts = () => {
   const handleBulkAdd = async (e) => {
     e.preventDefault();
     if (!bulkEmails.trim() || selectedListIds.length === 0) {
-      alert("Please enter emails and select at least one list.");
+      customAlert({
+        title: 'Validation Error',
+        message: 'Please enter emails and select at least one list.',
+        type: 'warning'
+      });
       return;
     }
 
@@ -97,8 +115,6 @@ const Contacts = () => {
     try {
       setAdding(true);
       
-      // Since our API currently accepts one at a time for creation, we'll loop it for the demo
-      // In a real production app, you'd add a bulk insert endpoint.
       let addedIds = [];
       for (const email of emails) {
         if (!email.includes('@')) continue; // skip invalid formats broadly
@@ -120,11 +136,19 @@ const Contacts = () => {
       }
 
       setBulkEmails('');
-      fetchData(); 
-      alert(`Successfully added ${addedIds.length} contacts!`);
+      await fetchData(); 
+      customAlert({
+        title: 'Success',
+        message: `Successfully added ${addedIds.length} contacts!`,
+        type: 'success'
+      });
     } catch (error) {
       console.error(error);
-      alert('Failed to bulk add contacts.');
+      customAlert({
+        title: 'Error',
+        message: 'Failed to bulk add contacts.',
+        type: 'danger'
+      });
     } finally {
       setAdding(false);
     }
@@ -163,12 +187,22 @@ const Contacts = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this contact?')) return;
+    const isOk = await confirm({
+      title: 'Delete Contact',
+      message: 'Are you sure you want to delete this contact?',
+      confirmText: 'Delete Contact',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/subscribers/${id}`);
       fetchData();
     } catch (error) {
-      alert('Failed to delete contact.');
+      customAlert({
+        title: 'Error',
+        message: 'Failed to delete contact.',
+        type: 'danger'
+      });
     }
   };
 

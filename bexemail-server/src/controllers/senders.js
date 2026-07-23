@@ -11,7 +11,7 @@ exports.getSenders = async (req, res) => {
 };
 
 exports.createSender = async (req, res) => {
-  const { name, email, is_default } = req.body;
+  const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure } = req.body;
   
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
@@ -28,12 +28,16 @@ exports.createSender = async (req, res) => {
     }
 
     const [result] = await connection.query(
-      'INSERT INTO senders (name, email, is_default) VALUES (?, ?, ?)',
-      [name, email, is_default || false]
+      `INSERT INTO senders (name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, is_default || false, smtp_host || null, smtp_port || null, smtp_user || null, smtp_pass || null, smtp_secure || 'tls']
     );
 
     await connection.commit();
-    const newSender = { id: result.insertId, name, email, is_default: is_default || false };
+    const newSender = { 
+      id: result.insertId, name, email, is_default: is_default || false,
+      smtp_host: smtp_host || null, smtp_port: smtp_port || null, smtp_user: smtp_user || null, smtp_pass: smtp_pass || null, smtp_secure: smtp_secure || 'tls'
+    };
     await logHistory('senders', result.insertId, 'add', null, newSender, req.headers['x-user-role']);
     res.status(201).json(newSender);
   } catch (error) {
@@ -47,7 +51,7 @@ exports.createSender = async (req, res) => {
 
 exports.updateSender = async (req, res) => {
   const { id } = req.params;
-  const { name, email, is_default } = req.body;
+  const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure } = req.body;
 
   let connection;
   try {
@@ -62,12 +66,12 @@ exports.updateSender = async (req, res) => {
     const oldData = oldRows[0];
 
     await connection.query(
-      'UPDATE senders SET name = ?, email = ?, is_default = ? WHERE id = ?',
-      [name, email, is_default, id]
+      `UPDATE senders SET name = ?, email = ?, is_default = ?, smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, smtp_secure = ? WHERE id = ?`,
+      [name, email, is_default, smtp_host || null, smtp_port || null, smtp_user || null, smtp_pass || null, smtp_secure || 'tls', id]
     );
 
     await connection.commit();
-    const newData = { id, name, email, is_default };
+    const newData = { id, name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure };
     await logHistory('senders', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'Sender updated successfully' });
   } catch (error) {

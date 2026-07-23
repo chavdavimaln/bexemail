@@ -58,9 +58,12 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+import { ModalProvider } from './context/ModalContext';
+
 function App() {
   return (
-    <NotificationProvider>
+    <ModalProvider>
+      <NotificationProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -96,6 +99,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </NotificationProvider>
+  </ModalProvider>
   );
 }
 

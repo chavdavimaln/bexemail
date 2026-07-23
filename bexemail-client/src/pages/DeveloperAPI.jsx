@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Key, Plus, Trash2, CheckCircle2, AlertTriangle, BookOpen } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const DeveloperAPI = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState(null);
@@ -25,8 +27,9 @@ const DeveloperAPI = () => {
     }
   };
 
-  const generateKey = async () => {
-    if (!keyName) return alert('Please provide a name for the key');
+  const generateKey = async (e) => {
+    e.preventDefault();
+    if (!keyName) return customAlert('Please provide a name for the key');
     try {
       const res = await axios.post('http://localhost:5000/api/api-keys', { name: keyName }, {
         headers: { 'x-user-role': 'Super Admin' }
@@ -40,7 +43,13 @@ const DeveloperAPI = () => {
   };
 
   const revokeKey = async (id) => {
-    if (!window.confirm('Are you sure you want to revoke this API key? Apps using it will immediately lose access.')) return;
+    const isOk = await confirm({
+      title: 'Revoke API Key',
+      message: 'Are you sure you want to revoke this API key? Apps using it will immediately lose access.',
+      confirmText: 'Revoke Key',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.put(`http://localhost:5000/api/api-keys/${id}/revoke`, {}, {
         headers: { 'x-user-role': 'Super Admin' }

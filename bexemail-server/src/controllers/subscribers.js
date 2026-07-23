@@ -14,9 +14,18 @@ exports.createSubscriber = async (req, res) => {
        ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags)`,
       [email, first_name || null, status || 'subscribed', tagsJson]
     );
-    res.status(201).json({ message: 'Subscriber added/updated successfully', id: result.insertId || result.updateId });
+
+    let subscriberId = result.insertId;
+    if (!subscriberId) {
+      const [existing] = await pool.query('SELECT id FROM subscribers WHERE email = ?', [email]);
+      if (existing.length > 0) {
+        subscriberId = existing[0].id;
+      }
+    }
+
+    res.status(201).json({ message: 'Subscriber added/updated successfully', id: subscriberId });
   } catch (error) {
-    console.error(error);
+    console.error('Create subscriber error:', error);
     res.status(500).json({ error: 'Database error' });
   }
 };

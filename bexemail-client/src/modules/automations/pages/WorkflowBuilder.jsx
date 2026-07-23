@@ -31,6 +31,7 @@ import WaitUntilNode from '../components/nodes/WaitUntilNode';
 import ConditionNode from '../components/nodes/ConditionNode';
 import WorkflowExampleModal from '../components/WorkflowExampleModal';
 import { MousePointer2, Trash2 } from 'lucide-react';
+import { useModal } from '../../../context/ModalContext';
 
 let id = 0;
 const getId = () => `dndnode_${id++}`;
@@ -96,6 +97,7 @@ const normalizeWorkflowGraph = (graph) => {
 };
 
 const BuilderLayout = () => {
+  const { confirm } = useModal();
   const { id: automationId } = useParams();
   const navigate = useNavigate();
   const reactFlowWrapper = useRef(null);
@@ -272,9 +274,15 @@ const BuilderLayout = () => {
 
   const [showAIModal, setShowAIModal] = useState(false);
 
-  const handleUseExample = useCallback(() => {
-    if (nodes.length > 0 && !window.confirm('Replace the current canvas with the example workflow? Unsaved canvas changes will be removed.')) {
-      return false;
+  const handleUseExample = useCallback(async () => {
+    if (nodes.length > 0) {
+      const isOk = await confirm({
+        title: 'Replace Canvas',
+        message: 'Replace the current canvas with the example workflow? Unsaved canvas changes will be removed.',
+        confirmText: 'Replace Canvas',
+        type: 'warning'
+      });
+      if (!isOk) return false;
     }
 
     setNodes(exampleNodes.map((node) => ({ ...node, data: { ...node.data } })));
@@ -287,7 +295,7 @@ const BuilderLayout = () => {
     }));
     window.setTimeout(() => reactFlowInstance?.fitView({ padding: 0.16, duration: 450 }), 0);
     return true;
-  }, [nodes.length, reactFlowInstance, setEdges, setNodes]);
+  }, [nodes.length, reactFlowInstance, setEdges, setNodes, confirm]);
 
   const handleAIGenerate = async (prompt) => {
     const { data } = await axios.post('/api/automations/ai-generate', { prompt });

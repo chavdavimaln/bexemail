@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const campaignController = require('../controllers/campaignController');
+const campaignsController = require('../controllers/campaigns');
 
-router.post('/dispatch', campaignController.dispatchCampaign);
+router.post('/dispatch', campaignsController.dispatchCampaign);
 
 module.exports = router;

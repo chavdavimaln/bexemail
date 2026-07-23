@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Download, RotateCcw, Edit3, Eye, X, CheckCircle } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const HistoryLogs = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -29,16 +31,22 @@ const HistoryLogs = () => {
   };
 
   const handleQuickRestore = async (id) => {
-    if (!window.confirm('Are you sure you want to quickly restore this deleted record as it was?')) return;
+    const isOk = await confirm({
+      title: 'Restore Record',
+      message: 'Are you sure you want to quickly restore this deleted record as it was?',
+      confirmText: 'Restore Record',
+      type: 'warning'
+    });
+    if (!isOk) return;
     try {
       await axios.post(`http://localhost:5000/api/history/${id}/restore`, {}, {
         headers: { 'x-user-role': 'Super Admin' }
       });
-      alert('Record restored successfully');
+      customAlert({ title: 'Success', message: 'Record restored successfully', type: 'success' });
       fetchLogs(); // refresh
     } catch (error) {
       console.error('Failed to restore record:', error);
-      alert(error.response?.data?.error || 'Failed to restore record');
+      customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to restore record', type: 'danger' });
     }
   };
 

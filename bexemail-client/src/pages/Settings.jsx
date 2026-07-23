@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Save, Settings2, Users, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, UserCheck, Shield, Eye, EyeOff } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const Settings = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState({
     company_name: '',
@@ -126,17 +128,23 @@ const Settings = () => {
   };
 
   const handleDeleteSender = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this sender?')) return;
+    const isOk = await confirm({
+      title: 'Delete Sender Profile',
+      message: 'Are you sure you want to delete this sender profile?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/senders/${id}`, { headers: { 'x-user-role': currentUserRole } });
       fetchSenders();
     } catch (error) {
-      alert('Failed to delete sender');
+      customAlert({ title: 'Error', message: 'Failed to delete sender', type: 'danger' });
     }
   };
 
   const handleSaveIntegration = async () => {
-    if (!integrationForm.target_list_id) return alert('Please select a target list.');
+    if (!integrationForm.target_list_id) return customAlert({ title: 'Validation Error', message: 'Please select a target list.', type: 'warning' });
     try {
       if (integrationForm.id) {
         await axios.put(`http://localhost:5000/api/integrations/${integrationForm.id}`, integrationForm, { headers: { 'x-user-role': currentUserRole } });
@@ -146,17 +154,23 @@ const Settings = () => {
       setShowIntegrationModal(false);
       fetchIntegrations();
     } catch (error) {
-      alert('Failed to save integration: ' + (error.response?.data?.error || error.message));
+      customAlert({ title: 'Error', message: 'Failed to save integration: ' + (error.response?.data?.error || error.message), type: 'danger' });
     }
   };
 
   const handleDeleteIntegration = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this integration?')) return;
+    const isOk = await confirm({
+      title: 'Delete Integration',
+      message: 'Are you sure you want to delete this integration?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/integrations/${id}`, { headers: { 'x-user-role': currentUserRole } });
       fetchIntegrations();
     } catch (error) {
-      alert('Failed to delete integration');
+      customAlert({ title: 'Error', message: 'Failed to delete integration', type: 'danger' });
     }
   };
 
@@ -164,19 +178,19 @@ const Settings = () => {
     setSyncingId(id);
     try {
       const res = await axios.post(`http://localhost:5000/api/integrations/${id}/sync`, {}, { headers: { 'x-user-role': currentUserRole } });
-      alert(res.data.message);
+      customAlert({ title: 'Success', message: res.data.message, type: 'success' });
       fetchIntegrations(); 
     } catch (error) {
-      alert('Sync Failed: ' + (error.response?.data?.error || error.message));
+      customAlert({ title: 'Error', message: 'Sync Failed: ' + (error.response?.data?.error || error.message), type: 'danger' });
     } finally {
       setSyncingId(null);
     }
   };
 
   const handleSaveAdmin = async () => {
-    if (!adminForm.name || !adminForm.email) return alert('Name and email are required');
-    if (!adminForm.password) return alert('Password is required');
-    if (adminForm.password !== adminForm.confirmPassword) return alert('Passwords do not match');
+    if (!adminForm.name || !adminForm.email) return customAlert({ title: 'Validation Error', message: 'Name and email are required', type: 'warning' });
+    if (!adminForm.password) return customAlert({ title: 'Validation Error', message: 'Password is required', type: 'warning' });
+    if (adminForm.password !== adminForm.confirmPassword) return customAlert({ title: 'Validation Error', message: 'Passwords do not match', type: 'warning' });
 
     try {
       const payload = { ...adminForm };
@@ -190,17 +204,23 @@ const Settings = () => {
       setShowAdminModal(false);
       fetchAdmins();
     } catch (error) {
-      alert('Failed to save user: ' + (error.response?.data?.error || error.message));
+      customAlert({ title: 'Error', message: 'Failed to save user: ' + (error.response?.data?.error || error.message), type: 'danger' });
     }
   };
 
   const handleDeleteAdmin = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    const isOk = await confirm({
+      title: 'Delete Admin User',
+      message: 'Are you sure you want to delete this user?',
+      confirmText: 'Delete User',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/admins/${id}`, { headers: { 'x-user-role': currentUserRole } });
       fetchAdmins();
     } catch (error) {
-      alert('Failed to delete user');
+      customAlert({ title: 'Error', message: 'Failed to delete user', type: 'danger' });
     }
   };
 

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { LayoutTemplate, Plus, Edit, Trash2 } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const TemplatesList = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,12 +25,23 @@ const TemplatesList = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this template?')) {
+    const isOk = await confirm({
+      title: 'Delete Template',
+      message: 'Are you sure you want to delete this template?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (isOk) {
       try {
         await axios.delete(`http://localhost:5000/api/templates/${id}`);
         fetchTemplates();
       } catch (error) {
         console.error('Error deleting template:', error);
+        customAlert({
+          title: 'Error',
+          message: 'Failed to delete template.',
+          type: 'danger'
+        });
       }
     }
   };

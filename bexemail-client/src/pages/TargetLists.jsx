@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Edit2, Trash2, List as ListIcon, Plus } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const TargetLists = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listForm, setListForm] = useState({ id: null, name: '', description: '' });
@@ -35,17 +37,31 @@ const TargetLists = () => {
       setListForm({ id: null, name: '', description: '' });
       fetchLists();
     } catch (error) {
-      alert('Failed to save list: ' + (error.response?.data?.error || error.message));
+      customAlert({
+        title: 'Error',
+        message: 'Failed to save list: ' + (error.response?.data?.error || error.message),
+        type: 'danger'
+      });
     }
   };
 
   const handleDeleteList = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this list? Subscriber data will be preserved.')) return;
+    const isOk = await confirm({
+      title: 'Delete Audience List',
+      message: 'Are you sure you want to delete this list? Subscriber data will be preserved.',
+      confirmText: 'Delete List',
+      type: 'danger'
+    });
+    if (!isOk) return;
     try {
       await axios.delete(`http://localhost:5000/api/lists/${id}`, { headers: { 'x-user-role': 'Super Admin' } });
       fetchLists();
     } catch (error) {
-      alert('Failed to delete list: ' + (error.response?.data?.error || error.message));
+      customAlert({
+        title: 'Error',
+        message: 'Failed to delete list: ' + (error.response?.data?.error || error.message),
+        type: 'danger'
+      });
     }
   };
 

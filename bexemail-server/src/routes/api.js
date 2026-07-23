@@ -17,9 +17,9 @@ router.post('/subscribers/unsubscribe/:subscriberId', subscribersController.unsu
 // Senders
 const sendersController = require('../controllers/senders');
 router.get('/senders', sendersController.getSenders);
-router.post('/senders', checkRole([ROLES.SUPER_ADMIN]), sendersController.createSender);
-router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN]), sendersController.updateSender);
-router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN]), sendersController.deleteSender);
+router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.createSender);
+router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.updateSender);
+router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.deleteSender);
 
 // Lists
 router.post('/lists', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.createList);
@@ -34,7 +34,7 @@ router.get('/campaigns', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]),
 router.get('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.getCampaignById);
 router.put('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.updateCampaign);
 router.delete('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.deleteCampaign);
-router.post('/campaigns/dispatch', checkRole([ROLES.CAMPAIGN_MANAGER]), campaignsController.dispatchCampaign);
+router.post('/campaigns/dispatch', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.dispatchCampaign);
 router.put('/campaigns/:id/approve', checkRole([ROLES.SUPER_ADMIN]), campaignsController.approveCampaign);
 router.post('/campaigns/:id/duplicate', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.duplicateCampaign);
 router.put('/campaigns/:id/status', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.updateCampaignStatus);
@@ -51,9 +51,9 @@ router.get('/analytics/dashboard', analyticsController.getDashboardStats);
 router.get('/track/open/:campaignId/:subscriberId', analyticsController.trackOpen);
 router.get('/analytics/:campaignId', analyticsController.getCampaignAnalytics);
 
-// Settings (Require Super Admin)
-router.get('/settings', checkRole([ROLES.SUPER_ADMIN]), settingsController.getSettings);
-router.put('/settings', checkRole([ROLES.SUPER_ADMIN]), settingsController.updateSettings);
+// Settings (Require Super Admin or Campaign Manager)
+router.get('/settings', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), settingsController.getSettings);
+router.put('/settings', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), settingsController.updateSettings);
 
 // Automations
 const automationsController = require('../controllers/automations');

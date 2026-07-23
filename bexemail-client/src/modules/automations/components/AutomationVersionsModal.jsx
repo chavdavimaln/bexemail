@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { X, History, RotateCcw, Loader2 } from 'lucide-react';
+import { useModal } from '../../../context/ModalContext';
 
 export default function AutomationVersionsModal({ automationId, onClose }) {
+  const { confirm, alert: customAlert } = useModal();
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(false);
   const [versions, setVersions] = useState([]);
@@ -22,15 +24,29 @@ export default function AutomationVersionsModal({ automationId, onClose }) {
   }, [automationId]);
 
   const handleRestore = async (versionId) => {
-    if (!window.confirm("Are you sure you want to restore this version? This will overwrite the current draft.")) return;
+    const isOk = await confirm({
+      title: 'Restore Version',
+      message: 'Are you sure you want to restore this version? This will overwrite the current draft.',
+      confirmText: 'Restore Version',
+      type: 'warning'
+    });
+    if (!isOk) return;
     
     setRestoring(true);
     try {
       await axios.post(`/api/automations/${automationId}/versions/${versionId}/restore`);
-      alert("Version restored successfully! Refreshing builder...");
+      await customAlert({
+        title: 'Success',
+        message: 'Version restored successfully! Refreshing builder...',
+        type: 'success'
+      });
       window.location.reload();
     } catch {
-      alert("Failed to restore version.");
+      customAlert({
+        title: 'Error',
+        message: 'Failed to restore version.',
+        type: 'danger'
+      });
       setRestoring(false);
     }
   };

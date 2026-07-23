@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Play, CheckCircle2, AlertCircle, Clock, Search, Filter, MoreVertical, FileEdit, Copy, CalendarClock, Save, BarChart, Trash2, Eye, X } from 'lucide-react';
+import { Play, CheckCircle2, AlertCircle, Clock, Search, Filter, MoreVertical, FileEdit, Copy, CalendarClock, Save, BarChart, Trash2, Eye, X, Send, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useModal } from '../context/ModalContext';
 
 const CampaignsList = () => {
+  const { confirm, alert: customAlert } = useModal();
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('Super Admin'); // Mock Role
@@ -52,8 +54,10 @@ const CampaignsList = () => {
   const filteredCampaigns = campaigns.filter(camp => {
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
+      (camp.id && `#${camp.id}`.toLowerCase().includes(searchLower)) ||
       (camp.name && camp.name.toLowerCase().includes(searchLower)) ||
       (camp.subject && camp.subject.toLowerCase().includes(searchLower)) ||
+      (camp.target_email && camp.target_email.toLowerCase().includes(searchLower)) ||
       (camp.list_name && camp.list_name.toLowerCase().includes(searchLower)) ||
       (new Date(camp.created_at).toLocaleDateString().includes(searchLower));
       
@@ -66,11 +70,32 @@ const CampaignsList = () => {
     setActiveDropdown(null);
     try {
       if (action === 'approve') {
-        if (!window.confirm('Approve and send this campaign immediately?')) return;
+        const isOk = await confirm({
+          title: 'Accept Review & Send Campaign',
+          message: `Are you sure you want to accept review and dispatch "${campaign.name}" immediately?`,
+          confirmText: 'Accept Review & Send',
+          type: 'warning'
+        });
+        if (!isOk) return;
         await axios.put(`http://localhost:5000/api/campaigns/${campaign.id}/approve`, {}, { headers: { 'x-user-role': userRole } });
-      } else if (action === 'edit_send') {
+        fetchCampaigns();
+        customAlert({
+          title: 'Campaign Dispatched',
+          message: `Campaign "${campaign.name}" accepted and sent successfully!`,
+          type: 'success'
+        });
+        return;
+      } else if (action === 'edit' || action === 'edit_send') {
+        navigate(`/campaigns/new?edit=${campaign.id}`);
+        return;
+      } else if (action === 'duplicate') {
         const res = await axios.post(`http://localhost:5000/api/campaigns/${campaign.id}/duplicate`, {}, { headers: { 'x-user-role': userRole } });
-        navigate(`/campaigns/new?edit=${res.data.id}`);
+        fetchCampaigns();
+        customAlert({
+          title: 'Success',
+          message: 'Campaign duplicated as draft copy!',
+          type: 'success'
+        });
         return;
       } else if (action === 'resend') {
         await axios.put(`http://localhost:5000/api/campaigns/${campaign.id}/status`, { status: 'submitted_for_review' }, { headers: { 'x-user-role': userRole } });
@@ -83,7 +108,13 @@ const CampaignsList = () => {
         setScheduleModal({ show: true, campaignId: campaign.id, date: '' });
         return;
       } else if (action === 'delete') {
-        if (!window.confirm('Are you sure you want to delete this campaign? This cannot be undone.')) return;
+        const isOk = await confirm({
+          title: 'Delete Campaign',
+          message: 'Are you sure you want to delete this campaign? This cannot be undone.',
+          confirmText: 'Delete',
+          type: 'danger'
+        });
+        if (!isOk) return;
         await axios.delete(`http://localhost:5000/api/campaigns/${campaign.id}`, { headers: { 'x-user-role': userRole } });
       } else if (action === 'view') {
         setViewModal(campaign);
@@ -91,7 +122,11 @@ const CampaignsList = () => {
       }
       fetchCampaigns();
     } catch (error) {
-      alert(error.response?.data?.error || `Failed to perform action: ${action}`);
+      customAlert({
+        title: 'Error',
+        message: error.response?.data?.error || `Failed to perform action: ${action}`,
+        type: 'danger'
+      });
     }
   };
 
@@ -104,9 +139,17 @@ const CampaignsList = () => {
       }, { headers: { 'x-user-role': userRole } });
       setScheduleModal({ show: false, campaignId: null, date: '' });
       fetchCampaigns();
-      alert('Campaign scheduled successfully!');
+      customAlert({
+        title: 'Success',
+        message: 'Campaign scheduled successfully!',
+        type: 'success'
+      });
     } catch (error) {
-      alert('Failed to schedule campaign.');
+      customAlert({
+        title: 'Error',
+        message: 'Failed to schedule campaign.',
+        type: 'danger'
+      });
     }
   };
 
@@ -168,6 +211,16 @@ const CampaignsList = () => {
             />
           </div>
           
+          {/* Quick Refresh Button */}
+          <button
+            onClick={() => fetchCampaigns(false)}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+            title="Quick Refresh Campaigns"
+          >
+            <RefreshCw size={15} className={`text-primary-600 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+
           <div className="relative ml-4">
             <button 
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
@@ -223,14 +276,41 @@ const CampaignsList = () => {
                 filteredCampaigns.map(camp => (
                   <tr key={camp.id} className="hover:bg-gray-50/80 transition-colors group">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900 text-base">{camp.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[250px]">{camp.subject}</div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 bg-gray-100 border border-gray-200 text-gray-700 text-[11px] font-mono font-bold rounded-md shadow-xs">
+                          #{camp.id}
+                        </span>
+                        <div className="font-bold text-gray-900 text-base">{camp.name}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]">Subject: {camp.subject}</div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-gray-700">{camp.list_name || 'Unknown List'}</td>
+                    <td className="px-6 py-4 font-medium text-gray-700">
+                      {camp.target_email ? (
+                        <div>
+                          <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-200">
+                            Single Recipient
+                          </span>
+                          <p className="text-xs text-gray-600 font-mono mt-1">{camp.target_email}</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-800">{camp.list_name || 'Subscribers Directory'}</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4">{getStatusBadge(camp.status, camp.scheduled_at)}</td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{new Date(camp.created_at).toLocaleDateString()}</div>
-                      {camp.scheduled_at && <div className="text-xs text-purple-600 mt-0.5">{new Date(camp.scheduled_at).toLocaleString()}</div>}
+                      <div className="font-semibold text-gray-900 text-xs">
+                        {new Date(camp.created_at).toLocaleDateString()}
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                        {new Date(camp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </div>
+                      {camp.scheduled_at && (
+                        <div className="text-xs text-purple-600 font-medium mt-1">
+                          ⏰ {new Date(camp.scheduled_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right relative">
                       <div className="flex items-center justify-end space-x-3">
@@ -252,23 +332,34 @@ const CampaignsList = () => {
                           
                           {activeDropdown === camp.id && (
                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-10 animate-in fade-in slide-in-from-top-2">
-                              {camp.status === 'submitted_for_review' && userRole === 'Super Admin' && (
-                                <button onClick={() => handleAction('approve', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 flex items-center">
-                                  <CheckCircle2 size={14} className="mr-2"/> Approve & Send
+                              <button onClick={() => handleAction('view', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
+                                <Eye size={14} className="mr-2 text-indigo-500"/> View Details & Review
+                              </button>
+
+                              {camp.status !== 'sent' && camp.status !== 'sending' && (
+                                <button onClick={() => handleAction('approve', camp)} className="w-full text-left px-4 py-2.5 text-sm font-bold text-green-700 hover:bg-green-50 flex items-center">
+                                  {camp.status === 'scheduled' ? (
+                                    <>
+                                      <Send size={14} className="mr-2 text-green-600"/> Send Campaign Now
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 size={14} className="mr-2 text-green-600"/> Accept Review & Send
+                                    </>
+                                  )}
                                 </button>
                               )}
-                              <button onClick={() => handleAction('view', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
-                                <Eye size={14} className="mr-2 text-indigo-500"/> View Details
-                              </button>
-                              <button onClick={() => handleAction('resend', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
-                                <Play size={14} className="mr-2 text-blue-600"/> Resend Now
-                              </button>
+
                               <button onClick={() => handleAction('edit_send', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
-                                <FileEdit size={14} className="mr-2 text-orange-500"/> Edit & Send
+                                <FileEdit size={14} className="mr-2 text-orange-500"/> Edit Campaign
                               </button>
-                              <button onClick={() => handleAction('schedule', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
-                                <CalendarClock size={14} className="mr-2 text-purple-600"/> Schedule Later
-                              </button>
+
+                              {camp.status !== 'sent' && camp.status !== 'sending' && (
+                                <button onClick={() => handleAction('schedule', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-50 flex items-center">
+                                  <CalendarClock size={14} className="mr-2 text-purple-600"/> 
+                                  {camp.status === 'scheduled' ? 'Reschedule' : 'Schedule Campaign'}
+                                </button>
+                              )}
                               <div className="border-t border-gray-100"></div>
                               <button onClick={() => handleAction('draft', camp)} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center">
                                 <Save size={14} className="mr-2 text-gray-500"/> Save as Draft
@@ -327,7 +418,12 @@ const CampaignsList = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Campaign Details</h3>
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <span>Campaign Details</span>
+                <span className="text-xs px-2.5 py-0.5 bg-gray-100 border border-gray-200 text-gray-700 font-mono font-bold rounded-md">
+                  #{viewModal.id}
+                </span>
+              </h3>
               <button onClick={() => setViewModal(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"><X size={20}/></button>
             </div>
             
@@ -386,32 +482,51 @@ const CampaignsList = () => {
                 Close
               </button>
               
-              <div className="flex space-x-3">
+              <div className="flex flex-wrap gap-2.5">
                 <button 
                   onClick={() => {
-                    navigate(`/campaigns/new?edit=${viewModal.id}`);
+                    const campId = viewModal.id;
+                    setViewModal(null);
+                    navigate(`/campaigns/new?edit=${campId}`);
                   }}
-                  className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 rounded-xl transition-colors shadow-sm flex items-center"
+                  className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 rounded-xl transition-colors shadow-sm flex items-center text-xs"
                 >
-                  <FileEdit size={16} className="mr-2 text-orange-500"/> Edit
+                  <FileEdit size={16} className="mr-1.5 text-orange-500"/> Edit
                 </button>
                 
-                {(viewModal.status === 'draft' || viewModal.status === 'submitted_for_review') && (
-                  <button 
-                    onClick={() => {
-                      if (userRole === 'Super Admin') {
-                        handleAction('approve', viewModal);
-                      } else {
-                        handleAction('resend', viewModal); // wait, resend makes a duplicate. for draft, we should update status.
-                        // I'll just change status to submitted_for_review for now.
-                        axios.put(`http://localhost:5000/api/campaigns/${viewModal.id}/status`, { status: 'submitted_for_review' }, { headers: { 'x-user-role': userRole } })
-                          .then(() => { setViewModal(null); fetchCampaigns(); alert('Submitted for review!'); });
-                      }
-                    }}
-                    className="px-5 py-2.5 bg-green-600 text-white font-medium hover:bg-green-700 rounded-xl transition-colors shadow-sm flex items-center"
-                  >
-                    <CheckCircle2 size={16} className="mr-2"/> Confirm & Send
-                  </button>
+                {viewModal.status !== 'sent' && viewModal.status !== 'sending' && (
+                  <>
+                    <button 
+                      onClick={() => {
+                        const campId = viewModal.id;
+                        setViewModal(null);
+                        setScheduleModal({ show: true, campaignId: campId, date: '' });
+                      }}
+                      className="px-4 py-2.5 bg-white border border-gray-300 text-purple-700 hover:bg-purple-50 font-medium rounded-xl transition-colors shadow-sm flex items-center gap-1.5 text-xs"
+                    >
+                      <CalendarClock size={16} className="text-purple-600"/> 
+                      {viewModal.status === 'scheduled' ? 'Reschedule' : 'Schedule Campaign'}
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        const selectedCamp = viewModal;
+                        setViewModal(null);
+                        handleAction('approve', selectedCamp);
+                      }}
+                      className="px-5 py-2.5 bg-green-600 text-white font-bold hover:bg-green-700 rounded-xl transition-colors shadow-sm flex items-center gap-1.5 text-xs"
+                    >
+                      {viewModal.status === 'scheduled' ? (
+                        <>
+                          <Send size={16} /> Send Campaign Now
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={16} /> Accept Review & Send Campaign
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
