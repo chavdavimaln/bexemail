@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Download, RotateCcw, Edit3, Eye, X, CheckCircle } from 'lucide-react';
+import { Download, RotateCcw, Edit3, Eye, X, CheckCircle, Search, Filter, AlertTriangle } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
 const HistoryLogs = () => {
@@ -8,6 +8,11 @@ const HistoryLogs = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Filter states
+  const [filterAction, setFilterAction] = useState('All');
+  const [filterModule, setFilterModule] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Modals state
   const [viewModal, setViewModal] = useState({ isOpen: false, data: null, title: '' });
   const [editModal, setEditModal] = useState({ isOpen: false, log: null, editedJson: '' });
@@ -22,7 +27,7 @@ const HistoryLogs = () => {
       const response = await axios.get('http://localhost:5000/api/history', {
         headers: { 'x-user-role': 'Super Admin' }
       });
-      setLogs(response.data);
+      setLogs(response.data || []);
     } catch (error) {
       console.error('Failed to fetch history logs:', error);
     } finally {
@@ -69,27 +74,87 @@ const HistoryLogs = () => {
 
   const handleEditRestoreSubmit = async () => {
     try {
-      // Parse to validate JSON
       const editedData = JSON.parse(editModal.editedJson);
       
       await axios.post(`http://localhost:5000/api/history/${editModal.log.id}/restore-edited`, { editedData }, {
         headers: { 'x-user-role': 'Super Admin' }
       });
-      alert('Record edited and restored successfully');
+      customAlert({ title: 'Success', message: 'Record edited and restored successfully', type: 'success' });
       setEditModal({ isOpen: false, log: null, editedJson: '' });
       fetchLogs();
     } catch (error) {
       if (error instanceof SyntaxError) {
-        alert('Invalid JSON format. Please fix the JSON syntax before submitting.');
+        customAlert({ title: 'Invalid JSON', message: 'Please fix the JSON syntax before submitting.', type: 'danger' });
       } else {
-        alert(error.response?.data?.error || 'Failed to restore edited record');
+        customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to restore edited record', type: 'danger' });
       }
     }
   };
 
   const handleDownload = () => {
-    window.open('http://localhost:5000/api/history/download', '_blank');
+    try {
+      const dataToExport = filteredLogs.length > 0 ? filteredLogs : logs;
+      if (dataToExport.length === 0) {
+        customAlert({ title: 'No Data', message: 'No history logs available to export.', type: 'info' });
+        return;
+      }
+
+      // Format CSV rows
+      const headers = ['Log ID', 'Timestamp', 'Action', 'Module Table', 'Record ID', 'Changed By'];
+      const csvRows = [headers.join(',')];
+
+      dataToExport.forEach(log => {
+        const row = [
+          log.id,
+          `"${new Date(log.timestamp).toLocaleString().replace(/"/g, '""')}"`,
+          `"${(log.action || '').replace(/"/g, '""')}"`,
+          `"${(log.table_name || '').replace(/"/g, '""')}"`,
+          log.record_id,
+          `"${(log.changed_by || 'System').replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(','));
+      });
+
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `audit_history_logs_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      customAlert({ title: 'Export Failed', message: 'Could not generate CSV export.', type: 'danger' });
+    }
   };
+
+  // Available unique modules for filter dropdown
+  const availableModules = ['All', ...new Set(logs.map(l => l.table_name).filter(Boolean))];
+
+  // Filter logs based on action, module, and search query
+  const filteredLogs = logs.filter(log => {
+    if (filterAction !== 'All' && log.action.toLowerCase() !== filterAction.toLowerCase()) {
+      return false;
+    }
+    if (filterModule !== 'All' && (log.table_name || '').toLowerCase() !== filterModule.toLowerCase()) {
+      return false;
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchId = String(log.record_id || '').includes(q);
+      const matchModule = (log.table_name || '').toLowerCase().includes(q);
+      const matchUser = (log.changed_by || '').toLowerCase().includes(q);
+      const matchAction = (log.action || '').toLowerCase().includes(q);
+      if (!matchId && !matchModule && !matchUser && !matchAction) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   if (loading) {
     return <div className="p-8 flex justify-center text-gray-500">Loading history logs...</div>;
@@ -97,7 +162,7 @@ const HistoryLogs = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Advanced History & Audit Logs</h1>
           <p className="text-gray-500 mt-1">Track, view, edit, and recover deleted data across all modules.</p>
@@ -109,6 +174,71 @@ const HistoryLogs = () => {
           <Download size={16} className="mr-2" />
           Export CSV
         </button>
+      </div>
+
+      {/* Top Filter Bar: Separate Action Tabs (All, Add, Edit, Delete, Restore) + Module Filter */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Action Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'All', label: 'All Actions' },
+            { id: 'add', label: 'Add' },
+            { id: 'edit', label: 'Edit' },
+            { id: 'delete', label: 'Delete' },
+            { id: 'restore', label: 'Restore' }
+          ].map(tab => {
+            const count = tab.id === 'All' 
+              ? logs.length 
+              : logs.filter(l => (l.action || '').toLowerCase() === tab.id).length;
+            const isActive = filterAction.toLowerCase() === tab.id.toLowerCase();
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setFilterAction(tab.id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  isActive
+                    ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-200'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Module Select & Search Box */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search logs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary-500 outline-none w-48 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl">
+            <Filter size={14} className="text-gray-500" />
+            <span className="text-xs font-semibold text-gray-600">Module:</span>
+            <select
+              value={filterModule}
+              onChange={(e) => setFilterModule(e.target.value)}
+              className="bg-transparent text-xs font-bold text-gray-800 outline-none cursor-pointer"
+            >
+              {availableModules.map(m => (
+                <option key={m} value={m}>
+                  {m === 'All' ? 'All Modules' : m.charAt(0).toUpperCase() + m.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -125,14 +255,14 @@ const HistoryLogs = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {logs.length === 0 ? (
+              {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    No history logs found
+                    No history logs found for selected action or filter
                   </td>
                 </tr>
               ) : (
-                logs.map((log) => (
+                filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-gray-500 whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString()}

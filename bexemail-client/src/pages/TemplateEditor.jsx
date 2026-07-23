@@ -19,18 +19,73 @@ const TemplateEditor = () => {
   });
   const [loading, setLoading] = useState(false);
 
+  const [editorReady, setEditorReady] = useState(false);
+  const [templateData, setTemplateData] = useState(null);
+
+  const loadDataIntoEditor = (data) => {
+    if (!emailEditorRef.current?.editor || !data) return;
+    
+    try {
+      let designToLoad = null;
+      if (data.design_json) {
+        designToLoad = typeof data.design_json === 'string' 
+          ? JSON.parse(data.design_json) 
+          : data.design_json;
+      } else if (data.html_content && data.html_content.trim() !== '') {
+        // Fallback for templates created before design_json was stored: wrap html_content into an Unlayer HTML block
+        designToLoad = {
+          body: {
+            rows: [
+              {
+                cells: [1],
+                columns: [
+                  {
+                    contents: [
+                      {
+                        type: 'html',
+                        values: {
+                          html: data.html_content
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        };
+      }
+
+      if (designToLoad) {
+        emailEditorRef.current.editor.loadDesign(designToLoad);
+      }
+    } catch (err) {
+      console.error('Failed to load design into Unlayer editor:', err);
+    }
+  };
+
   useEffect(() => {
     if (isEditing) {
       fetchTemplate();
     }
   }, [id]);
 
+  useEffect(() => {
+    if (editorReady && templateData) {
+      loadDataIntoEditor(templateData);
+    }
+  }, [editorReady, templateData]);
+
   const fetchTemplate = async () => {
     try {
       const res = await axios.get(`http://localhost:5000/api/templates/${id}`);
-      setFormData(res.data);
-      // If we saved JSON state previously, we would load it into the editor here.
-      // But standard schema only had html_content. In a real app we'd add design_json to schema.
+      const tData = res.data;
+      setFormData(tData);
+      setTemplateData(tData);
+
+      if (editorReady) {
+        loadDataIntoEditor(tData);
+      }
     } catch (error) {
       console.error('Error fetching template:', error);
       alert('Failed to load template');
@@ -38,15 +93,19 @@ const TemplateEditor = () => {
   };
 
   const onLoad = () => {
-    // You can load a design JSON here if editing
-    // if (formData.design_json) {
-    //   emailEditorRef.current.editor.loadDesign(formData.design_json);
-    // }
+    setEditorReady(true);
+    if (templateData) {
+      loadDataIntoEditor(templateData);
+    }
   };
 
   const handleSave = () => {
     if (!formData.template_name) return alert('Template name is required');
     
+    if (!emailEditorRef.current?.editor) {
+      return alert('Editor is not ready yet');
+    }
+
     // Extract HTML and Design JSON from the editor
     emailEditorRef.current.editor.exportHtml(async (data) => {
       const { design, html } = data;
@@ -56,7 +115,7 @@ const TemplateEditor = () => {
         const payload = {
           ...formData,
           html_content: html,
-          // design_json: design // (If schema was updated to store this)
+          design_json: JSON.stringify(design)
         };
 
         if (isEditing) {
@@ -67,7 +126,7 @@ const TemplateEditor = () => {
         navigate('/templates');
       } catch (error) {
         console.error('Error saving template:', error);
-        alert('Failed to save template');
+        alert(error.response?.data?.error || 'Failed to save template');
       } finally {
         setLoading(false);
       }

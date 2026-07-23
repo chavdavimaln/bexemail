@@ -1,6 +1,26 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* Global pointer cursor (hand cursor) for all buttons and interactive elements */
+button,
+a,
+select,
+summary,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+button:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
+}
 
 @layer base {
   body {

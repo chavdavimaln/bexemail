@@ -56,6 +56,13 @@ async function setupDB() {
       // Column might already exist, ignore error
     }
 
+    // Add design_json to templates if not exists
+    try {
+      await pool.query('ALTER TABLE templates ADD COLUMN design_json LONGTEXT NULL');
+    } catch (e) {
+      // Column might already exist, ignore error
+    }
+
     // 2. Create data_history table for Audit Logs
     await pool.query(`
       CREATE TABLE IF NOT EXISTS data_history (
