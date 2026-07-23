@@ -30,6 +30,28 @@ exports.createSubscriber = async (req, res) => {
   }
 };
 
+// Update Subscriber by ID (email, name, status)
+exports.updateSubscriber = async (req, res) => {
+  const { id } = req.params;
+  const { email, first_name, status } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const [oldRows] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
+    if (oldRows.length === 0) return res.status(404).json({ error: 'Subscriber not found' });
+
+    await pool.query(
+      `UPDATE subscribers SET email = ?, first_name = ?, status = ? WHERE id = ?`,
+      [email, first_name || null, status || 'subscribed', id]
+    );
+
+    res.json({ message: 'Subscriber updated successfully', id });
+  } catch (error) {
+    console.error('Update subscriber error:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
 // Fetch Subscribers with pagination, search, filter
 exports.getSubscribers = async (req, res) => {
   const page = parseInt(req.query.page) || 1;

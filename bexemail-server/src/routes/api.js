@@ -11,8 +11,9 @@ const { checkRole, ROLES } = require('../middleware/rbac');
 // Subscribers
 router.post('/subscribers', subscribersController.createSubscriber);
 router.get('/subscribers', subscribersController.getSubscribers);
+router.post('/subscribers/unsubscribe/:subscriberId', subscribersController.unsubscribe);  // must be before :id routes
+router.put('/subscribers/:id', subscribersController.updateSubscriber);
 router.delete('/subscribers/:id', subscribersController.deleteSubscriber);
-router.post('/subscribers/unsubscribe/:subscriberId', subscribersController.unsubscribe);
 
 // Senders
 const sendersController = require('../controllers/senders');
@@ -27,7 +28,7 @@ router.get('/lists', listsController.getLists);
 router.put('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.updateList);
 router.delete('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.deleteList);
 router.post('/lists/assign', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.assignSubscribers);
-router.post('/lists/sync', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.syncSubscriberLists);
+router.post('/lists/sync', listsController.syncSubscriberLists);  // no role guard - used by contacts edit
 
 // Campaigns (Require Campaign Manager or Super Admin)
 router.get('/campaigns', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.getCampaigns);

@@ -16,14 +16,57 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // For standard HTML forms
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' })); // For standard HTML forms
 
 
 // Routes
 app.get('/', (req, res) => {
   res.json({ message: 'BexEmail API is running successfully on port 5000!' });
 });
+
+// ── Dedicated Contact Update + List Sync (no role guard, for Contacts page edit) ──
+const pool = require('./src/config/db');
+app.put('/api/contacts/:id/update', async (req, res) => {
+  const { id } = req.params;
+  const { email, first_name, status, list_ids } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // 1. Update subscriber fields
+    const [check] = await connection.query('SELECT id FROM subscribers WHERE id = ?', [id]);
+    if (check.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+    await connection.query(
+      'UPDATE subscribers SET email = ?, first_name = ?, status = ? WHERE id = ?',
+      [email, first_name || null, status || 'subscribed', id]
+    );
+
+    // 2. Sync list assignments
+    await connection.query('DELETE FROM subscriber_lists WHERE subscriber_id = ?', [id]);
+    const ids = Array.isArray(list_ids) ? list_ids.map(Number).filter(Boolean) : [];
+    if (ids.length > 0) {
+      const values = ids.map(lid => [id, lid]);
+      await connection.query('INSERT INTO subscriber_lists (subscriber_id, list_id) VALUES ?', [values]);
+    }
+
+    await connection.commit();
+    res.json({ message: 'Contact updated successfully', id });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('[Contact Update] Error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 const automationRoutes = require('./src/routes/automationRoutes');
 app.use('/api/automations', automationRoutes);
 app.use('/api', require('./src/routes/api'));

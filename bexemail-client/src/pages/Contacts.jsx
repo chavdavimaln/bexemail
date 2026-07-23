@@ -168,21 +168,22 @@ const Contacts = () => {
 
   const saveEdit = async (id) => {
     try {
-      await axios.post('http://localhost:5000/api/subscribers', {
+      // Single atomic call: updates subscriber fields + syncs list assignments
+      await axios.put(`http://localhost:5000/api/contacts/${id}/update`, {
         email: editEmail,
         first_name: editName,
-        status: editStatus
-      });
-      
-      await axios.put('http://localhost:5000/api/lists/sync', {
-        subscriber_id: id,
+        status: editStatus,
         list_ids: editListIds.map(Number)
       });
-      
       setEditingId(null);
       fetchData();
     } catch (error) {
-      alert('Failed to update contact.');
+      console.error('saveEdit error:', error.response?.data || error.message);
+      customAlert({
+        title: 'Update Failed',
+        message: error.response?.data?.error || 'Failed to update contact. Please try again.',
+        type: 'danger'
+      });
     }
   };
 
