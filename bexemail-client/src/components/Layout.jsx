@@ -6,7 +6,7 @@ const Sidebar = () => {
   const location = useLocation();
   const [openDropdowns, setOpenDropdowns] = React.useState({ 
     automations: location.pathname.startsWith('/automations'),
-    contacts: location.pathname.startsWith('/contacts')
+    contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists')
   });
 
   const navItems = [
@@ -30,11 +30,11 @@ const Sidebar = () => {
       icon: <Users size={20} />,
       subItems: [
         { name: 'Directory', path: '/contacts' },
+        { name: 'Target Lists', path: '/lists' },
         { name: 'Bulk Import', path: '/contacts/bulk-import' },
         { name: 'Import History', path: '/contacts/import-logs' },
       ]
     },
-    { name: 'Target Lists', path: '/lists', icon: <ListIcon size={20} /> },
     { name: 'Templates', path: '/templates', icon: <LayoutTemplate size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
     { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
