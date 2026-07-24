@@ -381,35 +381,43 @@ export default function CampaignWizard() {
         </div>
       </div>
 
-      {/* Progress Bar - Responsive & Clickable */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="overflow-x-auto no-scrollbar py-1">
-          <div className="flex items-center justify-between min-w-[760px] px-2">
-            {steps.map((s, index) => (
-              <div 
-                key={s.id} 
+      {/* Progress Bar - Fully Responsive, 100% No Horizontal Scroll */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-6 w-full">
+        <div className="flex items-center justify-between w-full">
+          {steps.map((s, index) => (
+            <React.Fragment key={s.id}>
+              <button 
+                type="button"
                 onClick={() => setStep(s.id)}
-                className="flex items-center cursor-pointer group hover:opacity-90 transition-opacity"
+                className="flex items-center gap-2 justify-center focus:outline-none group transition-all"
               >
-                <div className={`flex items-center justify-center w-9 h-9 rounded-full border-2 transition-all ${
+                <div className={`flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full border-2 transition-all shrink-0 ${
                   step > s.id 
-                    ? 'bg-primary-600 border-primary-600 text-white' 
+                    ? 'bg-primary-600 border-primary-600 text-white shadow-sm' 
                     : step === s.id 
-                      ? 'border-primary-600 text-primary-600 bg-primary-50 ring-4 ring-primary-100' 
-                      : 'border-gray-200 text-gray-400 group-hover:border-gray-300'
+                      ? 'border-primary-600 text-white bg-primary-600 ring-4 ring-primary-100 shadow-md scale-105' 
+                      : 'border-gray-200 text-gray-400 bg-gray-50 group-hover:border-gray-300 group-hover:text-gray-600'
                 }`}>
-                  {step > s.id ? <Check size={18} /> : s.icon}
+                  {step > s.id ? <Check size={16} /> : s.icon}
                 </div>
-                <div className="ml-2.5">
-                  <p className={`text-[10px] uppercase tracking-wider font-bold ${step === s.id ? 'text-primary-700' : 'text-gray-400'}`}>Step {s.id}</p>
-                  <p className={`text-xs font-semibold whitespace-nowrap ${step === s.id ? 'text-primary-700' : 'text-gray-700'}`}>{s.title}</p>
+
+                <div className="hidden lg:block text-left">
+                  <p className={`text-[10px] uppercase tracking-wider font-extrabold leading-none ${step === s.id ? 'text-primary-600' : 'text-gray-400'}`}>
+                    Step {s.id}
+                  </p>
+                  <p className={`text-xs font-bold leading-tight truncate ${step === s.id ? 'text-gray-900' : 'text-gray-500'}`}>
+                    {s.title}
+                  </p>
                 </div>
-                {index < steps.length - 1 && (
-                  <div className={`w-4 md:w-8 h-0.5 mx-2 md:mx-3 rounded ${step > s.id ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
-                )}
-              </div>
-            ))}
-          </div>
+              </button>
+
+              {index < steps.length - 1 && (
+                <div className={`h-0.5 flex-1 mx-1.5 md:mx-2 rounded transition-colors ${
+                  step > s.id ? 'bg-primary-600' : 'bg-gray-200'
+                }`} />
+              )}
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
