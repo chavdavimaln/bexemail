@@ -8,6 +8,8 @@ import TemplatesList from './pages/TemplatesList';
 import TemplateEditor from './pages/TemplateEditor';
 import Contacts from './pages/Contacts';
 import TargetLists from './pages/TargetLists';
+import BulkImportPage from './modules/bulk-import/pages/BulkImportPage';
+import ImportHistoryPage from './modules/bulk-import/pages/ImportHistoryPage';
 import CampaignReport from './pages/CampaignReport';
 import PreferenceCenter from './pages/PreferenceCenter';
 import Settings from './pages/Settings';
@@ -73,6 +75,8 @@ function App() {
             <Route path="campaigns/new" element={<CampaignWizard />} />
             <Route path="create-campaign" element={<CampaignWizard />} />
             <Route path="contacts" element={<Contacts />} />
+            <Route path="contacts/bulk-import" element={<BulkImportPage />} />
+            <Route path="contacts/import-logs" element={<ImportHistoryPage />} />
             <Route path="lists" element={<TargetLists />} />
             <Route path="templates" element={<TemplatesList />} />
             <Route path="templates/new" element={<TemplateEditor />} />

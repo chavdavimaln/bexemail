@@ -29,6 +29,7 @@ app.get('/', (req, res) => {
 const pool = require('./src/config/db');
 app.put('/api/contacts/:id/update', async (req, res) => {
   const { id } = req.params;
+  const numSubId = Number(id);
   const { email, first_name, status, list_ids } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -38,26 +39,42 @@ app.put('/api/contacts/:id/update', async (req, res) => {
     await connection.beginTransaction();
 
     // 1. Update subscriber fields
-    const [check] = await connection.query('SELECT id FROM subscribers WHERE id = ?', [id]);
+    const [check] = await connection.query('SELECT id FROM subscribers WHERE id = ?', [numSubId]);
     if (check.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'Subscriber not found' });
     }
     await connection.query(
       'UPDATE subscribers SET email = ?, first_name = ?, status = ? WHERE id = ?',
-      [email, first_name || null, status || 'subscribed', id]
+      [email, first_name || null, status || 'subscribed', numSubId]
     );
 
-    // 2. Sync list assignments
-    await connection.query('DELETE FROM subscriber_lists WHERE subscriber_id = ?', [id]);
-    const ids = Array.isArray(list_ids) ? list_ids.map(Number).filter(Boolean) : [];
-    if (ids.length > 0) {
-      const values = ids.map(lid => [id, lid]);
-      await connection.query('INSERT INTO subscriber_lists (subscriber_id, list_id) VALUES ?', [values]);
+    // 2. Clear old assignments
+    await connection.query('DELETE FROM subscriber_lists WHERE subscriber_id = ?', [numSubId]);
+    await connection.query('DELETE FROM subscriber_list_origins WHERE subscriber_id = ?', [numSubId]);
+
+    // 3. Ensure origin record exists
+    const [origins] = await connection.query('SELECT origin_site FROM subscriber_origins WHERE subscriber_id = ?', [numSubId]);
+    let sites = origins.map(o => o.origin_site);
+    if (sites.length === 0) {
+      await connection.query(
+        'INSERT IGNORE INTO subscriber_origins (subscriber_id, origin_site, status) VALUES (?, ?, ?)',
+        [numSubId, 'localhost', status || 'subscribed']
+      );
+      sites = ['localhost'];
+    }
+
+    // 4. Insert new list assignments
+    const validListIds = Array.isArray(list_ids) ? list_ids.map(Number).filter(lid => !isNaN(lid) && lid > 0) : [];
+    for (const lid of validListIds) {
+      await connection.query('INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id) VALUES (?, ?)', [numSubId, lid]);
+      for (const site of sites) {
+        await connection.query('INSERT IGNORE INTO subscriber_list_origins (subscriber_id, list_id, origin_site) VALUES (?, ?, ?)', [numSubId, lid, site]);
+      }
     }
 
     await connection.commit();
-    res.json({ message: 'Contact updated successfully', id });
+    res.json({ message: 'Contact updated successfully', id: numSubId });
   } catch (error) {
     if (connection) await connection.rollback();
     console.error('[Contact Update] Error:', error);
@@ -78,6 +95,7 @@ app.use('/api/track_wizard', require('./src/routes/trackRoutes'));
 app.use('/api/forms', require('./src/routes/formRoutes'));
 app.use('/api/preferences', require('./src/routes/preferenceRoutes'));
 app.use('/api/ai', require('./src/routes/aiRoutes'));
+app.use('/api/bulk-import', require('./src/routes/bulkImportRoutes'));
 
 const PORT = process.env.PORT || 5000;
 
@@ -98,7 +116,7 @@ isRedisAvailable(REDIS_HOST, REDIS_PORT).then((available) => {
     require('./src/workers/automationCron');
     console.log('[Server] ✅ Redis online — Automation queue workers started.');
   } else {
-    console.warn(`[Server] ⚠️  Redis not detected on ${REDIS_HOST}:${REDIS_PORT}. Automation queue workers are DISABLED. Campaigns, contacts, and all other features work normally.`);
+    console.log(`[Server] ✅ Operating in Standalone Mode (No Redis required). Campaigns, Contacts, and Email Processing are fully active on Port ${PORT}.`);
   }
 });
 

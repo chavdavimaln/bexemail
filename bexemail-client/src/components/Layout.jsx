@@ -4,7 +4,10 @@ import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings,
 
 const Sidebar = () => {
   const location = useLocation();
-  const [openDropdowns, setOpenDropdowns] = React.useState({ automations: location.pathname.startsWith('/automations') });
+  const [openDropdowns, setOpenDropdowns] = React.useState({ 
+    automations: location.pathname.startsWith('/automations'),
+    contacts: location.pathname.startsWith('/contacts')
+  });
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
@@ -21,7 +24,16 @@ const Sidebar = () => {
     },
     { name: 'Integrations', path: '/integrations', icon: <Code size={20} /> },
     { name: 'Forms', path: '/forms', icon: <Code size={20} /> },
-    { name: 'Contacts', path: '/contacts', icon: <Users size={20} /> },
+    { 
+      name: 'Contacts', 
+      id: 'contacts',
+      icon: <Users size={20} />,
+      subItems: [
+        { name: 'Directory', path: '/contacts' },
+        { name: 'Bulk Import', path: '/contacts/bulk-import' },
+        { name: 'Import History', path: '/contacts/import-logs' },
+      ]
+    },
     { name: 'Target Lists', path: '/lists', icon: <ListIcon size={20} /> },
     { name: 'Templates', path: '/templates', icon: <LayoutTemplate size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
@@ -39,7 +51,7 @@ const Sidebar = () => {
         {navItems.map((item) => {
           if (item.subItems) {
             const isDropdownOpen = openDropdowns[item.id];
-            const isAnyChildActive = location.pathname.startsWith('/automations');
+            const isAnyChildActive = item.subItems.some(sub => location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path)));
             
             return (
               <div key={item.name} className="space-y-1">
@@ -60,7 +72,7 @@ const Sidebar = () => {
                 {isDropdownOpen && (
                   <div className="pl-10 pr-2 space-y-1">
                     {item.subItems.map(sub => {
-                      const isSubActive = location.pathname === sub.path || (sub.path !== '/automations' && location.pathname.startsWith(sub.path));
+                      const isSubActive = location.pathname === sub.path;
                       return (
                         <Link
                           key={sub.name}

@@ -119,30 +119,55 @@ exports.getDashboardStats = async (req, res) => {
     );
 
     // 3. Campaign Performance (Global Opens/Clicks)
-    // We combine campaign_opens and campaign_clicks by date
-    const [timelineStats] = await pool.query(
-      `SELECT 
-        date_series.d as date,
-        COALESCE(o.opens, 0) as opens,
-        COALESCE(c.clicks, 0) as clicks
-       FROM (
-         SELECT DATE(NOW() - INTERVAL n DAY) as d FROM (
-           SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
-         ) days
-       ) date_series
-       LEFT JOIN (
-         SELECT DATE(created_at) as d, COUNT(*) as opens FROM campaign_opens GROUP BY DATE(created_at)
-       ) o ON date_series.d = o.d
-       LEFT JOIN (
-         SELECT DATE(created_at) as d, COUNT(*) as clicks FROM campaign_clicks GROUP BY DATE(created_at)
-       ) c ON date_series.d = c.d
-       ORDER BY date_series.d DESC
-       LIMIT 7`
-    );
+    let timelineStats = [];
+    try {
+      const [rows] = await pool.query(
+        `SELECT 
+          date_series.d as date,
+          COALESCE(o.opens, 0) as opens,
+          COALESCE(c.clicks, 0) as clicks
+         FROM (
+           SELECT DATE(NOW() - INTERVAL n DAY) as d FROM (
+             SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
+           ) days
+         ) date_series
+         LEFT JOIN (
+           SELECT DATE(created_at) as d, COUNT(*) as opens FROM campaign_opens GROUP BY DATE(created_at)
+         ) o ON date_series.d = o.d
+         LEFT JOIN (
+           SELECT DATE(created_at) as d, COUNT(*) as clicks FROM campaign_clicks GROUP BY DATE(created_at)
+         ) c ON date_series.d = c.d
+         ORDER BY date_series.d DESC
+         LIMIT 7`
+      );
+      timelineStats = rows;
+    } catch (e) {
+      console.warn('[Analytics] Campaign opens/clicks timeline query fallback:', e.message);
+      timelineStats = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        return { date: d.toISOString().split('T')[0], opens: 0, clicks: 0 };
+      });
+    }
 
     // 4. Recent Campaigns
     const [recentCampaigns] = await pool.query(
       `SELECT id, name, status, created_at FROM campaigns ORDER BY created_at DESC LIMIT 5`
+    );
+
+    // 5. Recent Subscribers
+    const [recentSubscribers] = await pool.query(
+      `SELECT id, email, status, created_at FROM subscribers ORDER BY created_at DESC LIMIT 5`
+    );
+
+    // 6. Recent Automations
+    const [recentAutomations] = await pool.query(
+      `SELECT id, name, status, created_at FROM automations ORDER BY created_at DESC LIMIT 5`
+    );
+
+    // 7. Recent Lists
+    const [recentLists] = await pool.query(
+      `SELECT id, name, description, created_at FROM lists WHERE is_deleted = FALSE ORDER BY created_at DESC LIMIT 5`
     );
 
     // Format for recharts
@@ -165,7 +190,10 @@ exports.getDashboardStats = async (req, res) => {
       timeline: formattedTimeline.length ? formattedTimeline : [
         { date: new Date().toISOString().split('T')[0], opens: 0, clicks: 0, bounces: 0 }
       ],
-      recentCampaigns
+      recentCampaigns,
+      recentSubscribers,
+      recentAutomations,
+      recentLists
     });
 
   } catch (error) {

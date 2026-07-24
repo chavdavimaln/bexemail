@@ -10,11 +10,22 @@ cron.schedule('*/10 * * * *', async () => {
 
         // Find A/B test campaigns that have been in 'sending' status for at least 4 hours
         // (For testing purposes, we might want to drop it to 5 minutes, but let's use 4 hours for production realism)
-        const [campaigns] = await connection.query(`
-            SELECT id, subject, variant_b_subject, list_id 
-            FROM campaigns 
-            WHERE is_ab_test = 1 AND status = 'sending' AND updated_at <= NOW() - INTERVAL 4 HOUR
-        `);
+        let campaigns = [];
+        try {
+          const [rows] = await connection.query(`
+              SELECT id, subject, variant_b_subject, list_id 
+              FROM campaigns 
+              WHERE is_ab_test = 1 AND status = 'sending' AND updated_at <= NOW() - INTERVAL 4 HOUR
+          `);
+          campaigns = rows;
+        } catch (e) {
+          const [rows] = await connection.query(`
+              SELECT id, subject, variant_b_subject, list_id 
+              FROM campaigns 
+              WHERE is_ab_test = 1 AND status = 'sending' AND created_at <= NOW() - INTERVAL 4 HOUR
+          `);
+          campaigns = rows;
+        }
 
         for (const campaign of campaigns) {
             console.log(`[Cron] Resolving A/B Test for Campaign ${campaign.id}`);

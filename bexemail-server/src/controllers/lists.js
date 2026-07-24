@@ -82,15 +82,25 @@ exports.assignSubscribers = async (req, res) => {
   }
 
   try {
-    // Basic implementation: insert ignores duplicates if we had UNIQUE constraint
-    // But since it's a composite PK, INSERT IGNORE works
-    const values = subscriber_ids.map(sub_id => [sub_id, list_id]);
+    const ids = subscriber_ids.map(Number).filter(Boolean);
+    const values = ids.map(sub_id => [sub_id, list_id]);
     
     if (values.length > 0) {
-       await pool.query(
+      await pool.query(
         `INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id) VALUES ?`,
         [values]
       );
+
+      for (const sub_id of ids) {
+        const [origins] = await pool.query('SELECT origin_site FROM subscriber_origins WHERE subscriber_id = ?', [sub_id]);
+        const sites = origins.length > 0 ? origins.map(o => o.origin_site) : ['localhost'];
+        if (origins.length === 0) {
+          await pool.query('INSERT IGNORE INTO subscriber_origins (subscriber_id, origin_site, status) VALUES (?, ?, ?)', [sub_id, 'localhost', 'subscribed']);
+        }
+        for (const site of sites) {
+          await pool.query('INSERT IGNORE INTO subscriber_list_origins (subscriber_id, list_id, origin_site) VALUES (?, ?, ?)', [sub_id, list_id, site]);
+        }
+      }
     }
     res.json({ message: 'Subscribers assigned successfully' });
   } catch (error) {
@@ -102,9 +112,10 @@ exports.assignSubscribers = async (req, res) => {
 // Sync Subscribers Lists
 exports.syncSubscriberLists = async (req, res) => {
   const { subscriber_id, list_ids } = req.body;
+  const numSubId = Number(subscriber_id);
   
-  if (!subscriber_id || !Array.isArray(list_ids)) {
-    return res.status(400).json({ error: 'subscriber_id and list_ids (array) are required' });
+  if (!numSubId || isNaN(numSubId) || !Array.isArray(list_ids)) {
+    return res.status(400).json({ error: 'Valid subscriber_id and list_ids (array) are required' });
   }
 
   let connection;
@@ -113,15 +124,24 @@ exports.syncSubscriberLists = async (req, res) => {
     await connection.beginTransaction();
 
     // 1. Delete all existing list associations for this subscriber
-    await connection.query('DELETE FROM subscriber_lists WHERE subscriber_id = ?', [subscriber_id]);
+    await connection.query('DELETE FROM subscriber_lists WHERE subscriber_id = ?', [numSubId]);
+    await connection.query('DELETE FROM subscriber_list_origins WHERE subscriber_id = ?', [numSubId]);
 
-    // 2. Insert new list associations if any
-    if (list_ids.length > 0) {
-      const values = list_ids.map(list_id => [subscriber_id, list_id]);
-      await connection.query(
-        'INSERT INTO subscriber_lists (subscriber_id, list_id) VALUES ?',
-        [values]
-      );
+    // 2. Ensure origin record exists
+    const [origins] = await connection.query('SELECT origin_site FROM subscriber_origins WHERE subscriber_id = ?', [numSubId]);
+    let sites = origins.map(o => o.origin_site);
+    if (sites.length === 0) {
+      await connection.query('INSERT IGNORE INTO subscriber_origins (subscriber_id, origin_site, status) VALUES (?, ?, ?)', [numSubId, 'localhost', 'subscribed']);
+      sites = ['localhost'];
+    }
+
+    // 3. Insert new list associations if any
+    const validListIds = list_ids.map(Number).filter(lid => !isNaN(lid) && lid > 0);
+    for (const list_id of validListIds) {
+      await connection.query('INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id) VALUES (?, ?)', [numSubId, list_id]);
+      for (const site of sites) {
+        await connection.query('INSERT IGNORE INTO subscriber_list_origins (subscriber_id, list_id, origin_site) VALUES (?, ?, ?)', [numSubId, list_id, site]);
+      }
     }
 
     await connection.commit();

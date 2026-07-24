@@ -23,6 +23,13 @@ exports.createSubscriber = async (req, res) => {
       }
     }
 
+    if (subscriberId) {
+      await pool.query(
+        'INSERT IGNORE INTO subscriber_origins (subscriber_id, origin_site, name, status) VALUES (?, ?, ?, ?)',
+        [subscriberId, 'localhost', first_name || null, status || 'subscribed']
+      );
+    }
+
     res.status(201).json({ message: 'Subscriber added/updated successfully', id: subscriberId });
   } catch (error) {
     console.error('Create subscriber error:', error);
