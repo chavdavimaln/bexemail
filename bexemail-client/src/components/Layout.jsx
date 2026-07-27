@@ -5,13 +5,22 @@ import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings,
 const Sidebar = () => {
   const location = useLocation();
   const [openDropdowns, setOpenDropdowns] = React.useState({ 
+    campaigns: location.pathname.startsWith('/campaigns') || location.pathname.startsWith('/templates'),
     automations: location.pathname.startsWith('/automations'),
     contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists')
   });
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-    { name: 'Campaigns', path: '/campaigns', icon: <Megaphone size={20} /> },
+    { 
+      name: 'Campaigns', 
+      id: 'campaigns',
+      icon: <Megaphone size={20} />,
+      subItems: [
+        { name: 'Campaign List', path: '/campaigns' },
+        { name: 'Email Templates', path: '/templates' },
+      ]
+    },
     { 
       name: 'Automations', 
       id: 'automations',
@@ -35,7 +44,6 @@ const Sidebar = () => {
         { name: 'Import History', path: '/contacts/import-logs' },
       ]
     },
-    { name: 'Templates', path: '/templates', icon: <LayoutTemplate size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
     { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
     { name: 'History Logs', path: '/history', icon: <History size={20} /> },
@@ -56,7 +64,18 @@ const Sidebar = () => {
             return (
               <div key={item.name} className="space-y-1">
                 <button
-                  onClick={() => setOpenDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                  onClick={() => setOpenDropdowns(prev => {
+                    const nextVal = !prev[item.id];
+                    if (nextVal) {
+                      return {
+                        campaigns: item.id === 'campaigns',
+                        automations: item.id === 'automations',
+                        contacts: item.id === 'contacts'
+                      };
+                    } else {
+                      return { ...prev, [item.id]: false };
+                    }
+                  })}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isAnyChildActive && !isDropdownOpen ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
                   }`}

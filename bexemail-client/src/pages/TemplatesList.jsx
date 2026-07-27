@@ -67,8 +67,16 @@ const TemplatesList = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates.map(template => (
           <div key={template.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-            <div className="h-40 bg-gray-100 border-b border-gray-200 flex items-center justify-center text-gray-400">
-              <LayoutTemplate size={48} />
+            <div className="h-40 bg-gray-50 border-b border-gray-200 flex items-center justify-center overflow-hidden relative">
+              {template.html_content ? (
+                <iframe 
+                  srcDoc={template.html_content} 
+                  title={template.template_name} 
+                  className="w-[400%] h-[400%] origin-top-left scale-25 pointer-events-none border-0" 
+                />
+              ) : (
+                <LayoutTemplate size={48} className="text-gray-400" />
+              )}
             </div>
             <div className="p-5 flex flex-col flex-1">
               <div className="flex justify-between items-start mb-2">

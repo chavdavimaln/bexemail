@@ -12,22 +12,24 @@ async function enqueueSubscribers(db, campaignId, listId, isAbTest, targetEmail)
 
     let subscribers = [];
 
-    // Mode 1: Single recipient target email
+    // Mode 1: Single/Multiple recipient target email(s)
     if (targetEmail && targetEmail.trim() !== '') {
-      const cleanEmail = targetEmail.trim();
-      let [existingSub] = await db.query('SELECT id FROM subscribers WHERE email = ?', [cleanEmail]);
-      let subId;
-      if (existingSub.length > 0) {
-        subId = existingSub[0].id;
-      } else {
-        const [insertRes] = await db.query(
-          'INSERT INTO subscribers (email, status) VALUES (?, "subscribed")',
-          [cleanEmail]
-        );
-        subId = insertRes.insertId;
+      const emails = targetEmail.split(',').map(e => e.trim()).filter(e => e.length > 0);
+      for (const cleanEmail of emails) {
+        let [existingSub] = await db.query('SELECT id FROM subscribers WHERE email = ?', [cleanEmail]);
+        let subId;
+        if (existingSub.length > 0) {
+          subId = existingSub[0].id;
+        } else {
+          const [insertRes] = await db.query(
+            'INSERT INTO subscribers (email, status) VALUES (?, "subscribed")',
+            [cleanEmail]
+          );
+          subId = insertRes.insertId;
+        }
+        subscribers.push({ id: subId });
       }
-      subscribers = [{ id: subId }];
-      console.log(`[Campaigns] Target mode: Single Person (${cleanEmail}, Subscriber ID #${subId})`);
+      console.log(`[Campaigns] Target mode: Individual Contact(s) (${emails.join(', ')}, Subscriber IDs: ${subscribers.map(s => s.id).join(', ')})`);
     } else {
       // Mode 2: Audience List target
       const [rows] = await db.query(

@@ -31,6 +31,33 @@ const SAMPLE_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const DEFAULT_FOOTER_HTML = `<div style="padding: 25px 20px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; text-align: left; max-width: 600px; margin: 0 auto; box-sizing: border-box; border-radius: 0 0 12px 12px;">
+  <!-- Row 1: Logo (Left) & Social Media (Right) -->
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin-bottom: 15px;">
+    <tr>
+      <td align="left" style="font-size: 18px; font-weight: bold; color: #2563eb; font-family: inherit;">
+        BexEmail
+      </td>
+      <td align="right" style="font-family: inherit; font-size: 12px;">
+        <a href="https://facebook.com" style="margin-left: 10px; color: #1877f2; text-decoration: none; font-weight: 600;">Facebook</a>
+        <a href="https://instagram.com" style="margin-left: 10px; color: #e1306c; text-decoration: none; font-weight: 600;">Instagram</a>
+        <a href="https://linkedin.com" style="margin-left: 10px; color: #0077b5; text-decoration: none; font-weight: 600;">LinkedIn</a>
+        <a href="https://twitter.com" style="margin-left: 10px; color: #0f172a; text-decoration: none; font-weight: 600;">Twitter-X</a>
+      </td>
+    </tr>
+  </table>
+  
+  <!-- Row 2: Address and All Rights Reserved -->
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; border-top: 1px solid #f1f5f9; padding-top: 12px;">
+    <tr>
+      <td align="center" style="font-size: 11px; color: #64748b; line-height: 1.6; font-family: inherit; padding-top: 8px;">
+        123 Business Rd, Suite 100, Business City, BC 12345<br>
+        © 2026 BexEmail. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>`;
+
 const TemplateEditor = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -51,18 +78,28 @@ const TemplateEditor = () => {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
+  const footerEditorRef = useRef(null);
+  const [footerEditorReady, setFooterEditorReady] = useState(false);
+
   const [formData, setFormData] = useState({
     template_name: '',
     category: 'Newsletter',
     html_content: '',
     plain_text_content: '',
-    design_json: null
+    design_json: null,
+    include_footer: 1,
+    footer_editor_type: 'html',
+    footer_html: DEFAULT_FOOTER_HTML,
+    footer_design_json: null
   });
 
   const [loading, setLoading] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
   const [templateData, setTemplateData] = useState(null);
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewDevice, setPreviewDevice] = useState('desktop');
 
   useEffect(() => {
     if (isEditing) {
@@ -121,8 +158,17 @@ const TemplateEditor = () => {
     try {
       const res = await axios.get(`http://localhost:5000/api/templates/${id}`);
       const tData = res.data;
-      setFormData(tData);
-      setTemplateData(tData);
+      
+      const loadedFormData = {
+        ...tData,
+        include_footer: tData.include_footer !== null && tData.include_footer !== undefined ? tData.include_footer : 1,
+        footer_editor_type: tData.footer_editor_type || 'html',
+        footer_html: tData.footer_html || DEFAULT_FOOTER_HTML,
+        footer_design_json: tData.footer_design_json || null
+      };
+      
+      setFormData(loadedFormData);
+      setTemplateData(loadedFormData);
 
       // Add category if custom and not in list
       if (tData.category && !categories.includes(tData.category)) {
@@ -149,6 +195,76 @@ const TemplateEditor = () => {
     if (templateData) {
       loadDataIntoEditor(templateData);
     }
+  };
+
+  const onFooterLoad = () => {
+    setFooterEditorReady(true);
+    let designToLoad = null;
+    if (formData.footer_design_json) {
+      designToLoad = typeof formData.footer_design_json === 'string'
+        ? JSON.parse(formData.footer_design_json)
+        : formData.footer_design_json;
+    } else if (formData.footer_html) {
+      designToLoad = {
+        body: {
+          rows: [
+            {
+              cells: [1],
+              columns: [
+                {
+                  contents: [
+                    {
+                      type: 'html',
+                      values: {
+                        html: formData.footer_html
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+    if (designToLoad && footerEditorRef.current?.editor) {
+      footerEditorRef.current.editor.loadDesign(designToLoad);
+    }
+  };
+
+  const exportHtmlFromFooterBuilder = () => {
+    return new Promise((resolve) => {
+      if (formData.footer_editor_type === 'builder' && footerEditorRef.current?.editor) {
+        footerEditorRef.current.editor.exportHtml((data) => {
+          const { html, design } = data;
+          resolve({ html, design });
+        });
+      } else {
+        resolve({ html: formData.footer_html, design: formData.footer_design_json });
+      }
+    });
+  };
+
+  const mergeFooterIntoHtml = (mainHtml, footerHtml) => {
+    if (!mainHtml) return footerHtml;
+    if (!footerHtml) return mainHtml;
+    
+    // Check if footer is already merged
+    if (mainHtml.includes('Facebook') && mainHtml.includes('Instagram') && mainHtml.includes('All rights reserved')) {
+      return mainHtml;
+    }
+    
+    const bodyCloseIndex = mainHtml.lastIndexOf('</body>');
+    if (bodyCloseIndex !== -1) {
+      return mainHtml.substring(0, bodyCloseIndex) + footerHtml + mainHtml.substring(bodyCloseIndex);
+    }
+    
+    const divCloseIndex = mainHtml.lastIndexOf('</div>');
+    if (divCloseIndex !== -1) {
+      return mainHtml.substring(0, divCloseIndex) + footerHtml + mainHtml.substring(divCloseIndex);
+    }
+    
+    return mainHtml + '\n' + footerHtml;
   };
 
   // Sync HTML from Drag & Drop builder into formData.html_content
@@ -184,6 +300,15 @@ const TemplateEditor = () => {
     if (activeTab === 'builder' && emailEditorRef.current?.editor) {
       const exported = await exportHtmlFromBuilder();
       htmlToCopy = exported.html;
+    }
+
+    if (formData.include_footer) {
+      let footerHtml = formData.footer_html;
+      if (formData.footer_editor_type === 'builder' && footerEditorRef.current?.editor) {
+        const exportedFooter = await exportHtmlFromFooterBuilder();
+        footerHtml = exportedFooter.html;
+      }
+      htmlToCopy = mergeFooterIntoHtml(htmlToCopy, footerHtml);
     }
 
     if (!htmlToCopy) {
@@ -222,7 +347,28 @@ const TemplateEditor = () => {
     });
   };
 
-  // Save Template Handler
+  const handlePreviewTemplate = async () => {
+    let mainHtml = formData.html_content;
+    if (activeTab === 'builder' && emailEditorRef.current?.editor) {
+      const exported = await exportHtmlFromBuilder();
+      mainHtml = exported.html;
+    } else if (activeTab === 'code_editor' && !mainHtml) {
+      mainHtml = SAMPLE_HTML;
+    }
+
+    let footerHtml = formData.footer_html;
+    if (formData.include_footer) {
+      if (formData.footer_editor_type === 'builder' && footerEditorRef.current?.editor) {
+        const exportedFooter = await exportHtmlFromFooterBuilder();
+        footerHtml = exportedFooter.html;
+      }
+      mainHtml = mergeFooterIntoHtml(mainHtml, footerHtml);
+    }
+
+    setPreviewHtml(mainHtml);
+    setShowPreviewModal(true);
+  };
+
   const handleSave = async () => {
     if (!formData.template_name.trim()) {
       return customAlert({
@@ -231,7 +377,10 @@ const TemplateEditor = () => {
         type: 'warning'
       });
     }
+    await handlePreviewTemplate();
+  };
 
+  const executeSave = async () => {
     setLoading(true);
     try {
       let finalHtml = formData.html_content;
@@ -245,11 +394,26 @@ const TemplateEditor = () => {
         finalHtml = SAMPLE_HTML;
       }
 
+      // Handle custom footer if included
+      let footerHtml = formData.footer_html;
+      let footerDesignStr = formData.footer_design_json;
+
+      if (formData.include_footer) {
+        if (formData.footer_editor_type === 'builder' && footerEditorRef.current?.editor) {
+          const exportedFooter = await exportHtmlFromFooterBuilder();
+          footerHtml = exportedFooter.html;
+          footerDesignStr = JSON.stringify(exportedFooter.design);
+        }
+        finalHtml = mergeFooterIntoHtml(finalHtml, footerHtml);
+      }
+
       const payload = {
         ...formData,
         template_name: formData.template_name.trim(),
         html_content: finalHtml,
-        design_json: finalDesignStr
+        design_json: finalDesignStr,
+        footer_html: footerHtml,
+        footer_design_json: footerDesignStr
       };
 
       if (isEditing) {
@@ -263,6 +427,7 @@ const TemplateEditor = () => {
         message: 'Template saved successfully!',
         type: 'success'
       });
+      setShowPreviewModal(false);
       navigate('/templates');
     } catch (error) {
       console.error('Error saving template:', error);
@@ -306,6 +471,16 @@ const TemplateEditor = () => {
           >
             {copiedHtml ? <Check size={15} className="text-green-600" /> : <Copy size={15} />}
             {copiedHtml ? 'Copied HTML!' : 'Copy HTML Code'}
+          </button>
+
+          {/* Preview Template Button */}
+          <button
+            type="button"
+            onClick={handlePreviewTemplate}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition"
+          >
+            <Eye size={15} />
+            Preview Template
           </button>
 
           {/* Save Template Button */}
@@ -361,6 +536,74 @@ const TemplateEditor = () => {
             </div>
           </div>
 
+        </div>
+
+        {/* Footer Settings Row */}
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-gray-700">
+              <input 
+                type="checkbox"
+                checked={formData.include_footer === 1 || formData.include_footer === true}
+                onChange={e => setFormData({ ...formData, include_footer: e.target.checked ? 1 : 0 })}
+                className="rounded text-primary-600 focus:ring-primary-500 w-4 h-4 cursor-pointer"
+              />
+              Include Custom Email Footer at the bottom
+            </label>
+
+            {(formData.include_footer === 1 || formData.include_footer === true) && (
+              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, footer_editor_type: 'html' })}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${formData.footer_editor_type === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  ✏️ Footer HTML Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, footer_editor_type: 'builder' })}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${formData.footer_editor_type === 'builder' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  🧱 Footer Drag & Drop
+                </button>
+              </div>
+            )}
+          </div>
+
+          {(formData.include_footer === 1 || formData.include_footer === true) && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                <h4 className="text-xs font-bold text-gray-700">Footer Editor</h4>
+                <span className="text-[10px] text-gray-400 font-semibold uppercase">Editing Footer Block</span>
+              </div>
+
+              {formData.footer_editor_type === 'html' ? (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold text-gray-600">HTML Code for Footer</label>
+                  <textarea
+                    value={formData.footer_html}
+                    onChange={e => setFormData({ ...formData, footer_html: e.target.value })}
+                    className="w-full h-32 p-3 font-mono text-[11px] text-emerald-600 bg-slate-900 rounded-lg outline-none border border-slate-700 resize-y"
+                    placeholder="<!-- Write your footer HTML here -->"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">This HTML will be automatically injected at the bottom of the main template HTML.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold text-gray-600">Visual Footer Builder</label>
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-[400px]">
+                    <EmailEditor 
+                      ref={footerEditorRef} 
+                      onLoad={onFooterLoad} 
+                      minHeight="400px"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">Design the footer visually. It will be saved and merged at the bottom of the template.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Tab View Selector Bar */}
@@ -561,6 +804,100 @@ const TemplateEditor = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* PREVIEW TEMPLATE MODAL */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-4xl w-full h-[85vh] flex flex-col overflow-hidden animate-in fade-in-50">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 p-4 shrink-0 bg-gray-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <Eye size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base">Full Template Preview</h3>
+                  <p className="text-xs text-gray-500">Live preview of your template design merged with the footer.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                {/* Desktop/Mobile toggles */}
+                <div className="flex bg-gray-200/80 p-0.5 rounded-lg border border-gray-200">
+                  <button
+                    onClick={() => setPreviewDevice('desktop')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                      previewDevice === 'desktop' ? 'bg-white text-gray-950 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    Desktop
+                  </button>
+                  <button
+                    onClick={() => setPreviewDevice('mobile')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                      previewDevice === 'mobile' ? 'bg-white text-gray-950 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    Mobile
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setShowPreviewModal(false)} 
+                  className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: preview frame */}
+            <div className="flex-1 bg-gray-100 p-6 overflow-y-auto flex items-center justify-center">
+              {previewDevice === 'desktop' ? (
+                <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <iframe 
+                    srcDoc={previewHtml} 
+                    title="Template Live Preview Desktop" 
+                    className="w-full h-full border-0 bg-white"
+                  />
+                </div>
+              ) : (
+                <div className="relative mx-auto border-4 border-gray-800 rounded-[36px] h-[600px] w-[320px] bg-gray-800 shadow-xl overflow-hidden">
+                  {/* Smartphone top bar */}
+                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-4 w-32 bg-gray-800 rounded-b-xl z-20"></div>
+                  <div className="w-full h-full bg-white overflow-hidden">
+                    <iframe 
+                      srcDoc={previewHtml} 
+                      title="Template Live Preview Mobile" 
+                      className="w-full h-full border-0 bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100 bg-gray-50 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 border border-gray-200 text-gray-600 text-xs font-semibold rounded-xl hover:bg-gray-100 transition"
+              >
+                Close Preview
+              </button>
+              <button
+                type="button"
+                onClick={executeSave}
+                disabled={loading}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Looks Good, Save'}
+              </button>
+            </div>
+
           </div>
         </div>
       )}

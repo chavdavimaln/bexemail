@@ -36,6 +36,8 @@ export default function CampaignWizard() {
     email: '', 
     is_default: false
   });
+  const [subscriberSearch, setSubscriberSearch] = useState('');
+  const [previewMode, setPreviewMode] = useState('desktop'); // 'desktop' or 'mobile'
 
   const [formData, setFormData] = useState({
     name: '', 
@@ -54,36 +56,7 @@ export default function CampaignWizard() {
 
   useEffect(() => {
     fetchData();
-    if (editId) {
-      fetchCampaignToEdit();
-    }
   }, [editId]);
-
-  const fetchCampaignToEdit = async () => {
-    try {
-      const res = await axios.get(`http://localhost:5000/api/campaigns/${editId}`, {
-        headers: { 'x-user-role': 'Super Admin' }
-      });
-      const c = res.data;
-      setFormData(prev => ({
-        ...prev,
-        name: c.name || '',
-        subject: c.subject || '',
-        sender_id: c.sender_id ? c.sender_id.toString() : prev.sender_id,
-        target_type: c.target_email ? 'custom_email' : 'list',
-        list_id: c.list_id ? c.list_id.toString() : '',
-        target_email: c.target_email || '',
-        is_ab_test: Boolean(c.is_ab_test),
-        variant_b_subject: c.variant_b_subject || '',
-        variant_b_html: c.variant_b_html || '',
-        template_id: c.template_id || '',
-        html_content: c.html_content || '',
-        scheduled_at: c.scheduled_at ? new Date(c.scheduled_at).toISOString().slice(0, 16) : ''
-      }));
-    } catch (error) {
-      console.error('Failed to load campaign for editing:', error);
-    }
-  };
 
   const fetchData = async () => {
     try {
@@ -105,6 +78,36 @@ export default function CampaignWizard() {
       if (sendersRes.data && sendersRes.data.length > 0 && !formData.sender_id) {
         const defaultSender = sendersRes.data.find(s => s.is_default) || sendersRes.data[0];
         setFormData(prev => ({ ...prev, sender_id: defaultSender.id.toString() }));
+      }
+
+      if (editId) {
+        try {
+          const res = await axios.get(`http://localhost:5000/api/campaigns/${editId}`, {
+            headers: { 'x-user-role': 'Super Admin' }
+          });
+          const c = res.data;
+          const targetEmail = c.target_email || '';
+          const emails = targetEmail.split(',').map(e => e.trim()).filter(Boolean);
+          const allInSubscribers = emails.length > 0 && emails.every(email => subData.some(s => s.email === email));
+
+          setFormData(prev => ({
+            ...prev,
+            name: c.name || '',
+            subject: c.subject || '',
+            sender_id: c.sender_id ? c.sender_id.toString() : prev.sender_id,
+            target_type: c.target_email ? (allInSubscribers ? 'individual_subscriber' : 'custom_email') : 'list',
+            list_id: c.list_id ? c.list_id.toString() : '',
+            target_email: c.target_email || '',
+            is_ab_test: Boolean(c.is_ab_test),
+            variant_b_subject: c.variant_b_subject || '',
+            variant_b_html: c.variant_b_html || '',
+            template_id: c.template_id || '',
+            html_content: c.html_content || '',
+            scheduled_at: c.scheduled_at ? new Date(c.scheduled_at).toISOString().slice(0, 16) : ''
+          }));
+        } catch (error) {
+          console.error('Failed to load campaign for editing:', error);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch wizard data:", error);
@@ -182,11 +185,11 @@ export default function CampaignWizard() {
         if (html) {
           setFormData(prev => ({ ...prev, html_content: html }));
         }
-        setStep(prev => Math.min(prev + 1, 8));
+        setStep(prev => Math.min(prev + 1, 9));
       });
       return;
     }
-    setStep(prev => Math.min(prev + 1, 8));
+    setStep(prev => Math.min(prev + 1, 9));
   };
 
   const handlePrev = () => {
@@ -282,6 +285,23 @@ export default function CampaignWizard() {
     }
   };
 
+  const selectedEmails = formData.target_email 
+    ? formData.target_email.split(',').map(e => e.trim()).filter(Boolean)
+    : [];
+
+  const handleToggleSubscriber = (email) => {
+    let newEmails;
+    if (selectedEmails.includes(email)) {
+      newEmails = selectedEmails.filter(e => e !== email);
+    } else {
+      newEmails = [...selectedEmails, email];
+    }
+    setFormData(prev => ({
+      ...prev,
+      target_email: newEmails.join(',')
+    }));
+  };
+
   const steps = [
     { id: 1, title: 'Setup', icon: <Settings size={18} /> },
     { id: 2, title: 'Sender', icon: <User size={18} /> },
@@ -289,8 +309,9 @@ export default function CampaignWizard() {
     { id: 4, title: 'A/B Test', icon: <GitBranch size={18} /> },
     { id: 5, title: 'Template', icon: <FileText size={18} /> },
     { id: 6, title: 'Editor', icon: <Monitor size={18} /> },
-    { id: 7, title: 'Schedule', icon: <Calendar size={18} /> },
-    { id: 8, title: 'Review', icon: <Check size={18} /> },
+    { id: 7, title: 'Preview', icon: <Sparkles size={18} /> },
+    { id: 8, title: 'Schedule', icon: <Calendar size={18} /> },
+    { id: 9, title: 'Review', icon: <Check size={18} /> },
   ];
 
   if (dispatchedSuccess) {
@@ -340,7 +361,7 @@ export default function CampaignWizard() {
             type="button"
             onClick={() => {
               setDispatchedSuccess(false);
-              setStep(8);
+              setStep(9);
             }}
             className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all border border-gray-300 flex items-center justify-center gap-2"
           >
@@ -370,7 +391,7 @@ export default function CampaignWizard() {
             defaultValue="review"
             onChange={(e) => {
               const val = e.target.value;
-              if (val === 'review') setStep(8);
+              if (val === 'review') setStep(9);
               if (val === 'direct_send') handleDispatch();
             }}
             className="px-4 py-2.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-800 text-xs font-bold rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-primary-500 outline-none cursor-pointer"
@@ -657,22 +678,107 @@ export default function CampaignWizard() {
 
             {/* Option B: Select Individual Subscriber from Database */}
             {formData.target_type === 'individual_subscriber' && (
-              <div className="pt-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Individual Subscriber <span className="text-red-500">*</span></label>
-                <select 
-                  name="target_email" 
-                  value={formData.target_email} 
-                  onChange={handleChange} 
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white"
-                >
-                  <option value="">Select an individual subscriber email...</option>
-                  {subscribers.map(sub => (
-                    <option key={sub.id} value={sub.email}>
-                      {sub.email} {sub.first_name ? `(${sub.first_name})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-2">Select an existing contact from your database to send this single email campaign to.</p>
+              <div className="pt-2 space-y-3">
+                <label className="block text-sm font-semibold text-gray-700">Select Individual Subscriber <span className="text-red-500">*</span></label>
+                
+                {/* Selected tags */}
+                {selectedEmails.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 rounded-lg max-h-28 overflow-y-auto">
+                    {selectedEmails.map(email => {
+                      const sub = subscribers.find(s => s.email === email);
+                      const nameDisplay = sub && sub.first_name ? ` (${sub.first_name})` : '';
+                      return (
+                        <span key={email} className="inline-flex items-center gap-1 bg-white text-xs font-medium text-gray-800 px-2.5 py-1 rounded-md border border-gray-200 shadow-sm">
+                          {email}{nameDisplay}
+                          <button 
+                            type="button" 
+                            onClick={() => handleToggleSubscriber(email)}
+                            className="text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Search and control buttons */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search by email or name..."
+                    value={subscriberSearch}
+                    onChange={(e) => setSubscriberSearch(e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-lg p-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const filtered = subscribers.filter(sub => {
+                        const search = subscriberSearch.toLowerCase();
+                        return sub.email.toLowerCase().includes(search) || 
+                          (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                      });
+                      const allFilteredEmails = filtered.map(sub => sub.email);
+                      const union = Array.from(new Set([...selectedEmails, ...allFilteredEmails]));
+                      setFormData(prev => ({ ...prev, target_email: union.join(',') }));
+                    }}
+                    className="text-xs px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium cursor-pointer"
+                  >
+                    Select All Filtered
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, target_email: '' }));
+                    }}
+                    className="text-xs px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-red-600 cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                </div>
+
+                {/* Scrollable list of subscribers */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
+                  {subscribers.filter(sub => {
+                    const search = subscriberSearch.toLowerCase();
+                    return sub.email.toLowerCase().includes(search) || 
+                      (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                  }).length === 0 ? (
+                    <div className="p-4 text-center text-sm text-gray-500">No subscribers found</div>
+                  ) : (
+                    subscribers
+                      .filter(sub => {
+                        const search = subscriberSearch.toLowerCase();
+                        return sub.email.toLowerCase().includes(search) || 
+                          (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                      })
+                      .map(sub => {
+                        const isChecked = selectedEmails.includes(sub.email);
+                        return (
+                          <label 
+                            key={sub.id} 
+                            className={`flex items-center justify-between p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer text-sm ${isChecked ? 'bg-primary-50/20' : ''}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input 
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleSubscriber(sub.email)}
+                                className="text-primary-600 focus:ring-primary-500 rounded border-gray-300 cursor-pointer"
+                              />
+                              <span className="font-medium text-gray-900">{sub.email}</span>
+                            </div>
+                            {sub.first_name && (
+                              <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-full">{sub.first_name}</span>
+                            )}
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Select one or more subscribers from your database to send this campaign to.</p>
               </div>
             )}
 
@@ -958,6 +1064,134 @@ export default function CampaignWizard() {
         )}
 
         {step === 7 && (
+          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Campaign Preview</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Preview how your email campaign will look to your recipients and review target settings.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Configuration panel */}
+              <div className="lg:col-span-1 space-y-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4 shadow-xs">
+                  <h3 className="font-bold text-gray-900 text-sm border-b border-gray-200 pb-2">Campaign Details</h3>
+                  
+                  <div className="space-y-3.5">
+                    <div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Campaign Name</span>
+                        <button type="button" onClick={() => setStep(1)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.name || '—'}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Subject Line</span>
+                        <button type="button" onClick={() => setStep(1)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.subject || '—'}</p>
+                    </div>
+
+                    {formData.is_ab_test && (
+                      <div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Subject Line B (A/B Test)</span>
+                          <button type="button" onClick={() => setStep(4)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.variant_b_subject || '—'}</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Sender Profile</span>
+                        <button type="button" onClick={() => setStep(2)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                        {senders.find(s => s.id === parseInt(formData.sender_id))?.name || '—'} 
+                        {senders.find(s => s.id === parseInt(formData.sender_id)) ? ` <${senders.find(s => s.id === parseInt(formData.sender_id))?.email}>` : ''}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Target Audience</span>
+                        <button type="button" onClick={() => setStep(3)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                        {formData.target_type === 'list' && (lists.find(l => l.id === parseInt(formData.list_id))?.name || '—')}
+                        {formData.target_type === 'individual_subscriber' && 'Selected Contacts'}
+                        {formData.target_type === 'custom_email' && 'Custom Email Address'}
+                      </p>
+                      {formData.target_type !== 'list' && formData.target_email && (
+                        <p className="text-xs text-gray-500 font-mono break-all mt-1 bg-white border border-gray-200 rounded p-1.5 max-h-24 overflow-y-auto">
+                          {formData.target_email}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-200 flex flex-col gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => setStep(6)}
+                      className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-bold text-gray-700 transition-all cursor-pointer"
+                    >
+                      ✏️ Edit Design in Editor
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview panel */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Live Preview</span>
+                  <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('desktop')}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${previewMode === 'desktop' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      🖥️ Desktop
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('mobile')}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${previewMode === 'mobile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      📱 Mobile
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-center bg-gray-50/50 border border-dashed border-gray-200 rounded-2xl p-6 min-h-[550px]">
+                  {previewMode === 'desktop' ? (
+                    <iframe 
+                      title="Campaign Desktop Preview"
+                      srcDoc={formData.html_content || '<div style="padding: 20px; font-family: sans-serif; text-align: center; color: #888;">No content designed yet. Proceed to Step 6 to edit the layout.</div>'} 
+                      className="w-full min-h-[500px] border border-gray-200 rounded-xl bg-white shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-[360px] border-8 border-gray-800 rounded-[32px] overflow-hidden bg-white shadow-2xl relative flex flex-col" style={{ height: '550px' }}>
+                      <div className="h-6 bg-gray-800 flex justify-center items-center shrink-0">
+                        <div className="w-16 h-3 bg-black rounded-full" />
+                      </div>
+                      <iframe 
+                        title="Campaign Mobile Preview"
+                        srcDoc={formData.html_content || '<div style="padding: 20px; font-family: sans-serif; text-align: center; color: #888;">No content designed yet. Proceed to Step 6 to edit the layout.</div>'} 
+                        className="flex-1 w-full border-0"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 8 && (
           <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-300">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Dispatch & Scheduling Options</h2>
@@ -981,7 +1215,7 @@ export default function CampaignWizard() {
                     <Send size={20} />
                   </div>
                   <h3 className="font-bold text-gray-900 text-sm">Direct Send</h3>
-                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final review in Step 8.</p>
+                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final review in Step 9.</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-green-700">
                   <span>Immediate Send</span>
@@ -1054,10 +1288,10 @@ export default function CampaignWizard() {
           </div>
         )}
 
-        {step === 8 && (
+        {step === 9 && (
           <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">Review Your Campaign</h2>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 space-y-4">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 space-y-4 font-sans">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500 font-medium">Campaign Name</p>
@@ -1107,7 +1341,7 @@ export default function CampaignWizard() {
           <ChevronLeft size={16} className="mr-1" /> Back
         </button>
         
-        {step < 8 ? (
+        {step < 9 ? (
           <button 
             onClick={handleNext} 
             className="flex items-center px-6 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm shadow-primary-600/30"

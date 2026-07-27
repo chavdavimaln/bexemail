@@ -44,9 +44,14 @@ async function setupDB() {
 
     // Add target_email to campaigns if not exists
     try {
-      await pool.query('ALTER TABLE campaigns ADD COLUMN target_email VARCHAR(255) NULL AFTER list_id');
+      await pool.query('ALTER TABLE campaigns ADD COLUMN target_email TEXT NULL AFTER list_id');
     } catch (e) {
-      // Column might already exist, ignore error
+      // Column might already exist, try to modify it to TEXT just in case
+      try {
+        await pool.query('ALTER TABLE campaigns MODIFY COLUMN target_email TEXT NULL');
+      } catch (modErr) {
+        // ignore
+      }
     }
 
     // Add is_deleted to lists if not exists
@@ -61,6 +66,17 @@ async function setupDB() {
       await pool.query('ALTER TABLE templates ADD COLUMN design_json LONGTEXT NULL');
     } catch (e) {
       // Column might already exist, ignore error
+    }
+
+    // Add footer columns to templates
+    const footerCols = [
+      "ALTER TABLE templates ADD COLUMN include_footer TINYINT DEFAULT 1",
+      "ALTER TABLE templates ADD COLUMN footer_editor_type VARCHAR(50) DEFAULT 'html'",
+      "ALTER TABLE templates ADD COLUMN footer_html LONGTEXT NULL",
+      "ALTER TABLE templates ADD COLUMN footer_design_json LONGTEXT NULL"
+    ];
+    for (const colQuery of footerCols) {
+      try { await pool.query(colQuery); } catch (err) { /* ignore existing column error */ }
     }
 
     // Create campaign_opens table if not exists
