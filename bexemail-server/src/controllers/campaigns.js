@@ -139,7 +139,16 @@ exports.dispatchCampaign = async (req, res) => {
 
 exports.getCampaigns = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT c.*, l.name as list_name FROM campaigns c LEFT JOIN lists l ON c.list_id = l.id ORDER BY c.created_at DESC');
+    const [rows] = await pool.query(`
+      SELECT 
+        c.*, 
+        l.name as list_name,
+        (SELECT COUNT(*) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'sent') as delivered_count,
+        (SELECT COUNT(*) FROM campaign_opens co WHERE co.campaign_id = c.id) as opened_count
+      FROM campaigns c 
+      LEFT JOIN lists l ON c.list_id = l.id 
+      ORDER BY c.created_at DESC
+    `);
     res.json(rows);
   } catch (error) {
     console.error('Fetch campaigns error:', error);

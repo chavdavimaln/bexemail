@@ -3,16 +3,16 @@ const { logHistory } = require('../utils/historyLogger');
 
 // Create or Import Subscriber
 exports.createSubscriber = async (req, res) => {
-  const { email, first_name, status, tags } = req.body;
+  const { email, first_name, status, tags, admin_id } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   try {
     const tagsJson = tags ? JSON.stringify(tags) : null;
     const [result] = await pool.query(
-      `INSERT INTO subscribers (email, first_name, status, tags)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags)`,
-      [email, first_name || null, status || 'subscribed', tagsJson]
+      `INSERT INTO subscribers (email, first_name, status, tags, admin_id)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags), admin_id = VALUES(admin_id)`,
+      [email, first_name || null, status || 'subscribed', tagsJson, admin_id || null]
     );
 
     let subscriberId = result.insertId;
@@ -40,7 +40,7 @@ exports.createSubscriber = async (req, res) => {
 // Update Subscriber by ID (email, name, status)
 exports.updateSubscriber = async (req, res) => {
   const { id } = req.params;
-  const { email, first_name, status } = req.body;
+  const { email, first_name, status, admin_id } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   try {
@@ -48,8 +48,8 @@ exports.updateSubscriber = async (req, res) => {
     if (oldRows.length === 0) return res.status(404).json({ error: 'Subscriber not found' });
 
     await pool.query(
-      `UPDATE subscribers SET email = ?, first_name = ?, status = ? WHERE id = ?`,
-      [email, first_name || null, status || 'subscribed', id]
+      `UPDATE subscribers SET email = ?, first_name = ?, status = ?, admin_id = ? WHERE id = ?`,
+      [email, first_name || null, status || 'subscribed', admin_id || null, id]
     );
 
     res.json({ message: 'Subscriber updated successfully', id });

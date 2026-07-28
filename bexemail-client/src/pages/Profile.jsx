@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Lock, Phone, Save, Camera } from 'lucide-react';
+import { User, Lock, Phone, Save, Camera, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 
 const Profile = () => {
@@ -16,6 +16,10 @@ const Profile = () => {
     new: '',
     confirm: ''
   });
+
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -209,36 +213,63 @@ const Profile = () => {
                     Forgot password?
                   </button>
                 </div>
-                <input
-                  type="password"
-                  value={passwords.current}
-                  onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm max-w-md"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-2xl">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
-                  <input
-                    type="password"
-                    value={passwords.new}
-                    onChange={(e) => setPasswords({...passwords, new: e.target.value})}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm New Password</label>
-                  <input
-                    type="password"
-                    value={passwords.confirm}
-                    onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm"
-                  />
-                </div>
-              </div>
+                <div className="relative max-w-md">
+                   <input
+                     type={showCurrent ? 'text' : 'password'}
+                     value={passwords.current}
+                     onChange={(e) => setPasswords({...passwords, current: e.target.value})}
+                     required
+                     className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm"
+                   />
+                   <button
+                     type="button"
+                     onClick={() => setShowCurrent(!showCurrent)}
+                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                   >
+                     {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+                   </button>
+                 </div>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-2xl">
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
+                   <div className="relative">
+                     <input
+                       type={showNew ? 'text' : 'password'}
+                       value={passwords.new}
+                       onChange={(e) => setPasswords({...passwords, new: e.target.value})}
+                       required
+                       className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm"
+                     />
+                     <button
+                       type="button"
+                       onClick={() => setShowNew(!showNew)}
+                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                     >
+                       {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+                     </button>
+                   </div>
+                 </div>
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm New Password</label>
+                   <div className="relative">
+                     <input
+                       type={showConfirm ? 'text' : 'password'}
+                       value={passwords.confirm}
+                       onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
+                       required
+                       className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all shadow-sm"
+                     />
+                     <button
+                       type="button"
+                       onClick={() => setShowConfirm(!showConfirm)}
+                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                     >
+                       {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                     </button>
+                   </div>
+                 </div>
+               </div>
 
               <div className="pt-4 flex justify-end border-t border-gray-100">
                 <button

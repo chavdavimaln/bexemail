@@ -72,7 +72,7 @@ exports.parseContacts = async (req, res) => {
 
 // Confirm import with selected options (merge vs separate) for conflicts
 exports.confirmImport = async (req, res) => {
-  const { originSite, importType, filename, listIds, contacts } = req.body;
+  const { originSite, importType, filename, listIds, contacts, adminId } = req.body;
   if (!originSite || !listIds || listIds.length === 0 || !contacts || contacts.length === 0) {
     return res.status(400).json({ error: 'Missing required import details' });
   }
@@ -120,8 +120,8 @@ exports.confirmImport = async (req, res) => {
       if (existing.length === 0) {
         // Insert new subscriber
         const [subResult] = await connection.query(
-          'INSERT INTO subscribers (email, first_name, status) VALUES (?, ?, ?)',
-          [cleanEmail, name || null, 'subscribed']
+          'INSERT INTO subscribers (email, first_name, status, admin_id) VALUES (?, ?, ?, ?)',
+          [cleanEmail, name || null, 'subscribed', adminId || null]
         );
         const subId = subResult.insertId;
         addedSubscriberIds.push(subId);

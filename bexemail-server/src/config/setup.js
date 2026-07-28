@@ -164,6 +164,23 @@ async function setupDB() {
       )
     `);
 
+    // Profile & User Management migrations
+    const migrationQueries = [
+      "ALTER TABLE admin_users ADD COLUMN username VARCHAR(255) NULL",
+      "ALTER TABLE admin_users ADD COLUMN permissions JSON NULL",
+      "ALTER TABLE admin_users MODIFY COLUMN role ENUM('Super Admin','Admin','User','Sub Admin','Subscriber') DEFAULT 'User'",
+      "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
+      "ALTER TABLE lists ADD COLUMN admin_id INT NULL",
+      "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL"
+    ];
+    for (const q of migrationQueries) {
+      try {
+        await pool.query(q);
+      } catch (err) {
+        // Safe to ignore if column/enum value already exists
+      }
+    }
+
     await setupAutomationDB();
 
     // Auto-assign any unassigned subscribers in the database to default list

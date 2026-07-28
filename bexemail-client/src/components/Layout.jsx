@@ -10,6 +10,10 @@ const Sidebar = () => {
     contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists')
   });
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const userRole = user.role;
+  const userPermissions = user.permissions || {};
+
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { 
@@ -47,8 +51,38 @@ const Sidebar = () => {
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
     { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
     { name: 'History Logs', path: '/history', icon: <History size={20} /> },
+    { name: 'Profile', path: '/profiles', icon: <Users size={20} /> },
     { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
   ];
+
+  const checkPermission = (item) => {
+    if (userRole === 'Super Admin') return true;
+    
+    // Default allowed items
+    if (item.path === '/' || item.path === '/profile') return true;
+    
+    const permissionMap = {
+      'campaigns': 'campaigns',
+      'automations': 'automations',
+      '/integrations': 'integrations',
+      '/forms': 'forms',
+      'contacts': 'contacts',
+      '/reports': 'reports',
+      '/developer': 'api_access',
+      '/history': 'history_logs',
+      '/profiles': 'profiles',
+      '/settings': 'settings'
+    };
+
+    const key = item.id || item.path;
+    const permKey = permissionMap[key];
+    if (permKey) {
+      return userPermissions[permKey] === true;
+    }
+    return true;
+  };
+
+  const filteredNavItems = navItems.filter(checkPermission);
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col h-full">
@@ -56,7 +90,7 @@ const Sidebar = () => {
         <h1 className="text-xl font-bold text-primary-600 tracking-tight">BexEmail</h1>
       </div>
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           if (item.subItems) {
             const isDropdownOpen = openDropdowns[item.id];
             const isAnyChildActive = item.subItems.some(sub => location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path)));
@@ -138,6 +172,9 @@ const Header = () => {
   const dropdownRef = React.useRef(null);
   const navigate = useNavigate();
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const avatarLetter = user.name ? user.name.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'A');
+
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -150,6 +187,8 @@ const Header = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     navigate('/login');
   };
 
@@ -160,9 +199,9 @@ const Header = () => {
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold focus:outline-none ring-2 ring-transparent hover:ring-primary-300 transition-all"
+            className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold focus:outline-none ring-2 ring-transparent hover:ring-primary-300 transition-all text-sm uppercase"
           >
-            A
+            {avatarLetter}
           </button>
           
           {isProfileOpen && (

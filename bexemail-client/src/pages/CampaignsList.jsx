@@ -6,8 +6,10 @@ import { useModal } from '../context/ModalContext';
 
 const CampaignsList = () => {
   const { confirm, alert: customAlert } = useModal();
+
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [userRole, setUserRole] = useState('Super Admin'); // Mock Role
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [scheduleModal, setScheduleModal] = useState({ show: false, campaignId: null, date: '' });
@@ -44,12 +46,16 @@ const CampaignsList = () => {
         headers: { 'x-user-role': userRole }
       });
       setCampaigns(response.data);
+      setError(null);
     } catch (error) {
       console.error('Failed to load campaigns:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to load campaigns');
     } finally {
       setLoading(false);
     }
   };
+
+
 
   const filteredCampaigns = campaigns.filter(camp => {
     const searchLower = searchQuery.toLowerCase();
@@ -254,6 +260,7 @@ const CampaignsList = () => {
                 <th className="px-6 py-4 rounded-tl-xl">Campaign Details</th>
                 <th className="px-6 py-4">Target Audience</th>
                 <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Counter Email</th>
                 <th className="px-6 py-4">Date</th>
                 <th className="px-6 py-4 text-right rounded-tr-xl">Actions</th>
               </tr>
@@ -261,16 +268,25 @@ const CampaignsList = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                     <div className="animate-pulse flex flex-col items-center">
                       <div className="h-8 w-8 bg-gray-200 rounded-full mb-4"></div>
                       <div className="h-4 w-32 bg-gray-200 rounded"></div>
                     </div>
                   </td>
                 </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center text-red-500 font-medium">
+                    <div className="flex flex-col items-center gap-2">
+                      <span>⚠️ Error loading campaigns: {error}</span>
+                      <button onClick={() => fetchCampaigns(false)} className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition-colors">Try Again</button>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredCampaigns.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500 font-medium">No campaigns match your filters.</td>
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500 font-medium">No campaigns match your filters.</td>
                 </tr>
               ) : (
                 filteredCampaigns.map(camp => (
@@ -299,6 +315,26 @@ const CampaignsList = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">{getStatusBadge(camp.status, camp.scheduled_at)}</td>
+                    <td className="px-6 py-4">
+                      {camp.status === 'sent' || camp.status === 'completed' || camp.status === 'sending' ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                            <span className="text-xs text-gray-700 font-medium">
+                              Opened: <span className="font-bold text-green-600">{camp.opened_count || 0}</span>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                            <span className="text-xs text-gray-500 font-medium">
+                              Unopened: <span className="font-bold text-gray-700">{Math.max(0, (camp.delivered_count || 0) - (camp.opened_count || 0))}</span>
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="font-semibold text-gray-900 text-xs">
                         {new Date(camp.created_at).toLocaleDateString()}
@@ -463,6 +499,21 @@ const CampaignsList = () => {
                     <h4 className="text-sm font-medium text-gray-500 mb-1">A/B Testing</h4>
                     <p className="text-gray-900">{viewModal.is_ab_test ? 'Enabled' : 'Disabled'}</p>
                   </div>
+                  {(viewModal.status === 'sent' || viewModal.status === 'completed' || viewModal.status === 'sending') && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-500 mb-1.5">Email Engagement Counters</h4>
+                      <div className="flex gap-3">
+                        <div className="bg-green-50 border border-green-200 px-3 py-1.5 rounded-xl flex flex-col min-w-[90px]">
+                          <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">Opened</span>
+                          <span className="text-lg font-bold text-green-600 mt-0.5">{viewModal.opened_count || 0}</span>
+                        </div>
+                        <div className="bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl flex flex-col min-w-[90px]">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Unopened</span>
+                          <span className="text-lg font-bold text-gray-700 mt-0.5">{Math.max(0, (viewModal.delivered_count || 0) - (viewModal.opened_count || 0))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               

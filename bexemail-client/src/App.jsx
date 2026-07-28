@@ -18,6 +18,7 @@ import SubscriberForms from './modules/forms/SubscriberForms';
 import DeveloperAPI from './pages/DeveloperAPI';
 import HistoryLogs from './pages/HistoryLogs';
 import Profile from './pages/Profile';
+import Profiles from './pages/Profiles';
 import Login from './pages/Login';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
 import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
@@ -95,6 +96,7 @@ function App() {
             <Route path="developer" element={<DeveloperAPI />} />
             <Route path="history" element={<HistoryLogs />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="profiles" element={<Profiles />} />
             {/* Add more routes here later */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

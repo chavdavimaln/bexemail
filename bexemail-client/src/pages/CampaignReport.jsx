@@ -40,7 +40,7 @@ const CampaignReport = () => {
   return (
     <div className="space-y-6 pb-12">
       <div className="flex items-center mb-6">
-        <Link to="/reports" className="p-2 mr-4 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
+        <Link to="/campaigns" className="p-2 mr-4 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <div>

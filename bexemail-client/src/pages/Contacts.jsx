@@ -50,6 +50,11 @@ const Contacts = () => {
   const [creatingList, setCreatingList] = useState(false);
   const [processingBulk, setProcessingBulk] = useState(false);
 
+  // New admin/user associations states
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [newContactAdminId, setNewContactAdminId] = useState('');
+  const [newListAdminId, setNewListAdminId] = useState('');
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -57,15 +62,18 @@ const Contacts = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [subsRes, listsRes] = await Promise.all([
+      const [subsRes, listsRes, adminsRes] = await Promise.all([
         axios.get('http://localhost:5000/api/bulk-import/subscribers'),
-        axios.get('http://localhost:5000/api/lists')
+        axios.get('http://localhost:5000/api/lists'),
+        axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }))
       ]);
       const fetchedSubs = subsRes.data.data || [];
       const fetchedLists = listsRes.data || [];
+      const fetchedAdmins = adminsRes.data || [];
       
       setSubscribers(fetchedSubs);
       setLists(fetchedLists);
+      setAdminUsers(fetchedAdmins);
 
       if (fetchedLists.length > 0 && selectedListIds.length === 0) {
         setSelectedListIds([fetchedLists[0].id]);
@@ -114,6 +122,7 @@ const Contacts = () => {
         importType: 'manual',
         filename: 'Single Add',
         listIds: selectedListIds.map(Number),
+        adminId: newContactAdminId ? Number(newContactAdminId) : null,
         contacts: [{
           email: newEmail.trim(),
           name: newName.trim(),
@@ -123,6 +132,7 @@ const Contacts = () => {
 
       setNewEmail('');
       setNewName('');
+      setNewContactAdminId('');
       setShowAddContactModal(false);
       await fetchData(); 
       customAlert({
@@ -411,11 +421,13 @@ const Contacts = () => {
       setCreatingList(true);
       const res = await axios.post('http://localhost:5000/api/lists', {
         name: newListName.trim(),
-        description: newListDesc.trim()
+        description: newListDesc.trim(),
+        admin_id: newListAdminId ? Number(newListAdminId) : null
       }, { headers: { 'x-user-role': 'Super Admin' } });
 
       setNewListName('');
       setNewListDesc('');
+      setNewListAdminId('');
       setShowCreateListModal(false);
       await fetchData();
       if (res.data.id) {
@@ -1124,6 +1136,19 @@ const Contacts = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
+                  <select
+                    value={newContactAdminId}
+                    onChange={e => setNewContactAdminId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">Global / Unassigned</option>
+                    {adminUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -1240,6 +1265,20 @@ const Contacts = () => {
                   placeholder="Optional list description..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
+                <select
+                  value={newListAdminId}
+                  onChange={e => setNewListAdminId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="">Global / Unassigned</option>
+                  {adminUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

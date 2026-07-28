@@ -9,4 +9,8 @@ router.get('/me', checkRole([]), authController.getMe);
 router.put('/profile', checkRole([]), authController.updateProfile);
 router.put('/password', checkRole([]), authController.updatePassword);
 
+// Password Reset endpoints (public)
+const adminsController = require('../controllers/admins');
+router.post('/forget-password', adminsController.sendForgetPassword);
+
 module.exports = router;

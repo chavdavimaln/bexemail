@@ -990,8 +990,8 @@ export default function CampaignWizard() {
                   }}
                 >
                   <div>
-                    <div className="w-full h-36 bg-gray-100 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-gray-200/80">
-                      <iframe srcDoc={t.html_content} title={t.name || t.template_name} className="w-[400%] h-[400%] origin-top-left scale-25 pointer-events-none" />
+                    <div className="w-full h-36 bg-gray-100 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-gray-200/80 relative">
+                      <iframe srcDoc={t.html_content} title={t.name || t.template_name} style={{ transform: 'scale(0.25)', transformOrigin: 'top left', width: '400%', height: '400%' }} className="pointer-events-none absolute top-0 left-0 border-0" />
                     </div>
                     <h3 className="font-bold text-gray-900 text-sm">{t.name || t.template_name}</h3>
                   </div>

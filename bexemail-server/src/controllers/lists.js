@@ -3,15 +3,15 @@ const { logHistory } = require('../utils/historyLogger');
 
 // Create a new List
 exports.createList = async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, admin_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   try {
     const [result] = await pool.query(
-      `INSERT INTO lists (name, description) VALUES (?, ?)`,
-      [name, description || null]
+      `INSERT INTO lists (name, description, admin_id) VALUES (?, ?, ?)`,
+      [name, description || null, admin_id || null]
     );
-    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0 };
+    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0, admin_id: admin_id || null };
     await logHistory('lists', result.insertId, 'add', null, newList, req.headers['x-user-role']);
     res.status(201).json({ message: 'List created successfully', id: result.insertId, ...newList });
   } catch (error) {
@@ -34,7 +34,7 @@ exports.getLists = async (req, res) => {
 // Update a List
 exports.updateList = async (req, res) => {
   const { id } = req.params;
-  const { name, description } = req.body;
+  const { name, description, admin_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   try {
@@ -42,11 +42,11 @@ exports.updateList = async (req, res) => {
     const oldData = oldRows[0];
     
     await pool.query(
-      'UPDATE lists SET name = ?, description = ? WHERE id = ?',
-      [name, description || null, id]
+      'UPDATE lists SET name = ?, description = ?, admin_id = ? WHERE id = ?',
+      [name, description || null, admin_id || null, id]
     );
     
-    const newData = { ...oldData, name, description: description || null };
+    const newData = { ...oldData, name, description: description || null, admin_id: admin_id || null };
     await logHistory('lists', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'List updated successfully' });
   } catch (error) {

@@ -17,10 +17,10 @@ router.delete('/subscribers/:id', subscribersController.deleteSubscriber);
 
 // Senders
 const sendersController = require('../controllers/senders');
-router.get('/senders', sendersController.getSenders);
-router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.createSender);
-router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.updateSender);
-router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), sendersController.deleteSender);
+router.get('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.getSenders);
+router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.createSender);
+router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.updateSender);
+router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.deleteSender);
 
 // Lists
 router.post('/lists', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.createList);
@@ -84,11 +84,17 @@ router.put('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsCont
 router.delete('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsController.deleteIntegration);
 router.post('/integrations/:id/sync', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), integrationsController.syncIntegration);
 
-// Admin Users (RBAC protected - Super Admin only)
+// Admin Users (RBAC protected with controller-level scoping)
 const adminsController = require('../controllers/admins');
-router.get('/admins', checkRole([ROLES.SUPER_ADMIN]), adminsController.getAdmins);
-router.post('/admins', checkRole([ROLES.SUPER_ADMIN]), adminsController.createAdmin);
-router.put('/admins/:id', checkRole([ROLES.SUPER_ADMIN]), adminsController.updateAdmin);
-router.delete('/admins/:id', checkRole([ROLES.SUPER_ADMIN]), adminsController.deleteAdmin);
+const backupController = require('../controllers/backupController');
+
+router.get('/admins', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.getAdmins);
+router.post('/admins', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), adminsController.createAdmin);
+router.put('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.updateAdmin);
+router.delete('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), adminsController.deleteAdmin);
+router.post('/admins/:id/reset-password', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.resetPasswordManually);
+
+// Database Backup (Super Admin and Admin/Sub Admin)
+router.get('/backup/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.downloadBackup);
 
 module.exports = router;

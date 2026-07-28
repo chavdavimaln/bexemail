@@ -38,7 +38,8 @@ exports.login = async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                permissions: user.permissions ? (typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions) : null
             }
         });
     } catch (error) {
@@ -51,13 +52,18 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const userId = req.user.id;
-        const [users] = await db.query(`SELECT id, email, role, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const [users] = await db.query(`SELECT id, name, username, email, number, role, permissions, created_at FROM admin_users WHERE id = ?`, [userId]);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        res.status(200).json(users[0]);
+        const user = users[0];
+        if (user.permissions && typeof user.permissions === 'string') {
+            user.permissions = JSON.parse(user.permissions);
+        }
+
+        res.status(200).json(user);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch user profile' });
     }
