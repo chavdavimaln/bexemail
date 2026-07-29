@@ -124,20 +124,22 @@ const Sidebar = () => {
                 </button>
                 {isDropdownOpen && (
                   <div className="pl-10 pr-2 space-y-1">
-                    {item.subItems.map(sub => {
-                      const isSubActive = location.pathname === sub.path;
-                      return (
-                        <Link
-                          key={sub.name}
-                          to={sub.path}
-                          className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            isSubActive ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'
-                          }`}
-                        >
-                          {sub.name}
-                        </Link>
-                      );
-                    })}
+                    {item.subItems
+                      .filter(sub => !(userRole === 'User' && sub.path === '/lists'))
+                      .map(sub => {
+                        const isSubActive = location.pathname === sub.path;
+                        return (
+                          <Link
+                            key={sub.name}
+                            to={sub.path}
+                            className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              isSubActive ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {sub.name}
+                          </Link>
+                        );
+                      })}
                   </div>
                 )}
               </div>

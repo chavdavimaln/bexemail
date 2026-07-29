@@ -1,4 +1,19 @@
 const pool = require('../config/db');
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
+
+const getRequestUser = (req) => {
+  let token = req.headers.authorization;
+  if (!token) return null;
+  if (token.startsWith('Bearer ')) {
+    token = token.slice(7);
+  }
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
 
 // Parse uploaded contacts (TXT, CSV, Comma separated text) to find new/conflicting records
 exports.parseContacts = async (req, res) => {
@@ -77,6 +92,12 @@ exports.confirmImport = async (req, res) => {
     return res.status(400).json({ error: 'Missing required import details' });
   }
 
+  const user = getRequestUser(req);
+  let targetAdminId = adminId;
+  if (user && user.role !== 'Super Admin') {
+    targetAdminId = user.id;
+  }
+
   let connection;
   try {
     connection = await pool.getConnection();
@@ -121,7 +142,7 @@ exports.confirmImport = async (req, res) => {
         // Insert new subscriber
         const [subResult] = await connection.query(
           'INSERT INTO subscribers (email, first_name, status, admin_id) VALUES (?, ?, ?, ?)',
-          [cleanEmail, name || null, 'subscribed', adminId || null]
+          [cleanEmail, name || null, 'subscribed', targetAdminId || null]
         );
         const subId = subResult.insertId;
         addedSubscriberIds.push(subId);
@@ -338,7 +359,9 @@ exports.getBifurcatedSubscribers = async (req, res) => {
   const search = req.query.search || '';
   const status = req.query.status || '';
 
-  let query = 'SELECT s.id, s.email, s.first_name, s.status, s.created_at FROM subscribers s WHERE 1=1';
+  const user = getRequestUser(req);
+
+  let query = 'SELECT s.id, s.email, s.first_name, s.status, s.created_at, s.admin_id FROM subscribers s WHERE 1=1';
   const queryParams = [];
 
   if (search) {
@@ -349,6 +372,11 @@ exports.getBifurcatedSubscribers = async (req, res) => {
   if (status) {
     query += ' AND s.status = ?';
     queryParams.push(status);
+  }
+
+  if (user && user.role !== 'Super Admin') {
+    query += ' AND s.admin_id = ?';
+    queryParams.push(user.id);
   }
 
   query += ' ORDER BY s.created_at DESC';

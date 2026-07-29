@@ -1,10 +1,31 @@
 const pool = require('../config/db');
 const { logHistory } = require('../utils/historyLogger');
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
+
+const getRequestUser = (req) => {
+  let token = req.headers.authorization;
+  if (!token) return null;
+  if (token.startsWith('Bearer ')) {
+    token = token.slice(7);
+  }
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
 
 // Create or Import Subscriber
 exports.createSubscriber = async (req, res) => {
   const { email, first_name, status, tags, admin_id } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const user = getRequestUser(req);
+  let targetAdminId = admin_id;
+  if (user && user.role !== 'Super Admin') {
+    targetAdminId = user.id;
+  }
 
   try {
     const tagsJson = tags ? JSON.stringify(tags) : null;
@@ -12,7 +33,7 @@ exports.createSubscriber = async (req, res) => {
       `INSERT INTO subscribers (email, first_name, status, tags, admin_id)
        VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags), admin_id = VALUES(admin_id)`,
-      [email, first_name || null, status || 'subscribed', tagsJson, admin_id || null]
+      [email, first_name || null, status || 'subscribed', tagsJson, targetAdminId || null]
     );
 
     let subscriberId = result.insertId;
@@ -43,13 +64,23 @@ exports.updateSubscriber = async (req, res) => {
   const { email, first_name, status, admin_id } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
+  const user = getRequestUser(req);
+  let targetAdminId = admin_id;
+  if (user && user.role !== 'Super Admin') {
+    targetAdminId = user.id;
+  }
+
   try {
     const [oldRows] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
     if (oldRows.length === 0) return res.status(404).json({ error: 'Subscriber not found' });
 
+    if (user && user.role !== 'Super Admin' && oldRows[0].admin_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this contact' });
+    }
+
     await pool.query(
       `UPDATE subscribers SET email = ?, first_name = ?, status = ?, admin_id = ? WHERE id = ?`,
-      [email, first_name || null, status || 'subscribed', admin_id || null, id]
+      [email, first_name || null, status || 'subscribed', targetAdminId || null, id]
     );
 
     res.json({ message: 'Subscriber updated successfully', id });
@@ -67,6 +98,8 @@ exports.getSubscribers = async (req, res) => {
   const search = req.query.search || '';
   const status = req.query.status || '';
 
+  const user = getRequestUser(req);
+
   let query = 'SELECT * FROM subscribers WHERE 1=1';
   const queryParams = [];
 
@@ -78,6 +111,11 @@ exports.getSubscribers = async (req, res) => {
   if (status) {
     query += ' AND status = ?';
     queryParams.push(status);
+  }
+
+  if (user && user.role !== 'Super Admin') {
+    query += ' AND admin_id = ?';
+    queryParams.push(user.id);
   }
 
   // First get total count
@@ -128,9 +166,18 @@ exports.unsubscribe = async (req, res) => {
 exports.deleteSubscriber = async (req, res) => {
   const { id } = req.params;
 
+  const user = getRequestUser(req);
+
   try {
     const [oldRows] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
     const oldData = oldRows[0];
+    if (!oldData) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    if (user && user.role !== 'Super Admin' && oldData.admin_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this contact' });
+    }
 
     const [result] = await pool.query('DELETE FROM subscribers WHERE id = ?', [id]);
     

@@ -6,6 +6,9 @@ import { useModal } from '../context/ModalContext';
 
 const Contacts = () => {
   const { confirm, alert: customAlert } = useModal();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserRole = currentUser.role;
+
   const [subscribers, setSubscribers] = useState([]);
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -122,7 +125,9 @@ const Contacts = () => {
         importType: 'manual',
         filename: 'Single Add',
         listIds: selectedListIds.map(Number),
-        adminId: newContactAdminId ? Number(newContactAdminId) : null,
+        adminId: currentUserRole === 'Super Admin'
+          ? (newContactAdminId !== '' && newContactAdminId !== null && newContactAdminId !== undefined ? Number(newContactAdminId) : null)
+          : currentUser.id,
         contacts: [{
           email: newEmail.trim(),
           name: newName.trim(),
@@ -422,7 +427,7 @@ const Contacts = () => {
       const res = await axios.post('http://localhost:5000/api/lists', {
         name: newListName.trim(),
         description: newListDesc.trim(),
-        admin_id: newListAdminId ? Number(newListAdminId) : null
+        admin_id: newListAdminId !== '' && newListAdminId !== null && newListAdminId !== undefined ? Number(newListAdminId) : null
       }, { headers: { 'x-user-role': 'Super Admin' } });
 
       setNewListName('');
@@ -1136,19 +1141,22 @@ const Contacts = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
-                  <select
-                    value={newContactAdminId}
-                    onChange={e => setNewContactAdminId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    <option value="">Global / Unassigned</option>
-                    {adminUsers.map(u => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                    ))}
-                  </select>
-                </div>
+                {currentUserRole === 'Super Admin' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
+                    <select
+                      value={newContactAdminId}
+                      onChange={e => setNewContactAdminId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">Unassigned</option>
+                      <option value="0">Global</option>
+                      {adminUsers.map(u => (
+                        <option key={u.id} value={u.id}>{u.email}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -1267,19 +1275,22 @@ const Contacts = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
-                <select
-                  value={newListAdminId}
-                  onChange={e => setNewListAdminId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                >
-                  <option value="">Global / Unassigned</option>
-                  {adminUsers.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                  ))}
-                </select>
-              </div>
+              {currentUserRole === 'Super Admin' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
+                  <select
+                    value={newListAdminId}
+                    onChange={e => setNewListAdminId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    <option value="0">Global</option>
+                    {adminUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.email}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

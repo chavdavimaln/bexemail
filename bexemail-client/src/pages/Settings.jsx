@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Save, Settings2, Users, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, UserCheck, Shield, Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Save, Settings2, Users, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, UserCheck, Shield, Eye, EyeOff, X } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
 const Settings = () => {
+  const navigate = useNavigate();
   const { confirm, alert: customAlert } = useModal();
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState({
@@ -400,7 +402,7 @@ const Settings = () => {
                   <p className="text-sm text-gray-500 mt-1">Manage user access and Role-Based Access Control (RBAC).</p>
                 </div>
                 <button 
-                  onClick={() => { setAdminForm({ id: null, name: '', email: '', number: '', password: '', confirmPassword: '', role: 'User' }); setShowAdminModal(true); }} 
+                  onClick={() => navigate('/profiles')} 
                   className="px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-lg text-sm font-medium transition-colors flex items-center"
                 >
                   <Plus size={16} className="mr-2" /> Add User
@@ -449,9 +451,14 @@ const Settings = () => {
                               {admin.role}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right space-x-2">
-                            <button onClick={() => { setAdminForm({ ...admin, confirmPassword: admin.password }); setShowPassword(false); setShowConfirmPassword(false); setShowAdminModal(true); }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDeleteAdmin(admin.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => { setAdminForm(admin); setShowAdminModal(true); }} 
+                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                              title="View User Details"
+                            >
+                              <Eye size={16} />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -613,58 +620,59 @@ const Settings = () => {
         </div>
       )}
 
-      {/* Add/Edit Admin User Modal */}
+      {/* View Admin User Details Modal */}
       {showAdminModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6">
-            <h3 className="text-xl font-bold text-gray-900">{adminForm.id ? 'Edit User' : 'Add New User'}</h3>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <h3 className="text-xl font-bold text-gray-900">User Details</h3>
+              <button onClick={() => setShowAdminModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg transition-colors"><X size={18} /></button>
+            </div>
+            
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input type="text" value={adminForm.name} onChange={e => setAdminForm({...adminForm, name: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" value={adminForm.email} onChange={e => setAdminForm({...adminForm, email: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Number *</label>
-                <input type="text" value={adminForm.number} onChange={e => setAdminForm({...adminForm, number: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={adminForm.password} onChange={e => setAdminForm({...adminForm, password: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none pr-10" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+              <div className="flex flex-col items-center pb-4 border-b border-gray-100">
+                <div className="w-16 h-16 bg-primary-50 text-primary-600 rounded-full flex items-center justify-center mb-3">
+                  <UserCheck size={32} />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-                  <div className="relative">
-                    <input type={showConfirmPassword ? "text" : "password"} value={adminForm.confirmPassword} onChange={e => setAdminForm({...adminForm, confirmPassword: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none pr-10" />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
+                <h4 className="text-lg font-bold text-gray-900">{adminForm.name || 'No Name'}</h4>
+                <span className={`mt-1 px-2.5 py-1 text-xs font-semibold rounded-full ${
+                  adminForm.role === 'Super Admin' ? 'bg-purple-100 text-purple-700' :
+                  adminForm.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700' :
+                  adminForm.role === 'Subscriber' ? 'bg-orange-100 text-orange-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {adminForm.role || 'User'}
+                </span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Admin Access Role *</label>
-                <select value={adminForm.role} onChange={e => setAdminForm({...adminForm, role: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/30">
-                  <option value="Super Admin">Super Admin</option>
-                  <option value="Sub Admin">Sub Admin</option>
-                  <option value="User">User</option>
-                  <option value="Subscriber">Subscriber</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Only Super Admins have full access to global settings and integrations.</p>
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 py-1">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Email</span>
+                  <span className="col-span-2 text-sm text-gray-800 break-all">{adminForm.email || '-'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 py-1">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mobile</span>
+                  <span className="col-span-2 text-sm text-gray-800">{adminForm.number || '-'}</span>
+                </div>
               </div>
             </div>
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setShowAdminModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">Cancel</button>
-              <button onClick={handleSaveAdmin} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors">Save User</button>
+
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              <button 
+                onClick={() => setShowAdminModal(false)} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 border rounded-lg font-medium transition-colors text-sm"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => {
+                  setShowAdminModal(false);
+                  navigate('/profiles');
+                }} 
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold transition-colors flex items-center text-sm shadow-sm"
+              >
+                <Edit2 size={14} className="mr-1.5" /> Edit User Profile
+              </button>
             </div>
           </div>
         </div>

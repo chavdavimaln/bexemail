@@ -1,17 +1,38 @@
 const pool = require('../config/db');
 const { logHistory } = require('../utils/historyLogger');
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
+
+const getRequestUser = (req) => {
+  let token = req.headers.authorization;
+  if (!token) return null;
+  if (token.startsWith('Bearer ')) {
+    token = token.slice(7);
+  }
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
 
 // Create a new List
 exports.createList = async (req, res) => {
   const { name, description, admin_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
+  const user = getRequestUser(req);
+  let targetAdminId = admin_id;
+  if (user && user.role !== 'Super Admin') {
+    targetAdminId = user.id;
+  }
+
   try {
     const [result] = await pool.query(
       `INSERT INTO lists (name, description, admin_id) VALUES (?, ?, ?)`,
-      [name, description || null, admin_id || null]
+      [name, description || null, targetAdminId]
     );
-    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0, admin_id: admin_id || null };
+    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0, admin_id: targetAdminId };
     await logHistory('lists', result.insertId, 'add', null, newList, req.headers['x-user-role']);
     res.status(201).json({ message: 'List created successfully', id: result.insertId, ...newList });
   } catch (error) {
@@ -22,8 +43,26 @@ exports.createList = async (req, res) => {
 
 // Get all active Lists
 exports.getLists = async (req, res) => {
+  const user = getRequestUser(req);
   try {
-    const [rows] = await pool.query('SELECT * FROM lists WHERE is_deleted = FALSE ORDER BY created_at DESC');
+    let query = `
+      SELECT l.*, u.role AS admin_role, u.email AS admin_email, u.username AS admin_username 
+      FROM lists l 
+      LEFT JOIN admin_users u ON l.admin_id = u.id 
+      WHERE l.is_deleted = FALSE
+    `;
+    const params = [];
+    if (user && user.role !== 'Super Admin') {
+      if (user.role === 'Admin') {
+        query += ' AND (l.admin_id = ? OR l.admin_id = 0 OR u.role = \'User\')';
+        params.push(user.id);
+      } else {
+        query += ' AND (l.admin_id = ? OR l.admin_id = 0)';
+        params.push(user.id);
+      }
+    }
+    query += ' ORDER BY l.created_at DESC';
+    const [rows] = await pool.query(query, params);
     res.json(rows);
   } catch (error) {
     console.error(error);
@@ -37,16 +76,27 @@ exports.updateList = async (req, res) => {
   const { name, description, admin_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
+  const user = getRequestUser(req);
+  let targetAdminId = admin_id;
+  if (user && user.role !== 'Super Admin') {
+    targetAdminId = user.id;
+  }
+
   try {
     const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
     const oldData = oldRows[0];
+    if (!oldData) return res.status(404).json({ error: 'List not found' });
+
+    if (user && user.role !== 'Super Admin' && oldData.admin_id !== null && oldData.admin_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this list' });
+    }
     
     await pool.query(
       'UPDATE lists SET name = ?, description = ?, admin_id = ? WHERE id = ?',
-      [name, description || null, admin_id || null, id]
+      [name, description || null, targetAdminId, id]
     );
     
-    const newData = { ...oldData, name, description: description || null, admin_id: admin_id || null };
+    const newData = { ...oldData, name, description: description || null, admin_id: targetAdminId };
     await logHistory('lists', id, 'edit', oldData, newData, req.headers['x-user-role']);
     res.json({ message: 'List updated successfully' });
   } catch (error) {
@@ -58,9 +108,15 @@ exports.updateList = async (req, res) => {
 // Soft Delete a List
 exports.deleteList = async (req, res) => {
   const { id } = req.params;
+  const user = getRequestUser(req);
   try {
     const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
     const oldData = oldRows[0];
+    if (!oldData) return res.status(404).json({ error: 'List not found' });
+
+    if (user && user.role !== 'Super Admin' && oldData.admin_id !== null && oldData.admin_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this list' });
+    }
     
     await pool.query('UPDATE lists SET is_deleted = TRUE WHERE id = ?', [id]);
     

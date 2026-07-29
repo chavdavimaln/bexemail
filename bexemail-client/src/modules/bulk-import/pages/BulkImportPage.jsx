@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, Mail, Globe, List, CheckCircle, AlertTriangle, FileText, Trash } from 'lucide-react';
+import { Upload, Mail, Globe, List, CheckCircle, AlertTriangle, FileText, Trash, Users } from 'lucide-react';
 import { useNotification } from '../../../components/NotificationContext';
 import ConflictResolverModal from '../components/ConflictResolverModal';
 
 export default function BulkImportPage() {
   const { success, error, warning } = useNotification();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserRole = currentUser.role;
+
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(false);
   
@@ -15,6 +18,8 @@ export default function BulkImportPage() {
   const [emailsRaw, setEmailsRaw] = useState('');
   const [fileName, setFileName] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [targetAdminId, setTargetAdminId] = useState('');
 
   // Conflict Resolution State
   const [conflictData, setConflictData] = useState(null); // { newContacts, conflicts, originSite }
@@ -22,9 +27,21 @@ export default function BulkImportPage() {
 
   useEffect(() => {
     fetchLists();
+    if (currentUserRole === 'Super Admin' || currentUserRole === 'Admin') {
+      fetchAdmins();
+    }
     // Pre-populate with current origin
     setOriginSite(window.location.hostname || 'domain1.com');
   }, []);
+
+  const fetchAdmins = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/admins');
+      setAdminUsers(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchLists = async () => {
     try {
@@ -143,6 +160,9 @@ export default function BulkImportPage() {
         importType: fileName ? 'csv' : 'manual',
         filename: fileName || 'Direct Text Input',
         listIds: selectedListIds,
+        adminId: currentUserRole === 'Super Admin'
+          ? (targetAdminId !== '' && targetAdminId !== null && targetAdminId !== undefined ? Number(targetAdminId) : null)
+          : currentUser.id,
         contacts
       });
 
@@ -192,6 +212,30 @@ export default function BulkImportPage() {
                 Helps differentiate contacts imported from different sources or website plan domains.
               </p>
             </div>
+
+            {/* Assign to Admin/User Profile (Super Admin only) */}
+            {currentUserRole === 'Super Admin' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <Users size={16} className="text-primary-500" />
+                  Assign to Admin/User Profile
+                </label>
+                <select
+                  value={targetAdminId}
+                  onChange={e => setTargetAdminId(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Unassigned</option>
+                  <option value="0">Global</option>
+                  {adminUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.email}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Assigning this batch to a specific admin or user profile restricts view/edit rights to them.
+                </p>
+              </div>
+            )}
 
             {/* Selection & Drag Drop Area */}
             <div>

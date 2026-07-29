@@ -111,6 +111,20 @@ const Profiles = () => {
     setShowUserPassword(true);
   };
 
+  const generateResetPassword = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
+    let generated = "";
+    for (let i = 0; i < 12; i++) {
+      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPasswordForm(prev => ({
+      ...prev,
+      newPassword: generated,
+      confirmNewPassword: generated
+    }));
+    setShowPassword(true);
+  };
+
   const handleSaveUser = async () => {
     if (!userForm.name || !userForm.email || (!userForm.id && !userForm.password)) {
       customAlert({ title: 'Validation Error', message: 'Name, Email, and Password (for new users) are required.', type: 'danger' });
@@ -514,13 +528,27 @@ const Profiles = () => {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Password *</label>
-                      <button 
-                        type="button" 
-                        onClick={generatePassword} 
-                        className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none"
-                      >
-                        Generate
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          type="button" 
+                          onClick={generatePassword} 
+                          className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none"
+                        >
+                          Generate
+                        </button>
+                        {userForm.password && (
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              navigator.clipboard.writeText(userForm.password);
+                              customAlert({ title: 'Copied', message: 'Password copied to clipboard!', type: 'success' });
+                            }} 
+                            className="text-[10px] font-bold text-green-600 hover:text-green-700 uppercase focus:outline-none"
+                          >
+                            Copy
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="relative">
                       <input 
@@ -696,7 +724,30 @@ const Profiles = () => {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">New Password *</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">New Password *</label>
+                  <div className="flex gap-2">
+                    <button 
+                      type="button" 
+                      onClick={generateResetPassword} 
+                      className="text-[10px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none"
+                    >
+                      Generate
+                    </button>
+                    {passwordForm.newPassword && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          navigator.clipboard.writeText(passwordForm.newPassword);
+                          customAlert({ title: 'Copied', message: 'Password copied to clipboard!', type: 'success' });
+                        }} 
+                        className="text-[10px] font-bold text-green-600 hover:text-green-700 uppercase focus:outline-none"
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="relative">
                   <input 
                     type={showPassword ? "text" : "password"} 
