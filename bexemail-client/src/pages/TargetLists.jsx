@@ -7,8 +7,9 @@ const TargetLists = () => {
   const { confirm, alert: customAlert } = useModal();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserRole = currentUser.role;
+  const hasListsPermission = currentUserRole === 'Super Admin' || currentUser.permissions?.lists === true;
 
-  if (currentUserRole === 'User') {
+  if (currentUserRole === 'User' && !hasListsPermission) {
     return (
       <div className="max-w-4xl mx-auto py-12 px-6 text-center">
         <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto shadow-sm">
@@ -28,7 +29,7 @@ const TargetLists = () => {
     id: null, 
     name: '', 
     description: '', 
-    admin_id: currentUserRole !== 'Super Admin' ? String(currentUser.id || '') : '' 
+    admin_id: !hasListsPermission ? String(currentUser.id || '') : '' 
   });
 
   useEffect(() => {
@@ -45,15 +46,7 @@ const TargetLists = () => {
       
       let fetchedLists = listsRes.data || [];
       if (currentUserRole !== 'Super Admin') {
-        fetchedLists = fetchedLists.filter(list => {
-          if (currentUserRole === 'Admin') {
-            const owner = adminsRes.data?.find(u => Number(u.id) === Number(list.admin_id));
-            return Number(list.admin_id) === Number(currentUser.id) || 
-                   Number(list.admin_id) === 0 || 
-                   (owner && owner.role === 'User');
-          }
-          return Number(list.admin_id) === Number(currentUser.id) || Number(list.admin_id) === 0;
-        });
+        fetchedLists = fetchedLists.filter(list => Number(list.admin_id) === Number(currentUser.id));
       }
       setLists(fetchedLists);
       setAdminUsers(adminsRes.data || []);
@@ -77,11 +70,11 @@ const TargetLists = () => {
       };
 
       if (listForm.id) {
-        await axios.put(`http://localhost:5000/api/lists/${listForm.id}`, payload, { headers: { 'x-user-role': 'Super Admin' } });
+        await axios.put(`http://localhost:5000/api/lists/${listForm.id}`, payload, { headers: { 'x-user-role': currentUserRole } });
       } else {
-        await axios.post('http://localhost:5000/api/lists', payload, { headers: { 'x-user-role': 'Super Admin' } });
+        await axios.post('http://localhost:5000/api/lists', payload, { headers: { 'x-user-role': currentUserRole } });
       }
-      setListForm({ id: null, name: '', description: '', admin_id: currentUserRole !== 'Super Admin' ? String(currentUser.id || '') : '' });
+      setListForm({ id: null, name: '', description: '', admin_id: !hasListsPermission ? String(currentUser.id || '') : '' });
       fetchLists();
     } catch (error) {
       customAlert({
@@ -101,7 +94,7 @@ const TargetLists = () => {
     });
     if (!isOk) return;
     try {
-      await axios.delete(`http://localhost:5000/api/lists/${id}`, { headers: { 'x-user-role': 'Super Admin' } });
+      await axios.delete(`http://localhost:5000/api/lists/${id}`, { headers: { 'x-user-role': currentUserRole } });
       fetchLists();
     } catch (error) {
       customAlert({
@@ -149,9 +142,9 @@ const TargetLists = () => {
                 />
               </div>
 
-              {currentUserRole === 'Super Admin' && (
+              {hasListsPermission && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Admin/User Profile</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Subscriber/User Profile</label>
                   <select
                     value={listForm.admin_id !== null && listForm.admin_id !== undefined ? String(listForm.admin_id) : ''}
                     onChange={e => setListForm({...listForm, admin_id: e.target.value})}
@@ -177,7 +170,7 @@ const TargetLists = () => {
                 {listForm.id && (
                   <button 
                     type="button" 
-                    onClick={() => setListForm({ id: null, name: '', description: '', admin_id: currentUserRole !== 'Super Admin' ? String(currentUser.id || '') : '' })} 
+                    onClick={() => setListForm({ id: null, name: '', description: '', admin_id: !hasListsPermission ? String(currentUser.id || '') : '' })} 
                     className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors text-sm"
                   >
                     Cancel
@@ -208,13 +201,14 @@ const TargetLists = () => {
                     <th className="px-6 py-4">Name</th>
                     <th className="px-6 py-4">Description</th>
                     <th className="px-6 py-4">Associated Admin</th>
+                    <th className="px-6 py-4">List Created By</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {loading ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                         <div className="animate-pulse flex flex-col items-center">
                           <div className="h-8 w-8 bg-gray-200 rounded-full mb-4"></div>
                         </div>
@@ -222,7 +216,7 @@ const TargetLists = () => {
                     </tr>
                   ) : lists.length === 0 ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-12 text-center text-gray-500 font-medium">No target lists found.</td>
+                      <td colSpan="5" className="px-6 py-12 text-center text-gray-500 font-medium">No target lists found.</td>
                     </tr>
                   ) : (
                     lists.map(list => {
@@ -234,10 +228,23 @@ const TargetLists = () => {
                           <td className="px-6 py-4 text-gray-500 text-xs">
                             {list.admin_id !== null && list.admin_id !== undefined && Number(list.admin_id) === 0 ? (
                               <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-bold">Global</span>
+                            ) : list.admin_id !== null && list.admin_id !== undefined && Number(list.admin_id) === Number(currentUser.id) ? (
+                              <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">self</span>
                             ) : list.admin_id !== null && list.admin_id !== undefined ? (
                               list.admin_email || `User #${list.admin_id}`
                             ) : (
                               <span className="text-gray-400 italic">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-gray-500 text-xs">
+                            {list.admin_id !== null && list.admin_id !== undefined && Number(list.admin_id) !== 0 ? (
+                              list.admin_username && list.admin_email ? (
+                                <span>{list.admin_username} ({list.admin_email})</span>
+                              ) : (
+                                <span>User #{list.admin_id}</span>
+                              )
+                            ) : (
+                              <span className="text-gray-400 italic">-</span>
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">

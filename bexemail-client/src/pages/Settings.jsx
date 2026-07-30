@@ -413,7 +413,7 @@ const Settings = () => {
                 <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-sm text-red-800 flex items-start">
                   <Shield className="mr-2 mt-0.5 flex-shrink-0" size={18} />
                   <div>
-                    <strong>Access Denied:</strong> Only Super Admins have permission to view or manage users.
+                    <strong>Access Denied:</strong> Only Admins have permission to view or manage users.
                   </div>
                 </div>
               )}
@@ -448,7 +448,7 @@ const Settings = () => {
                               admin.role === 'Subscriber' ? 'bg-orange-100 text-orange-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
-                              {admin.role}
+                              {admin.role === 'Super Admin' ? 'Admin' : admin.role === 'Admin' ? 'Subscriber' : admin.role}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
@@ -641,7 +641,7 @@ const Settings = () => {
                   adminForm.role === 'Subscriber' ? 'bg-orange-100 text-orange-700' :
                   'bg-gray-100 text-gray-700'
                 }`}>
-                  {adminForm.role || 'User'}
+                  {adminForm.role === 'Super Admin' ? 'Admin' : adminForm.role === 'Admin' ? 'Subscriber' : (adminForm.role || 'User')}
                 </span>
               </div>
 

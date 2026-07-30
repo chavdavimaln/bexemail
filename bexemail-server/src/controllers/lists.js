@@ -16,6 +16,21 @@ const getRequestUser = (req) => {
   }
 };
 
+const hasListsPermission = async (userId) => {
+  if (!userId) return false;
+  try {
+    const [rows] = await pool.query('SELECT role, permissions FROM admin_users WHERE id = ?', [userId]);
+    if (rows.length === 0) return false;
+    const user = rows[0];
+    if (user.role === 'Super Admin') return true;
+    const perms = user.permissions ? (typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions) : {};
+    return perms.lists === true;
+  } catch (err) {
+    console.error('Error checking lists permission in backend:', err);
+    return false;
+  }
+};
+
 // Create a new List
 exports.createList = async (req, res) => {
   const { name, description, admin_id } = req.body;
@@ -24,7 +39,9 @@ exports.createList = async (req, res) => {
   const user = getRequestUser(req);
   let targetAdminId = admin_id;
   if (user && user.role !== 'Super Admin') {
-    targetAdminId = user.id;
+    if (!targetAdminId || Number(targetAdminId) === 0) {
+      targetAdminId = user.id;
+    }
   }
 
   try {
@@ -45,6 +62,7 @@ exports.createList = async (req, res) => {
 exports.getLists = async (req, res) => {
   const user = getRequestUser(req);
   try {
+    const hasPerm = user ? await hasListsPermission(user.id) : false;
     let query = `
       SELECT l.*, u.role AS admin_role, u.email AS admin_email, u.username AS admin_username 
       FROM lists l 
@@ -53,13 +71,8 @@ exports.getLists = async (req, res) => {
     `;
     const params = [];
     if (user && user.role !== 'Super Admin') {
-      if (user.role === 'Admin') {
-        query += ' AND (l.admin_id = ? OR l.admin_id = 0 OR u.role = \'User\')';
-        params.push(user.id);
-      } else {
-        query += ' AND (l.admin_id = ? OR l.admin_id = 0)';
-        params.push(user.id);
-      }
+      query += ' AND l.admin_id = ?';
+      params.push(user.id);
     }
     query += ' ORDER BY l.created_at DESC';
     const [rows] = await pool.query(query, params);
@@ -79,7 +92,9 @@ exports.updateList = async (req, res) => {
   const user = getRequestUser(req);
   let targetAdminId = admin_id;
   if (user && user.role !== 'Super Admin') {
-    targetAdminId = user.id;
+    if (!targetAdminId || Number(targetAdminId) === 0) {
+      targetAdminId = user.id;
+    }
   }
 
   try {
@@ -87,7 +102,8 @@ exports.updateList = async (req, res) => {
     const oldData = oldRows[0];
     if (!oldData) return res.status(404).json({ error: 'List not found' });
 
-    if (user && user.role !== 'Super Admin' && oldData.admin_id !== null && oldData.admin_id !== user.id) {
+    const hasPerm = user ? await hasListsPermission(user.id) : false;
+    if (user && user.role !== 'Super Admin' && !hasPerm && oldData.admin_id !== null && oldData.admin_id !== user.id) {
       return res.status(403).json({ error: 'Forbidden: You do not own this list' });
     }
     
@@ -110,11 +126,12 @@ exports.deleteList = async (req, res) => {
   const { id } = req.params;
   const user = getRequestUser(req);
   try {
+    const hasPerm = user ? await hasListsPermission(user.id) : false;
     const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
     const oldData = oldRows[0];
     if (!oldData) return res.status(404).json({ error: 'List not found' });
 
-    if (user && user.role !== 'Super Admin' && oldData.admin_id !== null && oldData.admin_id !== user.id) {
+    if (user && user.role !== 'Super Admin' && !hasPerm && oldData.admin_id !== null && oldData.admin_id !== user.id) {
       return res.status(403).json({ error: 'Forbidden: You do not own this list' });
     }
     

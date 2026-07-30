@@ -75,7 +75,10 @@ export default function CampaignWizard() {
       const subData = subscribersRes.data?.data || (Array.isArray(subscribersRes.data) ? subscribersRes.data : []);
       setSubscribers(subData);
 
-      if (sendersRes.data && sendersRes.data.length > 0 && !formData.sender_id) {
+      const senderIdParam = queryParams.get('sender_id');
+      if (senderIdParam) {
+        setFormData(prev => ({ ...prev, sender_id: senderIdParam }));
+      } else if (sendersRes.data && sendersRes.data.length > 0 && !formData.sender_id) {
         const defaultSender = sendersRes.data.find(s => s.is_default) || sendersRes.data[0];
         setFormData(prev => ({ ...prev, sender_id: defaultSender.id.toString() }));
       }
@@ -477,122 +480,56 @@ export default function CampaignWizard() {
                 <h2 className="text-xl font-bold text-gray-900">Sender Details</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Select a sender profile for your campaign.</p>
               </div>
-              {!showAddSender && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewSender({ name: '', email: '', is_default: false });
-                    setShowAddSender(true);
-                  }}
-                  className="text-xs font-semibold text-primary-600 hover:text-primary-800 bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-200 transition-all flex items-center gap-1 shadow-sm shrink-0"
-                >
-                  + Add New Sender
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => navigate('/profiles')}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-800 bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-200 transition-all flex items-center gap-1 shadow-sm shrink-0"
+              >
+                + Add New Sender
+              </button>
             </div>
 
-            {!showAddSender ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Who is sending this email? <span className="text-red-500">*</span></label>
-                  <select name="sender_id" value={formData.sender_id} onChange={handleChange} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white font-medium">
-                    <option value="">Select a sender...</option>
-                    {senders.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} &lt;{s.email}&gt; {s.is_default ? '(Default)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Read-Only Registered SMTP Banner */}
-                <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
-                      <Mail size={18} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <span className="block text-xs font-bold text-gray-900">
-                        Registered SMTP Email: <span className="text-blue-700">{systemSmtp.smtp_user || 'info@bexcodeservices.com'}</span>
-                      </span>
-                      <span className="block text-[11px] text-gray-500 mt-0.5">
-                        All campaign emails are dispatched securely using this registered SMTP configuration.
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Who is sending this email? <span className="text-red-500">*</span></label>
+                <select name="sender_id" value={formData.sender_id} onChange={handleChange} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white font-medium">
+                  <option value="">Select a sender...</option>
+                  {senders.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} &lt;{s.email}&gt; {s.smtp_user ? `(SMTP: ${s.smtp_user})` : '(System SMTP)'} {s.is_default ? ' (Default)' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="p-6 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
-                <div className="flex justify-between items-center border-b border-gray-200 pb-3">
-                  <h3 className="text-base font-bold text-gray-900">Add New Sender Profile</h3>
-                  <button 
-                    type="button" 
-                    onClick={() => setShowAddSender(false)}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-medium"
-                  >
-                    Cancel
-                  </button>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">From Name <span className="text-red-500">*</span></label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Vimal"
-                      className="w-full px-3.5 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 outline-none bg-white"
-                      value={newSender.name}
-                      onChange={e => setNewSender({ ...newSender, name: e.target.value })}
-                    />
+              {/* Dynamic SMTP Details Banner */}
+              {(() => {
+                const selectedSender = senders.find(s => s.id.toString() === formData.sender_id.toString());
+                const activeSmtpUser = selectedSender?.smtp_user || systemSmtp.smtp_user || 'info@bexcodeservices.com';
+                const host = selectedSender?.smtp_host || systemSmtp.smtp_host || 'smtp.gmail.com';
+                const port = selectedSender?.smtp_port || systemSmtp.smtp_port || 465;
+                const secure = selectedSender?.smtp_secure || systemSmtp.smtp_secure || 'ssl';
+                const isCustom = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
+                
+                return (
+                  <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between animate-in fade-in duration-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
+                        <Mail size={18} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-gray-900">
+                          Active SMTP Email: <span className="text-blue-700">{activeSmtpUser}</span>
+                        </span>
+                        <span className="block text-[11px] text-gray-500 mt-0.5">
+                          SMTP Configuration: <strong className="text-gray-700">{host}:{port}</strong> ({secure}) — {isCustom ? 'Custom Sender SMTP' : 'System Default SMTP'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">From Email <span className="text-red-500">*</span></label>
-                    <input 
-                      type="email" 
-                      placeholder="e.g. vimal@bexcodeservices.com"
-                      className="w-full px-3.5 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 outline-none bg-white"
-                      value={newSender.email}
-                      onChange={e => setNewSender({ ...newSender, email: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-700">
-                    <input 
-                      type="checkbox"
-                      checked={newSender.is_default}
-                      onChange={e => setNewSender({ ...newSender, is_default: e.target.checked })}
-                      className="rounded text-primary-600 focus:ring-primary-500"
-                    />
-                    Set as default sender profile
-                  </label>
-                </div>
-
-                {/* Read-Only Registered SMTP Info */}
-                <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-xs text-gray-700">
-                  Registered SMTP Email: <strong className="text-blue-700">{systemSmtp.smtp_user || 'info@bexcodeservices.com'}</strong>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button 
-                    type="button"
-                    onClick={handleAddSender}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-semibold text-xs transition-colors shadow-sm"
-                  >
-                    Save & Use Sender
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setShowAddSender(false)}
-                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg font-semibold text-xs transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+                );
+              })()}
+            </div>
           </div>
         )}
 

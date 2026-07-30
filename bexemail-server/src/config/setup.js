@@ -183,6 +183,17 @@ async function setupDB() {
 
     await setupAutomationDB();
 
+    // Create db_backups table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS db_backups (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        description VARCHAR(255) NOT NULL,
+        backup_data LONGTEXT NOT NULL,
+        tables_included TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Auto-assign any unassigned subscribers in the database to default list
     try {
       const [unassigned] = await pool.query(

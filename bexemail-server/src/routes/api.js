@@ -96,5 +96,8 @@ router.post('/admins/:id/reset-password', checkRole([ROLES.SUPER_ADMIN, ROLES.SU
 
 // Database Backup (Super Admin and Admin/Sub Admin)
 router.get('/backup/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.downloadBackup);
+router.post('/backup/create', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.createDatabaseBackup);
+router.get('/backup/list', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.getBackupHistory);
+router.post('/backup/:id/restore', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.restoreDatabaseBackup);
 
 module.exports = router;

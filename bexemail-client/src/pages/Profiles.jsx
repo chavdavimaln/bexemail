@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserPlus, Key, Mail, Phone, Shield, ShieldCheck, 
   Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw
@@ -12,6 +13,7 @@ const MODULES = [
   { id: 'integrations', name: 'Integrations & Webhooks' },
   { id: 'forms', name: 'Forms Builder' },
   { id: 'contacts', name: 'Contacts & Directory' },
+  { id: 'lists', name: 'Target Lists Management' },
   { id: 'reports', name: 'Reports & Analytics' },
   { id: 'api_access', name: 'API Key Access' },
   { id: 'history_logs', name: 'Audit History Logs' },
@@ -20,6 +22,7 @@ const MODULES = [
 
 const Profiles = () => {
   const { confirm, alert: customAlert } = useModal();
+  const navigate = useNavigate();
   
   // Logged in user info
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -346,7 +349,7 @@ const Profiles = () => {
                         u.role === 'Admin' || u.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {u.role}
+                        {u.role === 'Super Admin' ? 'Admin' : u.role === 'Admin' ? 'Subscriber' : u.role}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -458,21 +461,29 @@ const Profiles = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-gray-500">
-                        {s.admin_id ? (owner ? `${owner.name} (${owner.role})` : `User #${s.admin_id}`) : 'Global Default'}
+                        {s.admin_id ? (owner ? `${owner.name} (${owner.role === 'Super Admin' ? 'Admin' : owner.role === 'Admin' ? 'Subscriber' : owner.role})` : `User #${s.admin_id}`) : 'Global Default'}
                       </td>
                       <td className="px-6 py-4 text-right space-x-2">
+                        <button 
+                          onClick={() => navigate(`/campaigns/new?sender_id=${s.id}`)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-600 hover:text-white rounded-lg text-xs font-bold transition border border-green-200 shadow-sm align-middle"
+                          title="Send campaign using this email"
+                        >
+                          <Mail size={12} />
+                          <span>Send campaign using this email</span>
+                        </button>
                         <button 
                           onClick={() => {
                             setSmtpForm({ ...s });
                             setShowSmtpModal(true);
                           }}
-                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition inline-flex items-center justify-center align-middle"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
                           onClick={() => handleDeleteSmtp(s.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition inline-flex items-center justify-center align-middle"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -589,8 +600,8 @@ const Profiles = () => {
                   onChange={e => setUserForm({...userForm, role: e.target.value})} 
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20"
                 >
-                  {currentUserRole === 'Super Admin' && <option value="Super Admin">Super Admin</option>}
-                  <option value="Admin">Admin</option>
+                  {currentUserRole === 'Super Admin' && <option value="Super Admin">Admin</option>}
+                  <option value="Admin">Subscriber</option>
                   <option value="User">User</option>
                 </select>
               </div>
@@ -694,11 +705,11 @@ const Profiles = () => {
 
               {currentUserRole === 'Super Admin' && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Owner Admin User</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Owner Subscriber User</label>
                   <select value={smtpForm.admin_id || ''} onChange={e => setSmtpForm({...smtpForm, admin_id: e.target.value ? Number(e.target.value) : null})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20">
-                    <option value="">Global/System Default (Super Admin)</option>
+                    <option value="">Global/System Default (Admin)</option>
                     {users.filter(u => u.role !== 'User').map(u => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                      <option key={u.id} value={u.id}>{u.name} ({u.role === 'Super Admin' ? 'Admin' : u.role === 'Admin' ? 'Subscriber' : u.role})</option>
                     ))}
                   </select>
                 </div>

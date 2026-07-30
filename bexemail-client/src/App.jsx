@@ -23,6 +23,8 @@ import Login from './pages/Login';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
 import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
 import { NotificationProvider } from './components/NotificationContext';
+import ExportPanel from './pages/ExportPanel';
+import BackupRestore from './pages/BackupRestore'; // HMR trigger to resolve new files
 import axios from 'axios';
 
 // Keep relative API requests on the API server while running the Vite client.
@@ -78,6 +80,8 @@ function App() {
             <Route path="contacts" element={<Contacts />} />
             <Route path="contacts/bulk-import" element={<BulkImportPage />} />
             <Route path="contacts/import-logs" element={<ImportHistoryPage />} />
+            <Route path="contacts/export" element={<ExportPanel />} />
+            <Route path="contacts/backup" element={<BackupRestore />} />
             <Route path="lists" element={<TargetLists />} />
             <Route path="templates" element={<TemplatesList />} />
             <Route path="templates/new" element={<TemplateEditor />} />

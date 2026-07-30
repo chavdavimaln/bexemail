@@ -44,8 +44,10 @@ const Sidebar = () => {
       subItems: [
         { name: 'Directory', path: '/contacts' },
         { name: 'Target Lists', path: '/lists' },
-        { name: 'Bulk Import', path: '/contacts/bulk-import' },
+        { name: 'Import Directory', path: '/contacts/bulk-import' },
         { name: 'Import History', path: '/contacts/import-logs' },
+        { name: 'Export Directory', path: '/contacts/export' },
+        { name: 'DB Backup & Restore', path: '/contacts/backup' },
       ]
     },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
@@ -67,6 +69,9 @@ const Sidebar = () => {
       '/integrations': 'integrations',
       '/forms': 'forms',
       'contacts': 'contacts',
+      '/contacts/export': 'contacts',
+      '/contacts/backup': 'settings',
+      '/lists': 'lists',
       '/reports': 'reports',
       '/developer': 'api_access',
       '/history': 'history_logs',
@@ -125,6 +130,7 @@ const Sidebar = () => {
                 {isDropdownOpen && (
                   <div className="pl-10 pr-2 space-y-1">
                     {item.subItems
+                      .filter(checkPermission)
                       .filter(sub => !(userRole === 'User' && sub.path === '/lists'))
                       .map(sub => {
                         const isSubActive = location.pathname === sub.path;

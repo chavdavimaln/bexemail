@@ -555,7 +555,7 @@ const Contacts = () => {
 
       {/* VIEW MODE 1: FULL-WIDTH SINGLE COLUMN DIRECTORY TABLE */}
       {viewMode === 'directory' && (
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col w-full">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col w-full min-h-[520px]">
           
           {/* Table Control & Filter Header */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -611,7 +611,7 @@ const Contacts = () => {
           </div>
           
           {/* Spacious Full-Width Table */}
-          <div className="overflow-x-auto flex-1">
+          <div className="overflow-x-auto flex-1 min-h-[420px]">
             <table className="w-full text-left text-sm text-gray-600">
               <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200 text-xs uppercase tracking-wider">
                 <tr>
