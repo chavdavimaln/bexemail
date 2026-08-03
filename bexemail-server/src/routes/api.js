@@ -94,10 +94,20 @@ router.put('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.U
 router.delete('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), adminsController.deleteAdmin);
 router.post('/admins/:id/reset-password', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.resetPasswordManually);
 
-// Database Backup (Super Admin and Admin/Sub Admin)
-router.get('/backup/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.downloadBackup);
-router.post('/backup/create', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.createDatabaseBackup);
-router.get('/backup/list', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.getBackupHistory);
-router.post('/backup/:id/restore', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), backupController.restoreDatabaseBackup);
+// Database & Module Backups (Super Admin, Sub Admin, Admin, and User with permission)
+router.get('/backup/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.downloadBackup);
+router.get('/backup/download-code-ui', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.downloadCodeUiSystem);
+router.post('/backup/create', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.createDatabaseBackup);
+router.post('/backup/import', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.importDatabaseBackup);
+router.get('/backup/list', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getBackupHistory);
+router.post('/backup/:id/restore', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.restoreDatabaseBackup);
+router.delete('/backup/delete', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.deleteDatabaseBackup);
+router.post('/backup/delete', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.deleteDatabaseBackup);
+router.delete('/backup/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.deleteDatabaseBackup);
+router.get('/backup/:id/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.downloadSpecificBackup);
+
+// Auto Backup Schedules & Reminders
+router.get('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getBackupSchedules);
+router.post('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.saveBackupSchedule);
 
 module.exports = router;

@@ -1,13 +1,14 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, Database } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
   const [openDropdowns, setOpenDropdowns] = React.useState({ 
     campaigns: location.pathname.startsWith('/campaigns') || location.pathname.startsWith('/templates'),
     automations: location.pathname.startsWith('/automations'),
-    contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists')
+    contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists'),
+    backups: location.pathname.startsWith('/backups') || location.pathname.startsWith('/history')
   });
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -47,12 +48,20 @@ const Sidebar = () => {
         { name: 'Import Directory', path: '/contacts/bulk-import' },
         { name: 'Import History', path: '/contacts/import-logs' },
         { name: 'Export Directory', path: '/contacts/export' },
-        { name: 'DB Backup & Restore', path: '/contacts/backup' },
       ]
     },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
     { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
-    { name: 'History Logs', path: '/history', icon: <History size={20} /> },
+    { 
+      name: 'Backups and history', 
+      id: 'backups',
+      icon: <Database size={20} />,
+      subItems: [
+        { name: 'Backups Management', path: '/backups' },
+        { name: 'Auto Backup & Reminders', path: '/backups/schedules' },
+        { name: 'History Logs', path: '/history' },
+      ]
+    },
     { name: 'Profile', path: '/profiles', icon: <Users size={20} /> },
     { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
   ];
@@ -70,7 +79,9 @@ const Sidebar = () => {
       '/forms': 'forms',
       'contacts': 'contacts',
       '/contacts/export': 'contacts',
-      '/contacts/backup': 'settings',
+      'backups': 'history_logs',
+      '/backups': 'history_logs',
+      '/backups/schedules': 'history_logs',
       '/lists': 'lists',
       '/reports': 'reports',
       '/developer': 'api_access',
@@ -109,7 +120,8 @@ const Sidebar = () => {
                       return {
                         campaigns: item.id === 'campaigns',
                         automations: item.id === 'automations',
-                        contacts: item.id === 'contacts'
+                        contacts: item.id === 'contacts',
+                        backups: item.id === 'backups'
                       };
                     } else {
                       return { ...prev, [item.id]: false };

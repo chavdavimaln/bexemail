@@ -4,11 +4,8 @@ const { logHistory } = require('../utils/historyLogger');
 // Helper to enqueue subscribers for a campaign
 async function enqueueSubscribers(db, campaignId, listId, isAbTest, targetEmail) {
   try {
-    const [existing] = await db.query('SELECT COUNT(*) as cnt FROM email_queue WHERE campaign_id = ?', [campaignId]);
-    if (existing[0].cnt > 0) {
-      console.log(`[Campaigns] Campaign #${campaignId} already has ${existing[0].cnt} queued emails.`);
-      return;
-    }
+    // Delete any previous queue items for this campaign so fresh pending jobs are enqueued
+    await db.query('DELETE FROM email_queue WHERE campaign_id = ?', [campaignId]);
 
     let subscribers = [];
 

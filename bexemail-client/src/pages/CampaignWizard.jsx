@@ -51,7 +51,8 @@ export default function CampaignWizard() {
     variant_b_html: '',
     template_id: '',
     html_content: '',
-    scheduled_at: ''
+    scheduled_at: '',
+    dispatch_option: 'review'
   });
 
   useEffect(() => {
@@ -1136,37 +1137,13 @@ export default function CampaignWizard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Direct Send */}
-              <div 
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'direct_send' }));
-                }}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  (!formData.dispatch_option || formData.dispatch_option === 'direct_send') && !formData.scheduled_at
-                    ? 'border-green-500 bg-green-50/50 ring-2 ring-green-200 shadow-md' 
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-3">
-                    <Send size={20} />
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-sm">Direct Send</h3>
-                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final review in Step 9.</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-green-700">
-                  <span>Immediate Send</span>
-                  <span>{(!formData.dispatch_option || formData.dispatch_option === 'direct_send') && !formData.scheduled_at ? '✓ Active' : ''}</span>
-                </div>
-              </div>
-
-              {/* Submit for Review */}
+              {/* 1. Send to Review (Card 1 - Default) */}
               <div 
                 onClick={() => {
                   setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'review' }));
                 }}
                 className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  formData.dispatch_option === 'review' 
+                  (formData.dispatch_option === 'review' || !formData.dispatch_option) 
                     ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-200 shadow-md' 
                     : 'border-gray-200 hover:border-gray-300 bg-white'
                 }`}
@@ -1180,11 +1157,35 @@ export default function CampaignWizard() {
                 </div>
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-amber-700">
                   <span>Needs Approval</span>
-                  <span>{formData.dispatch_option === 'review' ? '✓ Active' : ''}</span>
+                  <span>{(formData.dispatch_option === 'review' || !formData.dispatch_option) ? '✓ Active' : ''}</span>
                 </div>
               </div>
 
-              {/* Schedule */}
+              {/* 2. Direct Send (Card 2) */}
+              <div 
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'direct_send' }));
+                }}
+                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                  formData.dispatch_option === 'direct_send'
+                    ? 'border-green-500 bg-green-50/50 ring-2 ring-green-200 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-3">
+                    <Send size={20} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-sm">Direct Send</h3>
+                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final review in Step 9.</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-green-700">
+                  <span>Immediate Send</span>
+                  <span>{formData.dispatch_option === 'direct_send' ? '✓ Active' : ''}</span>
+                </div>
+              </div>
+
+              {/* 3. Schedule Campaign (Card 3) */}
               <div 
                 onClick={() => {
                   setFormData(prev => ({ ...prev, dispatch_option: 'schedule' }));
@@ -1225,46 +1226,249 @@ export default function CampaignWizard() {
           </div>
         )}
 
-        {step === 9 && (
-          <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">Review Your Campaign</h2>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 space-y-4 font-sans">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Campaign Name</p>
-                  <p className="text-lg font-bold text-gray-900">{formData.name || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Schedule</p>
-                  <p className="text-lg font-bold text-gray-900">{formData.scheduled_at ? new Date(formData.scheduled_at).toLocaleString() : 'Immediate Send'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Subject Line A</p>
-                  <p className="text-gray-900 font-medium">{formData.subject || '—'}</p>
-                </div>
-                {formData.is_ab_test && (
+        {step === 9 && (() => {
+          // Resolve Sender
+          const selectedSender = senders.find(s => s.id.toString() === (formData.sender_id || '').toString()) || senders.find(s => s.is_default) || senders[0];
+          const senderName = selectedSender?.name || 'Default System Sender';
+          const senderEmail = selectedSender?.email || 'noreply@bexcodeservices.com';
+          const smtpUser = selectedSender?.smtp_user || systemSmtp?.smtp_user || senderEmail;
+          const smtpHost = selectedSender?.smtp_host || systemSmtp?.smtp_host || 'smtp.gmail.com';
+          const smtpPort = selectedSender?.smtp_port || systemSmtp?.smtp_port || 465;
+          const smtpSecure = selectedSender?.smtp_secure || systemSmtp?.smtp_secure || 'ssl';
+          const isCustomSmtp = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
+
+          // Resolve Audience
+          const selectedList = lists.find(l => l.id.toString() === (formData.list_id || '').toString());
+          let audienceTypeTag = 'Subscriber List';
+          let audienceTitle = 'All Contacts Directory';
+          let audienceDetail = 'Sending to all contacts';
+          let contactCount = subscribers.length;
+
+          if (formData.target_type === 'list') {
+            audienceTypeTag = 'Subscriber List';
+            if (selectedList) {
+              audienceTitle = selectedList.name;
+              contactCount = selectedList.subscriber_count || selectedList.contacts_count || selectedList.subscriberCount || 0;
+              audienceDetail = `Saved list ID #${selectedList.id}`;
+            } else {
+              audienceTitle = 'Target List';
+              audienceDetail = 'All Active Subscribers';
+            }
+          } else if (formData.target_type === 'individual_subscriber') {
+            audienceTypeTag = 'Selected Contacts';
+            const emails = formData.target_email ? formData.target_email.split(',').map(e => e.trim()).filter(Boolean) : [];
+            contactCount = emails.length;
+            audienceTitle = `${emails.length} Selected Contact(s)`;
+            audienceDetail = emails.slice(0, 3).join(', ') + (emails.length > 3 ? ` ...+${emails.length - 3} more` : '');
+          } else if (formData.target_type === 'custom_email') {
+            audienceTypeTag = 'Custom Email';
+            const emails = formData.target_email ? formData.target_email.split(',').map(e => e.trim()).filter(Boolean) : [];
+            contactCount = emails.length || 1;
+            audienceTitle = formData.target_email || 'Single Email Recipient';
+            audienceDetail = 'Custom recipient address';
+          }
+
+          // Resolve Template & Content
+          const selectedTemplate = templates.find(t => t.id.toString() === (formData.template_id || '').toString());
+          const templateName = selectedTemplate ? (selectedTemplate.name || selectedTemplate.template_name) : (formData.html_content ? 'Custom Content' : 'Blank Template');
+          const designMode = editorMode === 'visual' ? '🎨 Drag & Drop Visual Builder' : '💻 Custom HTML Code Editor';
+          const textSnippet = (formData.html_content || '').replace(/<[^>]+>/g, ' ').slice(0, 150).trim();
+
+          // Resolve Schedule & Dispatch Strategy
+          let dispatchTitle = 'Immediate Direct Send';
+          let dispatchBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+
+          if (formData.dispatch_option === 'review') {
+            dispatchTitle = 'Pending Admin Review';
+            dispatchBadgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+          } else if (formData.scheduled_at || formData.dispatch_option === 'schedule') {
+            const formattedTime = formData.scheduled_at ? new Date(formData.scheduled_at).toLocaleString() : 'Scheduled Date & Time';
+            dispatchTitle = `Scheduled for ${formattedTime}`;
+            dispatchBadgeClass = 'bg-purple-100 text-purple-800 border-purple-300';
+          }
+
+          return (
+            <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+              <div className="text-center space-y-1">
+                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Review Your Campaign</h2>
+                <p className="text-xs text-gray-500">Double check all configurations, sender details, audience, and email content before sending.</p>
+              </div>
+
+              {/* Main Review Summary Banner */}
+              <div className="bg-gradient-to-r from-primary-900 via-primary-800 to-indigo-900 text-white rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <div>
-                    <p className="text-sm text-gray-500 font-medium">Subject Line B</p>
-                    <p className="text-gray-900 font-medium">{formData.variant_b_subject || '—'}</p>
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-primary-200 bg-white/10 px-2.5 py-1 rounded-full border border-white/20">
+                      Campaign Review & Final Dispatch
+                    </span>
+                    <h3 className="text-2xl font-black mt-2 text-white">{formData.name || 'Untitled Campaign'}</h3>
                   </div>
-                )}
-                <div className="col-span-2 border-t border-gray-200 my-2"></div>
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Sender</p>
-                  <p className="text-gray-900 font-medium">{senders.find(s => s.id === parseInt(formData.sender_id))?.name || '—'}</p>
+
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${dispatchBadgeClass}`}>
+                      {dispatchTitle}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Audience</p>
-                  <p className="text-gray-900 font-medium">
-                    {formData.target_type === 'custom_email' 
-                      ? `Single Email (${formData.target_email || '—'})` 
-                      : (lists.find(l => l.id === parseInt(formData.list_id))?.name || '—')}
-                  </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs pt-1">
+                  <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/10">
+                    <span className="block text-[10px] font-extrabold uppercase text-primary-200">Sender</span>
+                    <span className="font-bold text-white truncate block mt-0.5">{senderName}</span>
+                    <span className="text-[11px] text-gray-300 truncate block">&lt;{senderEmail}&gt;</span>
+                  </div>
+
+                  <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/10">
+                    <span className="block text-[10px] font-extrabold uppercase text-primary-200">Target Audience</span>
+                    <span className="font-bold text-white truncate block mt-0.5">{audienceTitle}</span>
+                    <span className="text-[11px] text-emerald-300 font-bold block">{contactCount} Contacts</span>
+                  </div>
+
+                  <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/10">
+                    <span className="block text-[10px] font-extrabold uppercase text-primary-200">Design Template</span>
+                    <span className="font-bold text-white truncate block mt-0.5">{templateName}</span>
+                    <span className="text-[11px] text-gray-300 truncate block">{formData.html_content ? `${formData.html_content.length} chars` : 'Empty HTML'}</span>
+                  </div>
+
+                  <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/10">
+                    <span className="block text-[10px] font-extrabold uppercase text-primary-200">A/B Testing</span>
+                    <span className="font-bold text-white truncate block mt-0.5">{formData.is_ab_test ? 'Active (50/50 Split)' : 'Disabled'}</span>
+                    <span className="text-[11px] text-gray-300 truncate block">{formData.is_ab_test ? '2 Subject Variants' : '1 Subject Line'}</span>
+                  </div>
                 </div>
               </div>
+
+              {/* 4 Detail Grid Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                
+                {/* 1. Setup & Subject Lines Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3.5 hover:border-primary-300 transition-all">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                      <FileText size={15} className="text-primary-600" /> Campaign & Subject Lines
+                    </h4>
+                    <button type="button" onClick={() => setStep(1)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
+                      Edit Step 1
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Internal Campaign Name</span>
+                      <p className="font-bold text-gray-900 text-sm mt-0.5">{formData.name || '—'}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Primary Subject Line (Variant A)</span>
+                      <p className="font-semibold text-gray-800 bg-gray-50 p-2 rounded-lg border border-gray-200 mt-0.5">{formData.subject || '—'}</p>
+                    </div>
+
+                    {formData.is_ab_test && (
+                      <div>
+                        <span className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider">Test Subject Line (Variant B)</span>
+                        <p className="font-semibold text-purple-900 bg-purple-50 p-2 rounded-lg border border-purple-200 mt-0.5">{formData.variant_b_subject || '—'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Sender Profile & SMTP Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3.5 hover:border-primary-300 transition-all">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                      <Mail size={15} className="text-blue-600" /> Sender Profile & SMTP Configuration
+                    </h4>
+                    <button type="button" onClick={() => setStep(2)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
+                      Edit Step 2
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Sender Profile</span>
+                      <p className="font-bold text-gray-900 text-sm mt-0.5">{senderName} &lt;{senderEmail}&gt;</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Active SMTP Email Account</span>
+                      <p className="font-semibold text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-200 mt-0.5">{smtpUser}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">SMTP Server & Encryption</span>
+                      <p className="font-medium text-gray-700 mt-0.5">
+                        <strong className="text-gray-900">{smtpHost}:{smtpPort}</strong> ({smtpSecure.toUpperCase()}) — {isCustomSmtp ? 'Custom Sender SMTP' : 'System Default SMTP'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Target Audience Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3.5 hover:border-primary-300 transition-all">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                      <Users size={15} className="text-emerald-600" /> Target Audience & Recipients
+                    </h4>
+                    <button type="button" onClick={() => setStep(3)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
+                      Edit Step 3
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Audience Type</span>
+                        <p className="font-bold text-gray-900 text-sm mt-0.5">{audienceTypeTag}</p>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-black">
+                        {contactCount} Total Contacts
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Recipient Details</span>
+                      <p className="font-medium text-gray-800 bg-gray-50 p-2.5 rounded-lg border border-gray-200 mt-0.5 break-words">
+                        {audienceTitle} — <span className="text-gray-600 font-normal">{audienceDetail}</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Template & Content Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3.5 hover:border-primary-300 transition-all">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                      <FileText size={15} className="text-purple-600" /> Template & Email Content
+                    </h4>
+                    <button type="button" onClick={() => setStep(6)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
+                      Edit Step 6
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Selected Template</span>
+                      <p className="font-bold text-gray-900 text-sm mt-0.5">{templateName}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Design Mode</span>
+                      <p className="font-medium text-gray-800 mt-0.5">{designMode}</p>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Content Snippet Preview</span>
+                      <p className="font-mono text-[11px] text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-200 mt-0.5 line-clamp-2">
+                        {textSnippet || 'No text snippet available.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
       </div>
 
@@ -1289,9 +1493,23 @@ export default function CampaignWizard() {
           <button 
             onClick={handleDispatch} 
             disabled={loading}
-            className="flex items-center px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors shadow-sm shadow-green-600/30 disabled:opacity-50"
+            className={`flex items-center px-6 py-2.5 text-sm font-bold text-white rounded-xl transition-all shadow-md disabled:opacity-50 ${
+              formData.dispatch_option === 'review' || !formData.dispatch_option
+                ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/30'
+                : (formData.dispatch_option === 'schedule' || formData.scheduled_at)
+                ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/30'
+                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30'
+            }`}
           >
-            {loading ? 'Dispatching...' : 'Dispatch Campaign'} <Send size={16} className="ml-2" />
+            {loading ? (
+              'Processing...'
+            ) : formData.dispatch_option === 'review' || !formData.dispatch_option ? (
+              <> Send to Review <Check size={16} className="ml-2" /> </>
+            ) : (formData.dispatch_option === 'schedule' || formData.scheduled_at) ? (
+              <> Schedule Campaign <Calendar size={16} className="ml-2" /> </>
+            ) : (
+              <> Dispatch Campaign <Send size={16} className="ml-2" /> </>
+            )}
           </button>
         )}
       </div>

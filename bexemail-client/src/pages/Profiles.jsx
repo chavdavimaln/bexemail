@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserPlus, Key, Mail, Phone, Shield, ShieldCheck, 
-  Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw
+  Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw, Database
 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
@@ -17,7 +17,10 @@ const MODULES = [
   { id: 'reports', name: 'Reports & Analytics' },
   { id: 'api_access', name: 'API Key Access' },
   { id: 'history_logs', name: 'Audit History Logs' },
-  { id: 'settings', name: 'System Settings' }
+  { id: 'settings', name: 'System Settings' },
+  { id: 'all_system_backup', name: 'All System Backup Access' },
+  { id: 'database_backup', name: 'Database Backup Access' },
+  { id: 'contacts_backup', name: 'Contacts Backup Access' }
 ];
 
 const Profiles = () => {
@@ -257,6 +260,30 @@ const Profiles = () => {
     }
   };
 
+  const handleTakeAllSystemBackup = async () => {
+    try {
+      await axios.post('http://localhost:5000/api/backup/create', {
+        description: `All System Backup triggered from Profiles - ${new Date().toLocaleDateString()}`,
+        module_type: 'all'
+      });
+      customAlert({ title: 'Success', message: 'All System Backup created successfully!', type: 'success' });
+    } catch (err) {
+      customAlert({ title: 'Backup Error', message: err.response?.data?.error || 'Failed to create All System Backup.', type: 'danger' });
+    }
+  };
+
+  const handleTakeDatabaseBackup = async () => {
+    try {
+      await axios.post('http://localhost:5000/api/backup/create', {
+        description: `Database Backup triggered from Profiles - ${new Date().toLocaleDateString()}`,
+        module_type: 'database'
+      });
+      customAlert({ title: 'Success', message: 'Database Backup created successfully!', type: 'success' });
+    } catch (err) {
+      customAlert({ title: 'Backup Error', message: err.response?.data?.error || 'Failed to create Database Backup.', type: 'danger' });
+    }
+  };
+
   const handleTogglePermission = (moduleId) => {
     setUserForm(prev => {
       const nextPerms = { ...prev.permissions };
@@ -266,6 +293,10 @@ const Profiles = () => {
   };
 
   if (loading) return <div className="p-8">Loading Profile Management...</div>;
+
+  const currentUserPerms = currentUser.permissions || {};
+  const canTakeAllSystem = currentUserRole === 'Super Admin' || currentUserRole === 'Admin' || currentUserRole === 'Sub Admin' || currentUserPerms.all_system_backup === true;
+  const canTakeDatabase = currentUserRole === 'Super Admin' || currentUserRole === 'Admin' || currentUserRole === 'Sub Admin' || currentUserPerms.database_backup === true;
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-300">

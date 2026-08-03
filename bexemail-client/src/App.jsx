@@ -65,6 +65,8 @@ const ProtectedRoute = ({ children }) => {
 
 import { ModalProvider } from './context/ModalContext';
 
+import BackupsAndHistory from './pages/BackupsAndHistory';
+
 function App() {
   return (
     <ModalProvider>
@@ -81,7 +83,9 @@ function App() {
             <Route path="contacts/bulk-import" element={<BulkImportPage />} />
             <Route path="contacts/import-logs" element={<ImportHistoryPage />} />
             <Route path="contacts/export" element={<ExportPanel />} />
-            <Route path="contacts/backup" element={<BackupRestore />} />
+            <Route path="contacts/backup" element={<Navigate to="/backups" replace />} />
+            <Route path="backups" element={<BackupsAndHistory initialTab="management" />} />
+            <Route path="backups/schedules" element={<BackupsAndHistory initialTab="schedules" />} />
             <Route path="lists" element={<TargetLists />} />
             <Route path="templates" element={<TemplatesList />} />
             <Route path="templates/new" element={<TemplateEditor />} />
@@ -98,7 +102,7 @@ function App() {
             <Route path="integrations" element={<SubscriptionForms />} />
             <Route path="forms" element={<SubscriberForms />} />
             <Route path="developer" element={<DeveloperAPI />} />
-            <Route path="history" element={<HistoryLogs />} />
+            <Route path="history" element={<BackupsAndHistory initialTab="history" />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profiles" element={<Profiles />} />
             {/* Add more routes here later */}

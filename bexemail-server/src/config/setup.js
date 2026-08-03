@@ -187,10 +187,70 @@ async function setupDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS db_backups (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        module_type VARCHAR(50) DEFAULT 'all',
         description VARCHAR(255) NOT NULL,
         backup_data LONGTEXT NOT NULL,
         tables_included TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add module_type column if not exists
+    try {
+      await pool.query("ALTER TABLE db_backups ADD COLUMN module_type VARCHAR(50) DEFAULT 'all'");
+    } catch (e) {
+      // Column might already exist
+    }
+
+    // Create backup_schedules table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS backup_schedules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        module_type VARCHAR(50) NOT NULL DEFAULT 'all',
+        frequency ENUM('daily', 'weekly', 'monthly', 'yearly') NOT NULL DEFAULT 'weekly',
+        status ENUM('active', 'paused') NOT NULL DEFAULT 'active',
+        reminder_enabled TINYINT(1) DEFAULT 1,
+        reminder_email VARCHAR(255) NULL,
+        last_run_at TIMESTAMP NULL,
+        next_run_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contacts_ui_config (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        config_key VARCHAR(100) DEFAULT 'contacts_settings',
+        config_json JSON NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS automations_ui_config (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        config_key VARCHAR(100) DEFAULT 'automations_settings',
+        config_json JSON NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaigns_ui_config (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        config_key VARCHAR(100) DEFAULT 'campaigns_settings',
+        config_json JSON NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ui_programming (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        config_key VARCHAR(100) DEFAULT 'system_ui_settings',
+        config_json JSON NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
 

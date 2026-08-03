@@ -13,7 +13,17 @@ const defaultUser = cleanEnv(process.env.SMTP_USER) || 'info@bexcodeservices.com
 const defaultPass = cleanEnv(process.env.SMTP_PASSWORD) || cleanEnv(process.env.SMTP_PASS) || 'tbwffkmwugtbaiuw';
 const defaultSecure = cleanEnv(process.env.SMTP_SECURE) === 'true' || defaultPort === 465;
 
-function createMailTransporter(senderObj, sysSettings = {}) {
+function createMailTransporter(senderObj, sysSettings = {}, forceDefault = false) {
+  if (forceDefault) {
+    return nodemailer.createTransport({
+      host: defaultHost,
+      port: defaultPort,
+      secure: defaultSecure,
+      auth: defaultUser && defaultPass ? { user: defaultUser, pass: defaultPass } : undefined,
+      tls: { rejectUnauthorized: false }
+    });
+  }
+
   const host = cleanEnv(senderObj?.smtp_host) || sysSettings.smtp_host || defaultHost;
   const port = parseInt(senderObj?.smtp_port || sysSettings.smtp_port) || defaultPort;
   const user = cleanEnv(senderObj?.smtp_user) || sysSettings.smtp_user || defaultUser;
@@ -31,12 +41,32 @@ function createMailTransporter(senderObj, sysSettings = {}) {
   });
 }
 
+async function resolveCompletedCampaigns(connection) {
+  try {
+    await connection.query(`
+      UPDATE campaigns c 
+      SET c.status = CASE 
+        WHEN (SELECT COUNT(*) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'sent') > 0 THEN 'sent' 
+        WHEN (SELECT COUNT(*) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'failed') > 0 THEN 'failed'
+        ELSE 'sent'
+      END
+      WHERE c.status = 'sending' 
+      AND NOT EXISTS (SELECT 1 FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'pending')
+    `);
+  } catch (err) {
+    console.error('[Worker] Error resolving completed campaigns:', err);
+  }
+}
+
 async function processQueue() {
   let connection;
   try {
     connection = await pool.getConnection();
 
-    // Fetch one pending email at a time to respect limits
+    // Check & resolve any completed/stuck campaigns first
+    await resolveCompletedCampaigns(connection);
+
+    // Fetch one pending email at a time
     const [rows] = await connection.query(
       `SELECT q.id, q.recipient_id, q.campaign_id, c.subject, c.html_content, c.status as campaign_status,
               s.email, s.first_name, snd.name as sender_name, snd.email as sender_email,
@@ -58,33 +88,33 @@ async function processQueue() {
     const job = rows[0];
     console.log(`[Worker] Processing email queue job #${job.id} for recipient: ${job.email}`);
 
+    // Process HTML tracking
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(job.html_content || '');
+    
+    const baseUrl = process.env.API_URL || 'http://localhost:5000';
+    $('a').each((i, link) => {
+      const originalHref = $(link).attr('href');
+      if (originalHref && !originalHref.startsWith('mailto:') && !originalHref.startsWith('tel:')) {
+        const encodedUrl = encodeURIComponent(originalHref);
+        const trackingLink = `${baseUrl}/api/track/click/${job.campaign_id}/${job.recipient_id}?url=${encodedUrl}`;
+        $(link).attr('href', trackingLink);
+      }
+    });
+
+    // Append 1x1 open tracking pixel
+    const pixelUrl = `${baseUrl}/api/track/open/${job.campaign_id}/${job.recipient_id}`;
+    $('body').append(`<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none;" />`);
+
+    const finalHtml = $.html();
+    const senderEmail = job.sender_email || defaultUser;
+    const senderName = job.sender_name || 'BexEmail';
+
+    let sendSuccess = false;
+
+    // Primary Attempt with Sender SMTP
     try {
-      // 1. Process HTML for tracking
-      const cheerio = require('cheerio');
-      const $ = cheerio.load(job.html_content || '');
-      
-      const baseUrl = process.env.API_URL || 'http://localhost:5000';
-      $('a').each((i, link) => {
-        const originalHref = $(link).attr('href');
-        if (originalHref && !originalHref.startsWith('mailto:') && !originalHref.startsWith('tel:')) {
-          const encodedUrl = encodeURIComponent(originalHref);
-          const trackingLink = `${baseUrl}/api/track/click/${job.campaign_id}/${job.recipient_id}?url=${encodedUrl}`;
-          $(link).attr('href', trackingLink);
-        }
-      });
-
-      // Append 1x1 open tracking pixel
-      const pixelUrl = `${baseUrl}/api/track/open/${job.campaign_id}/${job.recipient_id}`;
-      $('body').append(`<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none;" />`);
-
-      const finalHtml = $.html();
-
-      // Create transporter dynamically
       const transporter = createMailTransporter(job);
-
-      const senderEmail = job.sender_email || defaultUser;
-      const senderName = job.sender_name || 'BexEmail';
-      
       await transporter.sendMail({
         from: `"${senderName}" <${senderEmail}>`,
         replyTo: `"${senderName}" <${senderEmail}>`,
@@ -92,43 +122,52 @@ async function processQueue() {
         subject: job.subject,
         html: finalHtml 
       });
+      sendSuccess = true;
+    } catch (primaryErr) {
+      console.warn(`[Worker] Primary SMTP failed for job #${job.id} (${primaryErr.message}). Retrying with System Default SMTP...`);
+      // Retry with System Default SMTP
+      try {
+        const defaultTransporter = createMailTransporter(job, {}, true);
+        await defaultTransporter.sendMail({
+          from: `"${senderName}" <${defaultUser}>`,
+          replyTo: `"${senderName}" <${defaultUser}>`,
+          to: job.email,
+          subject: job.subject,
+          html: finalHtml 
+        });
+        sendSuccess = true;
+        console.log(`[Worker] System Default SMTP fallback succeeded for job #${job.id}`);
+      } catch (fallbackErr) {
+        console.error(`[Worker] Fallback SMTP also failed for job #${job.id}:`, fallbackErr.message);
+        
+        let errorCategory = 'Failed';
+        let errorMessage = fallbackErr.message;
 
-      // Mark as sent
+        if (fallbackErr.responseCode >= 500 && fallbackErr.responseCode <= 599) {
+          errorCategory = 'Hard Bounce (SMTP 5xx)';
+        } else if (fallbackErr.responseCode >= 400 && fallbackErr.responseCode <= 499) {
+          errorCategory = 'Soft Bounce (SMTP 4xx)';
+        } else if (fallbackErr.code === 'EAUTH') {
+          errorCategory = 'Authentication Failed';
+        }
+
+        await connection.query(
+          `UPDATE email_queue SET status = 'failed', error_message = ? WHERE id = ?`,
+          [`[${errorCategory}] ${errorMessage}`, job.id]
+        );
+      }
+    }
+
+    if (sendSuccess) {
       await connection.query(
         `UPDATE email_queue SET status = 'sent' WHERE id = ?`,
         [job.id]
       );
       console.log(`[Worker] Job #${job.id} sent successfully to ${job.email}`);
-
-    } catch (sendError) {
-      console.error(`[Worker] Failed to send job #${job.id} to ${job.email}:`, sendError.message);
-      
-      let errorCategory = 'Failed';
-      let errorMessage = sendError.message;
-
-      if (sendError.responseCode >= 500 && sendError.responseCode <= 599) {
-        errorCategory = 'Hard Bounce (SMTP 5xx)';
-      } else if (sendError.responseCode >= 400 && sendError.responseCode <= 499) {
-        errorCategory = 'Soft Bounce (SMTP 4xx)';
-      } else if (sendError.code === 'EAUTH') {
-        errorCategory = 'Authentication Failed';
-      }
-
-      await connection.query(
-        `UPDATE email_queue SET status = 'failed', error_message = ? WHERE id = ?`,
-        [`[${errorCategory}] ${errorMessage}`, job.id]
-      );
     }
 
-    // After updating queue (sent or failed), check if campaign is fully completed
-    const [pendingJobs] = await connection.query(
-      `SELECT COUNT(*) as count FROM email_queue WHERE campaign_id = ? AND status = 'pending'`,
-      [job.campaign_id]
-    );
-    if (pendingJobs[0].count === 0) {
-      await connection.query(`UPDATE campaigns SET status = 'sent' WHERE id = ?`, [job.campaign_id]);
-      console.log(`[Worker] Campaign #${job.campaign_id} fully sent and completed!`);
-    }
+    // Check if campaign is fully completed
+    await resolveCompletedCampaigns(connection);
 
   } catch (err) {
     console.error('[Worker] Database error in queue worker:', err);

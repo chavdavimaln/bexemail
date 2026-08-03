@@ -128,6 +128,50 @@ async function setupAutomationDB() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      status VARCHAR(50) DEFAULT 'draft',
+      trigger_type VARCHAR(100) NULL,
+      workflow_json LONGTEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_steps (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      automation_id INT NULL,
+      step_type VARCHAR(100) NULL,
+      step_data JSON NULL,
+      position_order INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_subscribers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      automation_id INT NOT NULL,
+      subscriber_id INT NOT NULL,
+      status VARCHAR(50) DEFAULT 'active',
+      current_step_id INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      automation_id INT NOT NULL,
+      subscriber_id INT NOT NULL,
+      action VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   for (const template of templates) {
     await pool.query(
       `INSERT IGNORE INTO automation_templates
