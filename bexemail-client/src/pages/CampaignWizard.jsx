@@ -3,8 +3,34 @@ import EmailEditor from 'react-email-editor';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Check, ChevronRight, ChevronLeft, Send, Calendar, Monitor, Users, FileText, Settings, User, GitBranch, Sparkles, X, RefreshCw, Mail } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
+
+const DEFAULT_FOOTER_HTML = `<div style="padding: 25px 20px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; text-align: left; max-width: 600px; margin: 0 auto; box-sizing: border-box; border-radius: 0 0 12px 12px;">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin-bottom: 15px;">
+    <tr>
+      <td align="left" style="font-size: 18px; font-weight: bold; color: #2563eb; font-family: inherit;">
+        BexEmail
+      </td>
+      <td align="right" style="font-family: inherit; font-size: 12px;">
+        <a href="https://facebook.com" style="margin-left: 10px; color: #1877f2; text-decoration: none; font-weight: 600;">Facebook</a>
+        <a href="https://instagram.com" style="margin-left: 10px; color: #e1306c; text-decoration: none; font-weight: 600;">Instagram</a>
+        <a href="https://linkedin.com" style="margin-left: 10px; color: #0077b5; text-decoration: none; font-weight: 600;">LinkedIn</a>
+        <a href="https://twitter.com" style="margin-left: 10px; color: #0f172a; text-decoration: none; font-weight: 600;">Twitter-X</a>
+      </td>
+    </tr>
+  </table>
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; border-top: 1px solid #f1f5f9; padding-top: 12px;">
+    <tr>
+      <td align="center" style="font-size: 11px; color: #64748b; line-height: 1.6; font-family: inherit; padding-top: 8px;">
+        123 Business Rd, Suite 100, Business City, BC 12345<br>
+        © 2026 BexEmail. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>`;
 
 export default function CampaignWizard() {
+  const { alert: customAlert } = useModal();
   const emailEditorRef = useRef(null);
   const [editorMode, setEditorMode] = useState('visual'); // 'visual' or 'html'
   const [step, setStep] = useState(1);
@@ -28,7 +54,6 @@ export default function CampaignWizard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState([]);
 
-  // Add Sender state & Registered SMTP info
   const [showAddSender, setShowAddSender] = useState(false);
   const [systemSmtp, setSystemSmtp] = useState({});
   const [newSender, setNewSender] = useState({ 
@@ -38,6 +63,19 @@ export default function CampaignWizard() {
   });
   const [subscriberSearch, setSubscriberSearch] = useState('');
   const [previewMode, setPreviewMode] = useState('desktop'); // 'desktop' or 'mobile'
+
+  // Full Add SMTP & Test Connection Modal States in Wizard
+  const [showAddSmtpModal, setShowAddSmtpModal] = useState(false);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [smtpForm, setSmtpForm] = useState({
+    name: '', email: '', smtp_host: 'smtp.gmail.com', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_secure: 'tls'
+  });
+
+  const [showTestSmtpModal, setShowTestSmtpModal] = useState(false);
+  const [testSmtpSender, setTestSmtpSender] = useState(null);
+  const [testEmailInput, setTestEmailInput] = useState('');
+  const [testSmtpLoading, setTestSmtpLoading] = useState(false);
+  const [testSmtpResult, setTestSmtpResult] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '', 
@@ -68,20 +106,47 @@ export default function CampaignWizard() {
         axios.get('http://localhost:5000/api/subscribers?limit=500').catch(() => ({ data: { data: [] } })),
         axios.get('http://localhost:5000/api/settings', { headers: { 'x-user-role': 'Super Admin' } }).catch(() => ({ data: {} }))
       ]);
-      setSenders(sendersRes.data || []);
-      setLists(listsRes.data || []);
-      setTemplates(templatesRes.data || []);
-      setSystemSmtp(settingsRes.data || {});
-      
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const configuredSmtp = localStorage.getItem('configured_smtp_sender') || currentUser.email || 'info@bexcodeservices.com';
+
+      let availableSenders = (sendersRes.data && Array.isArray(sendersRes.data) && sendersRes.data.length > 0) ? sendersRes.data : [];
+      if (availableSenders.length === 0) {
+        availableSenders = [
+          {
+            id: '1',
+            name: currentUser.name || 'Active SMTP Email',
+            email: configuredSmtp,
+            smtp_user: configuredSmtp,
+            is_default: true
+          }
+        ];
+      }
+      setSenders(availableSenders);
+
       const subData = subscribersRes.data?.data || (Array.isArray(subscribersRes.data) ? subscribersRes.data : []);
       setSubscribers(subData);
+
+      const availableLists = listsRes.data?.data || (Array.isArray(listsRes.data) ? listsRes.data : []);
+      setLists(availableLists);
+
+      const availableTemplates = templatesRes.data?.data || (Array.isArray(templatesRes.data) ? templatesRes.data : []);
+      setTemplates(availableTemplates);
 
       const senderIdParam = queryParams.get('sender_id');
       if (senderIdParam) {
         setFormData(prev => ({ ...prev, sender_id: senderIdParam }));
-      } else if (sendersRes.data && sendersRes.data.length > 0 && !formData.sender_id) {
-        const defaultSender = sendersRes.data.find(s => s.is_default) || sendersRes.data[0];
-        setFormData(prev => ({ ...prev, sender_id: defaultSender.id.toString() }));
+      } else {
+        const matchingUserSender = availableSenders.find(s => 
+          (s.email && s.email.toLowerCase() === (configuredSmtp || '').toLowerCase()) ||
+          (s.smtp_user && s.smtp_user.toLowerCase() === (configuredSmtp || '').toLowerCase())
+        );
+
+        if (matchingUserSender) {
+          setFormData(prev => ({ ...prev, sender_id: matchingUserSender.id.toString() }));
+        } else {
+          const defaultSender = availableSenders.find(s => s.is_default) || availableSenders[0];
+          setFormData(prev => ({ ...prev, sender_id: defaultSender.id.toString() }));
+        }
       }
 
       if (editId) {
@@ -118,9 +183,82 @@ export default function CampaignWizard() {
     }
   };
 
+  const handleSaveSmtpInWizard = async () => {
+    if (!smtpForm.name.trim() || !smtpForm.email.trim()) {
+      customAlert({ title: 'Validation Required', message: 'Sender Name and Sender Email are required.', type: 'warning' });
+      return;
+    }
+
+    try {
+      const payload = {
+        name: smtpForm.name.trim(),
+        email: smtpForm.email.trim(),
+        smtp_host: smtpForm.smtp_host || 'smtp.gmail.com',
+        smtp_port: smtpForm.smtp_port ? Number(smtpForm.smtp_port) : 587,
+        smtp_user: smtpForm.smtp_user || smtpForm.email,
+        smtp_pass: smtpForm.smtp_pass || null,
+        smtp_secure: smtpForm.smtp_secure || 'tls',
+        is_default: false
+      };
+
+      const res = await axios.post('http://localhost:5000/api/senders', payload, {
+        headers: { 'x-user-role': 'Admin' }
+      });
+
+      const addedSender = res.data;
+      setSenders(prev => [...prev, addedSender]);
+      setFormData(prev => ({ ...prev, sender_id: addedSender.id.toString() }));
+      setShowAddSmtpModal(false);
+      setSmtpForm({ name: '', email: '', smtp_host: 'smtp.gmail.com', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_secure: 'tls' });
+      customAlert({ title: 'Success', message: 'New SMTP Sender profile added successfully!', type: 'success' });
+    } catch (err) {
+      console.error('Failed to save SMTP in wizard:', err);
+      customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to save SMTP configuration.', type: 'danger' });
+    }
+  };
+
+  const handleOpenTestSmtpInWizard = (senderObj) => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    setTestSmtpSender(senderObj);
+    setTestEmailInput(currentUser.email || senderObj?.email || 'vimal@bexcodeservices.com');
+    setTestSmtpResult(null);
+    setShowTestSmtpModal(true);
+  };
+
+  const handleRunSmtpTestInWizard = async () => {
+    if (!testEmailInput.trim()) {
+      customAlert({ title: 'Validation Required', message: 'Please enter a test recipient email address.', type: 'warning' });
+      return;
+    }
+
+    setTestSmtpLoading(true);
+    setTestSmtpResult(null);
+    try {
+      const payload = {
+        test_email: testEmailInput.trim(),
+        ...(testSmtpSender || {})
+      };
+      const senderId = testSmtpSender?.id || 'test';
+      const res = await axios.post(`/api/senders/${senderId}/test`, payload).catch(() => axios.post(`http://localhost:5000/api/senders/${senderId}/test`, payload));
+      setTestSmtpResult({
+        success: true,
+        message: res.data.message || 'SMTP Connection & Test Email sent successfully!'
+      });
+    } catch (err) {
+      console.error('SMTP test connection failed:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'SMTP Test Connection Failed.';
+      setTestSmtpResult({
+        success: false,
+        message: errMsg
+      });
+    } finally {
+      setTestSmtpLoading(false);
+    }
+  };
+
   const handleAddSender = async () => {
     if (!newSender.name.trim() || !newSender.email.trim()) {
-      alert('Sender Name and Email are required.');
+      customAlert({ title: 'Validation Error', message: 'Sender Name and Email are required.', type: 'warning' });
       return;
     }
 
@@ -132,7 +270,7 @@ export default function CampaignWizard() {
       };
 
       const res = await axios.post('http://localhost:5000/api/senders', payload, {
-        headers: { 'x-user-role': 'Super Admin' }
+        headers: { 'x-user-role': 'Admin' }
       });
 
       const addedSender = res.data;
@@ -140,10 +278,10 @@ export default function CampaignWizard() {
       setFormData(prev => ({ ...prev, sender_id: addedSender.id.toString() }));
       setShowAddSender(false);
       setNewSender({ name: '', email: '', is_default: false });
-      alert('Sender profile added successfully!');
+      customAlert({ title: 'Success', message: 'Sender profile added successfully!', type: 'success' });
     } catch (error) {
       console.error('Failed to add sender:', error);
-      alert(error.response?.data?.error || 'Failed to add sender.');
+      customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to add sender.', type: 'danger' });
     }
   };
 
@@ -176,35 +314,130 @@ export default function CampaignWizard() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (name === 'target_type') {
+      if (value === 'list') {
+        // Clear target_email (individual contacts & custom email)
+        setFormData(prev => ({
+          ...prev,
+          target_type: 'list',
+          target_email: ''
+        }));
+        return;
+      }
+      if (value === 'individual_subscriber') {
+        // Clear list_id and clear target_email initially
+        setFormData(prev => ({
+          ...prev,
+          target_type: 'individual_subscriber',
+          list_id: '',
+          target_email: ''
+        }));
+        return;
+      }
+      if (value === 'custom_email') {
+        // Clear list_id and clear target_email for fresh input
+        setFormData(prev => ({
+          ...prev,
+          target_type: 'custom_email',
+          list_id: '',
+          target_email: ''
+        }));
+        return;
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
   };
 
-  const handleNext = () => {
-    if (step === 6 && editorMode === 'visual' && emailEditorRef.current?.editor) {
-      emailEditorRef.current.editor.exportHtml((data) => {
-        const { html } = data;
-        if (html) {
-          setFormData(prev => ({ ...prev, html_content: html }));
+  const autoSaveDraft = async (dataToSave = formData) => {
+    try {
+      const isSingleEmail = dataToSave.target_type === 'individual_subscriber' || dataToSave.target_type === 'custom_email';
+      let contentToSave = dataToSave.html_content || '';
+      if (contentToSave && !contentToSave.includes('BexEmail')) {
+        contentToSave = contentToSave + DEFAULT_FOOTER_HTML;
+      }
+
+      const payload = {
+        name: dataToSave.name || 'Untitled Campaign Draft',
+        subject: dataToSave.subject || 'No Subject',
+        sender_id: dataToSave.sender_id ? Number(dataToSave.sender_id) : null,
+        target_type: dataToSave.target_type || 'list',
+        list_id: isSingleEmail ? null : (dataToSave.list_id ? Number(dataToSave.list_id) : null),
+        target_email: isSingleEmail ? (dataToSave.target_email || '') : null,
+        is_ab_test: dataToSave.is_ab_test || false,
+        variant_b_subject: dataToSave.variant_b_subject || null,
+        variant_b_html: dataToSave.variant_b_html || null,
+        template_id: dataToSave.template_id ? Number(dataToSave.template_id) : null,
+        html_content: contentToSave,
+        status: 'draft'
+      };
+
+      if (editId) {
+        await axios.put(`http://localhost:5000/api/campaigns/${editId}`, payload, {
+          headers: { 'x-user-role': 'Admin' }
+        });
+      } else {
+        const res = await axios.post('http://localhost:5000/api/campaigns', payload, {
+          headers: { 'x-user-role': 'Admin' }
+        });
+        if (res.data && (res.data.id || res.data.campaignId)) {
+          const newId = res.data.id || res.data.campaignId;
+          navigate(`/campaigns/new?edit=${newId}`, { replace: true });
         }
-        setStep(prev => Math.min(prev + 1, 9));
+      }
+    } catch (err) {
+      console.error('Auto-save draft error:', err);
+    }
+  };
+
+  const handleSaveDraftManual = async () => {
+    await autoSaveDraft();
+    customAlert({
+      title: 'Draft Saved',
+      message: 'Your campaign progress has been saved as a draft successfully!',
+      type: 'success'
+    });
+  };
+
+  const goToStep = async (targetStep) => {
+    if (step === 6 && editorMode === 'visual' && emailEditorRef.current?.editor) {
+      emailEditorRef.current.editor.exportHtml(async (data) => {
+        let { html } = data || {};
+        if (html && !html.includes('BexEmail')) {
+          html = html + DEFAULT_FOOTER_HTML;
+        }
+        const updated = { ...formData, html_content: html || formData.html_content };
+        setFormData(updated);
+        await autoSaveDraft(updated);
+        setStep(targetStep);
       });
       return;
     }
-    setStep(prev => Math.min(prev + 1, 9));
+    await autoSaveDraft();
+    setStep(targetStep);
+  };
+
+  const handleNext = () => {
+    goToStep(Math.min(step + 1, 9));
   };
 
   const handlePrev = () => {
-    setStep(prev => Math.max(prev - 1, 1));
+    goToStep(Math.max(step - 1, 1));
   };
 
   const handleTemplateSelect = (template) => {
+    let content = template.html_content || '';
+    if (content && !content.includes('BexEmail')) {
+      content = content + DEFAULT_FOOTER_HTML;
+    }
     setFormData(prev => ({
       ...prev,
       template_id: template.id || '',
-      html_content: template.html_content || ''
+      html_content: content
     }));
     handleNext();
   };
@@ -213,36 +446,38 @@ export default function CampaignWizard() {
     if (step === 6 && editorMode === 'visual' && emailEditorRef.current?.editor) {
       await new Promise((resolve) => {
         emailEditorRef.current.editor.exportHtml((data) => {
-          if (data?.html) {
-            setFormData(prev => ({ ...prev, html_content: data.html }));
+          let { html } = data || {};
+          if (html && !html.includes('BexEmail')) {
+            html = html + DEFAULT_FOOTER_HTML;
           }
+          setFormData(prev => ({ ...prev, html_content: html || prev.html_content }));
           resolve();
         });
       });
     }
 
     if (!formData.name.trim()) {
-      alert('Campaign Name is required. Please fill it out in Step 1.');
+      customAlert({ title: 'Validation Required', message: 'Campaign Name is required. Please fill it out in Step 1.', type: 'warning' });
       setStep(1);
       return;
     }
     if (!formData.subject.trim()) {
-      alert('Subject Line is required. Please fill it out in Step 1.');
-      setStep(1);
+      customAlert({ title: 'Validation Required', message: 'Subject Line is required. Please fill it out in Step 4.', type: 'warning' });
+      setStep(4);
       return;
     }
     if (!formData.sender_id) {
-      alert('Sender is required. Please select a sender in Step 2.');
+      customAlert({ title: 'Validation Required', message: 'Sender is required. Please select a sender in Step 2.', type: 'warning' });
       setStep(2);
       return;
     }
     if (formData.target_type === 'list' && !formData.list_id) {
-      alert('Audience list is required. Please select a list in Step 3.');
+      customAlert({ title: 'Validation Required', message: 'Target contact list is required. Please select a list in Step 3.', type: 'warning' });
       setStep(3);
       return;
     }
     if ((formData.target_type === 'individual_subscriber' || formData.target_type === 'custom_email') && !formData.target_email.trim()) {
-      alert('Target Email Address is required. Please select or enter an email in Step 3.');
+      customAlert({ title: 'Validation Required', message: 'Target Email Address is required. Please select or enter an email in Step 3.', type: 'warning' });
       setStep(3);
       return;
     }
@@ -250,6 +485,11 @@ export default function CampaignWizard() {
     setLoading(true);
     try {
       const isSingleEmail = formData.target_type === 'individual_subscriber' || formData.target_type === 'custom_email';
+      let finalHtml = formData.html_content || '<h1>Default Campaign</h1>';
+      if (!finalHtml.includes('BexEmail')) {
+        finalHtml = finalHtml + DEFAULT_FOOTER_HTML;
+      }
+
       const payload = {
         name: formData.name,
         campaignName: formData.name,
@@ -267,23 +507,24 @@ export default function CampaignWizard() {
         variant_b_html: formData.variant_b_html,
         variantBHtml: formData.variant_b_html,
         template_id: formData.template_id,
-        html_content: formData.html_content,
-        htmlContent: formData.html_content,
+        html_content: finalHtml,
+        htmlContent: finalHtml,
         scheduled_at: formData.scheduled_at || null,
-        status: formData.scheduled_at ? 'scheduled' : 'sending'
+        status: formData.dispatch_option === 'schedule' ? 'scheduled' : 'sending'
       };
 
-      if (isEditing) {
+      if (editId) {
         await axios.put(`http://localhost:5000/api/campaigns/${editId}`, payload, {
-          headers: { 'x-user-role': 'Super Admin' }
+          headers: { 'x-user-role': 'Admin' }
         }).catch(() => {});
       }
 
-      await axios.post('http://localhost:5000/api/campaigns_wizard/dispatch', payload);
+      await axios.post('http://localhost:5000/api/campaigns/dispatch', payload);
       setDispatchedSuccess(true);
+      customAlert({ title: 'Success', message: 'Campaign dispatched successfully!', type: 'success' });
     } catch (error) {
       console.error('Dispatch error:', error);
-      alert(error.response?.data?.error || 'Failed to dispatch campaign.');
+      customAlert({ title: 'Dispatch Error', message: error.response?.data?.error || 'Failed to dispatch campaign.', type: 'danger' });
     } finally {
       setLoading(false);
     }
@@ -310,7 +551,7 @@ export default function CampaignWizard() {
     { id: 1, title: 'Setup', icon: <Settings size={18} /> },
     { id: 2, title: 'Sender', icon: <User size={18} /> },
     { id: 3, title: 'Audience', icon: <Users size={18} /> },
-    { id: 4, title: 'A/B Test', icon: <GitBranch size={18} /> },
+    { id: 4, title: 'Subject Line', icon: <Mail size={18} /> },
     { id: 5, title: 'Template', icon: <FileText size={18} /> },
     { id: 6, title: 'Editor', icon: <Monitor size={18} /> },
     { id: 7, title: 'Preview', icon: <Sparkles size={18} /> },
@@ -389,13 +630,20 @@ export default function CampaignWizard() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{isEditing ? 'Edit Campaign' : 'Create Campaign'}</h1>
         
-        {/* Top Right Select Dropdown */}
+        {/* Top Right Actions */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveDraftManual}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition border border-gray-300 shadow-sm"
+          >
+            <FileText size={15} /> Save Draft
+          </button>
           <select
             defaultValue="review"
             onChange={(e) => {
               const val = e.target.value;
-              if (val === 'review') setStep(9);
+              if (val === 'review') goToStep(9);
               if (val === 'direct_send') handleDispatch();
             }}
             className="px-4 py-2.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-800 text-xs font-bold rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-primary-500 outline-none cursor-pointer"
@@ -413,7 +661,7 @@ export default function CampaignWizard() {
             <React.Fragment key={s.id}>
               <button 
                 type="button"
-                onClick={() => setStep(s.id)}
+                onClick={() => goToStep(s.id)}
                 className="flex items-center gap-2 justify-center focus:outline-none group transition-all"
               >
                 <div className={`flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full border-2 transition-all shrink-0 ${
@@ -479,7 +727,7 @@ export default function CampaignWizard() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2 border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Sender Details</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Select a sender profile for your campaign.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Select one or multiple sender profiles for your campaign.</p>
               </div>
               <button
                 type="button"
@@ -490,47 +738,157 @@ export default function CampaignWizard() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Who is sending this email? <span className="text-red-500">*</span></label>
-                <select name="sender_id" value={formData.sender_id} onChange={handleChange} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white font-medium">
-                  <option value="">Select a sender...</option>
-                  {senders.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} &lt;{s.email}&gt; {s.smtp_user ? `(SMTP: ${s.smtp_user})` : '(System SMTP)'} {s.is_default ? ' (Default)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Multi-Select Senders UI */}
+            {(() => {
+              const selectedIds = (formData.sender_id || '')
+                .split(',')
+                .map(id => id.trim())
+                .filter(Boolean);
 
-              {/* Dynamic SMTP Details Banner */}
-              {(() => {
-                const selectedSender = senders.find(s => s.id.toString() === formData.sender_id.toString());
-                const activeSmtpUser = selectedSender?.smtp_user || systemSmtp.smtp_user || 'info@bexcodeservices.com';
-                const host = selectedSender?.smtp_host || systemSmtp.smtp_host || 'smtp.gmail.com';
-                const port = selectedSender?.smtp_port || systemSmtp.smtp_port || 465;
-                const secure = selectedSender?.smtp_secure || systemSmtp.smtp_secure || 'ssl';
-                const isCustom = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
-                
-                return (
-                  <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between animate-in fade-in duration-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
-                        <Mail size={18} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <span className="block text-xs font-bold text-gray-900">
-                          Active SMTP Email: <span className="text-blue-700">{activeSmtpUser}</span>
+              const toggleSender = (idStr) => {
+                let current = [...selectedIds];
+                if (current.includes(idStr)) {
+                  if (current.length > 1) {
+                    current = current.filter(i => i !== idStr);
+                  }
+                } else {
+                  current.push(idStr);
+                }
+                setFormData(prev => ({ ...prev, sender_id: current.join(',') }));
+              };
+
+              const selectAll = () => {
+                const allIds = senders.map(s => s.id.toString());
+                setFormData(prev => ({ ...prev, sender_id: allIds.join(',') }));
+              };
+
+              const selectedSenders = senders.filter(s => selectedIds.includes(s.id.toString()));
+              if (selectedSenders.length === 0 && senders.length > 0) {
+                selectedSenders.push(senders[0]);
+              }
+
+              return (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-semibold text-gray-700">
+                        Who is sending this email? <span className="text-red-500">*</span>
+                        <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 ml-2 font-bold">
+                          Multi-Select ({selectedSenders.length} Selected)
                         </span>
-                        <span className="block text-[11px] text-gray-500 mt-0.5">
-                          SMTP Configuration: <strong className="text-gray-700">{host}:{port}</strong> ({secure}) — {isCustom ? 'Custom Sender SMTP' : 'System Default SMTP'}
-                        </span>
-                      </div>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={selectAll}
+                        className="text-xs font-bold text-primary-600 hover:text-primary-700 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-200 transition"
+                      >
+                        Select All
+                      </button>
                     </div>
+
+                    {/* Selected Sender Badges */}
+                    {selectedSenders.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                        {selectedSenders.map(s => (
+                          <span 
+                            key={s.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-primary-700 text-xs font-bold rounded-lg border border-primary-200 shadow-2xs"
+                          >
+                            <Mail size={12} className="text-primary-600" />
+                            <span>{s.name} &lt;{s.email}&gt;</span>
+                            {selectedSenders.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSender(s.id.toString());
+                                }}
+                                className="text-gray-400 hover:text-red-600 p-0.5 rounded-full"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Interactive Checkbox List for Multi-Select */}
+                    <div className="border border-gray-300 rounded-xl p-2 bg-white max-h-56 overflow-y-auto space-y-1.5 shadow-2xs">
+                      {senders.map(s => {
+                        const isSelected = selectedIds.includes(s.id.toString());
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => toggleSender(s.id.toString())}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                              isSelected 
+                                ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-400/30' 
+                                : 'bg-white border-gray-100 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                                isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'
+                              }`}>
+                                {isSelected && <Check size={14} />}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-gray-900">{s.name} <span className="text-gray-500 font-normal">&lt;{s.email}&gt;</span></p>
+                                <p className="text-[11px] text-gray-400">SMTP User: {s.smtp_user || s.email} {s.is_default ? '• Default Profile' : ''}</p>
+                              </div>
+                            </div>
+                            {s.smtp_host && (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded border border-slate-200">
+                                {s.smtp_host}:{s.smtp_port || 587}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1.5">Check one or multiple sender profiles. Emails will be dynamically rotated across all selected senders during campaign dispatches.</p>
                   </div>
-                );
-              })()}
-            </div>
+
+                  {/* Dynamic SMTP Details Banners for Selected Senders */}
+                  <div className="space-y-2 pt-1">
+                    {selectedSenders.map(selectedSender => {
+                      const activeSmtpUser = selectedSender?.smtp_user || selectedSender?.email || systemSmtp.smtp_user || 'info@bexcodeservices.com';
+                      const host = selectedSender?.smtp_host || systemSmtp.smtp_host || 'smtp.gmail.com';
+                      const port = selectedSender?.smtp_port || systemSmtp.smtp_port || 465;
+                      const secure = selectedSender?.smtp_secure || systemSmtp.smtp_secure || 'ssl';
+                      const isCustom = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
+
+                      return (
+                        <div key={selectedSender.id} className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
+                              <Mail size={16} className="text-blue-600" />
+                            </div>
+                            <div>
+                              <span className="block text-xs font-bold text-gray-900">
+                                Active SMTP Email: <span className="text-blue-700">{activeSmtpUser}</span> ({selectedSender.name})
+                              </span>
+                              <span className="block text-[11px] text-gray-500 mt-0.5">
+                                SMTP Configuration: <strong className="text-gray-700">{host}:{port}</strong> ({secure}) — {isCustom ? 'Custom Sender SMTP' : 'System Default SMTP'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTestSmtpInWizard(selectedSender)}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 shrink-0"
+                          >
+                            <Send size={13} /> Test SMTP Connection
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -601,17 +959,178 @@ export default function CampaignWizard() {
               </label>
             </div>
 
-            {/* Option A: Select List */}
+            {/* Option A: Select List (Multi-Select Supported) */}
             {formData.target_type === 'list' && (
-              <div className="pt-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Which list should receive this? <span className="text-red-500">*</span></label>
-                <select name="list_id" value={formData.list_id} onChange={handleChange} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white">
-                  <option value="">Select an audience list...</option>
-                  {lists.map(l => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-              </div>
+              (() => {
+                const selectedListIds = (formData.list_id || '')
+                  .split(',')
+                  .map(id => id.trim())
+                  .filter(Boolean);
+
+                const isAllSelected = selectedListIds.includes('all');
+
+                const toggleList = (idStr) => {
+                  let current = [...selectedListIds];
+                  if (idStr === 'all') {
+                    setFormData(prev => ({ ...prev, list_id: 'all' }));
+                    return;
+                  }
+
+                  current = current.filter(i => i !== 'all');
+                  if (current.includes(idStr)) {
+                    if (current.length > 1) {
+                      current = current.filter(i => i !== idStr);
+                    }
+                  } else {
+                    current.push(idStr);
+                  }
+                  setFormData(prev => ({ ...prev, list_id: current.join(',') }));
+                };
+
+                const selectAllLists = () => {
+                  setFormData(prev => ({ ...prev, list_id: 'all' }));
+                };
+
+                const selectedListsObj = lists.filter(l => selectedListIds.includes(l.id.toString()));
+                const totalSelectedSubscribers = isAllSelected 
+                  ? subscribers.filter(s => s.status === 'subscribed').length || subscribers.length
+                  : selectedListsObj.reduce((acc, curr) => acc + (Number(curr.subscriber_count || curr.contacts_count || 0)), 0);
+
+                return (
+                  <div className="pt-2 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-sm font-semibold text-gray-700">
+                        Which list should receive this? <span className="text-red-500">*</span>
+                        <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 ml-2 font-bold">
+                          {isAllSelected ? 'All Lists Selected' : `Multi-Select (${selectedListIds.length} Selected • ~${totalSelectedSubscribers} Subscribers)`}
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={selectAllLists}
+                          className="text-xs font-bold text-primary-600 hover:text-primary-700 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-200 transition cursor-pointer"
+                        >
+                          Select All Lists
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, list_id: '' }))}
+                          className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg border border-red-200 transition cursor-pointer"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Selected List Badges */}
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                      {isAllSelected ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-2xs">
+                          <span>🌐 All Target Lists ({lists.length} Contact Lists • {subscribers.length} Subscribers)</span>
+                        </span>
+                      ) : selectedListsObj.length > 0 ? (
+                        selectedListsObj.map(l => (
+                          <span key={l.id} className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-primary-700 text-xs font-bold rounded-lg border border-primary-200 shadow-2xs">
+                            <span>{l.name} ({l.subscriber_count || l.contacts_count || 0} subscribers)</span>
+                            {selectedListsObj.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleList(l.id.toString());
+                                }}
+                                className="text-gray-400 hover:text-red-600 p-0.5 rounded-full"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-400 px-2 py-0.5">No list selected yet</span>
+                      )}
+                    </div>
+
+                    {/* Multi-Select List Options */}
+                    <div className="border border-gray-300 rounded-xl p-2 bg-white max-h-56 overflow-y-auto space-y-1.5 shadow-2xs">
+                      {/* All Target Lists Option */}
+                      <div
+                        onClick={() => toggleList('all')}
+                        className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isAllSelected 
+                            ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-400/30' 
+                            : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                            isAllSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'
+                          }`}>
+                            {isAllSelected && <Check size={14} />}
+                          </div>
+                          <div>
+                            <p className="text-xs font-extrabold text-blue-900 flex items-center gap-1.5">
+                              <span>🌐 All Target Lists (All Active Contact Lists)</span>
+                            </p>
+                            <p className="text-[11px] text-blue-600 font-medium">Global dispatch to all {lists.length} lists and subscribers</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-200">
+                          {lists.length} Lists
+                        </span>
+                      </div>
+
+                      {/* Individual Lists */}
+                      {lists.map(l => {
+                        const countFromApi = Number(l.subscriber_count ?? l.contacts_count ?? 0);
+                        const countFromState = subscribers.filter(s => {
+                          if (s.list_ids) {
+                            const ids = String(s.list_ids).split(',');
+                            return ids.includes(String(l.id));
+                          }
+                          return false;
+                        }).length;
+
+                        const count = countFromApi > 0 ? countFromApi : countFromState;
+                        const isSelected = !isAllSelected && selectedListIds.includes(l.id.toString());
+
+                        return (
+                          <div
+                            key={l.id}
+                            onClick={() => toggleList(l.id.toString())}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                              isSelected 
+                                ? 'bg-primary-50/80 border-primary-300 ring-1 ring-primary-400/30' 
+                                : 'bg-white border-gray-100 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                                isSelected ? 'bg-primary-600 border-primary-600 text-white' : 'border-gray-300 bg-white'
+                              }`}>
+                                {isSelected && <Check size={14} />}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-gray-900">{l.name}</p>
+                                {l.description && <p className="text-[11px] text-gray-400">{l.description}</p>}
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded border ${
+                              count > 0 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {count} Assigned Contacts
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-gray-500">Check one or multiple target lists to broadcast this campaign to all assigned contacts.</p>
+                  </div>
+                );
+              })()
             )}
 
             {/* Option B: Select Individual Subscriber from Database */}
@@ -739,133 +1258,44 @@ export default function CampaignWizard() {
         )}
 
         {step === 4 && (
-          <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3 mb-2">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">A/B Testing Configuration</h2>
-                <p className="text-xs text-gray-500">Test different subject lines and HTML email content to compare performance.</p>
-              </div>
-              <div className="flex items-center bg-gray-50 border border-gray-200 px-3.5 py-2 rounded-xl shadow-sm">
-                <input 
-                  type="checkbox" 
-                  id="is_ab_test" 
-                  name="is_ab_test" 
-                  checked={formData.is_ab_test} 
-                  onChange={handleChange} 
-                  className="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500 cursor-pointer" 
-                />
-                <label htmlFor="is_ab_test" className="ml-2 text-xs font-bold text-gray-800 cursor-pointer">
-                  Enable A/B Testing (10% / 10% Split)
-                </label>
-              </div>
+          <div className="space-y-6 max-w-2xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+            <div className="border-b border-gray-100 pb-3 mb-2">
+              <h2 className="text-xl font-bold text-gray-900">Email Subject Line</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Enter a compelling email subject line for your subscribers or generate one using AI.</p>
             </div>
 
-            {!formData.is_ab_test ? (
-              <div className="p-8 text-center bg-gray-50 border border-dashed border-gray-300 rounded-xl space-y-3">
-                <GitBranch size={38} className="mx-auto text-gray-400" />
-                <h3 className="text-base font-bold text-gray-800">A/B Testing is Currently Disabled</h3>
-                <p className="text-xs text-gray-500 max-w-md mx-auto">
-                  Your campaign will send a single version using the subject line from Step 1 and content from Step 6. Check "Enable A/B Testing" above to configure Variant A vs. Variant B.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, is_ab_test: true }))}
-                  className="px-4 py-2 bg-primary-600 text-white font-semibold text-xs rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
-                >
-                  Enable A/B Test Now
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Variant A Column */}
-                  <div className="p-5 bg-blue-50/40 border border-blue-200 rounded-xl space-y-4 shadow-sm">
-                    <div className="flex justify-between items-center border-b border-blue-200 pb-2.5">
-                      <span className="font-bold text-xs text-blue-700 bg-blue-100 px-2.5 py-1 rounded-md uppercase tracking-wider">
-                        Variant A (Primary)
-                      </span>
-                      <span className="text-[11px] text-blue-600 font-medium">Sends to 10%</span>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <label className="block text-xs font-bold text-gray-700">Subject Line A <span className="text-red-500">*</span></label>
-                        <button
-                          type="button"
-                          onClick={() => { setAiTargetField('subject'); setShowAiModal(true); }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
-                        >
-                          <Sparkles size={12} /> AI Generate
-                        </button>
-                      </div>
-                      <input 
-                        type="text" 
-                        name="subject" 
-                        value={formData.subject} 
-                        onChange={handleChange} 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-blue-500 outline-none bg-white" 
-                        placeholder="Variant A Subject Line..." 
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1.5">HTML Body A</label>
-                      <textarea 
-                        name="html_content" 
-                        rows="7" 
-                        value={formData.html_content} 
-                        onChange={handleChange} 
-                        className="w-full p-3 border border-gray-300 rounded-lg text-xs font-mono focus:ring-blue-500 outline-none bg-white leading-relaxed" 
-                        placeholder="<h1>Hello from Variant A</h1>" 
-                      />
-                    </div>
-                  </div>
-
-                  {/* Variant B Column */}
-                  <div className="p-5 bg-purple-50/40 border border-purple-200 rounded-xl space-y-4 shadow-sm">
-                    <div className="flex justify-between items-center border-b border-purple-200 pb-2.5">
-                      <span className="font-bold text-xs text-purple-700 bg-purple-100 px-2.5 py-1 rounded-md uppercase tracking-wider">
-                        Variant B (Test)
-                      </span>
-                      <span className="text-[11px] text-purple-600 font-medium">Sends to 10%</span>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <label className="block text-xs font-bold text-gray-700">Subject Line B <span className="text-red-500">*</span></label>
-                        <button
-                          type="button"
-                          onClick={() => { setAiTargetField('variant_b_subject'); setShowAiModal(true); }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-800"
-                        >
-                          <Sparkles size={12} /> AI Generate
-                        </button>
-                      </div>
-                      <input 
-                        type="text" 
-                        name="variant_b_subject" 
-                        value={formData.variant_b_subject} 
-                        onChange={handleChange} 
-                        className="w-full px-3 py-2 border border-purple-300 rounded-lg text-xs focus:ring-purple-500 outline-none bg-white" 
-                        placeholder="Variant B Subject Line..." 
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1.5">HTML Body B</label>
-                      <textarea 
-                        name="variant_b_html" 
-                        rows="7" 
-                        value={formData.variant_b_html} 
-                        onChange={handleChange} 
-                        className="w-full p-3 border border-purple-300 rounded-lg text-xs font-mono focus:ring-purple-500 outline-none bg-white leading-relaxed" 
-                        placeholder="<h1>Hello from Variant B</h1>" 
-                      />
-                    </div>
-                  </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">Subject Line <span className="text-red-500">*</span></label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    name="subject" 
+                    value={formData.subject} 
+                    onChange={handleChange} 
+                    className="flex-1 px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-primary-500 outline-none bg-white shadow-xs" 
+                    placeholder="e.g. Special Offer: 20% Off Your Next Order!" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAiModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all whitespace-nowrap"
+                  >
+                    <Sparkles size={15} /> AI Generate
+                  </button>
                 </div>
               </div>
-            )}
+
+              <div className="p-4 bg-violet-50/60 border border-violet-100 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2 text-violet-900 text-xs font-bold">
+                  <Sparkles size={14} className="text-violet-600" />
+                  <span>AI Subject Line Generator</span>
+                </div>
+                <p className="text-[11px] text-violet-700 leading-relaxed">
+                  Need inspiration? Click <strong>AI Generate</strong> to automatically create high-converting subject lines tailored to your campaign topic and tone.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1584,6 +2014,163 @@ export default function CampaignWizard() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Add SMTP Configuration Modal in Wizard */}
+      {showAddSmtpModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <h3 className="text-lg font-bold text-gray-900">Add SMTP Configuration</h3>
+              <button onClick={() => setShowAddSmtpModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sender Name *</label>
+                  <input type="text" value={smtpForm.name} onChange={e => setSmtpForm({...smtpForm, name: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" placeholder="e.g. Sales Department" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sender Email *</label>
+                  <input type="email" value={smtpForm.email} onChange={e => setSmtpForm({...smtpForm, email: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" placeholder="info@company.com" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">SMTP Host</label>
+                <input type="text" value={smtpForm.smtp_host} onChange={e => setSmtpForm({...smtpForm, smtp_host: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" placeholder="smtp.gmail.com" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">SMTP Port</label>
+                  <input type="text" value={smtpForm.smtp_port} onChange={e => setSmtpForm({...smtpForm, smtp_port: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" placeholder="587" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">SMTP Security</label>
+                  <select value={smtpForm.smtp_secure} onChange={e => setSmtpForm({...smtpForm, smtp_secure: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20 text-sm">
+                    <option value="tls">TLS (Standard)</option>
+                    <option value="ssl">SSL</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">SMTP User</label>
+                  <input type="text" value={smtpForm.smtp_user} onChange={e => setSmtpForm({...smtpForm, smtp_user: e.target.value})} className="w-full px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" placeholder="user@gmail.com" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">SMTP Password</label>
+                  <div className="relative">
+                    <input 
+                      type={showSmtpPassword ? 'text' : 'password'} 
+                      value={smtpForm.smtp_pass} 
+                      onChange={e => setSmtpForm({...smtpForm, smtp_pass: e.target.value})} 
+                      className="w-full px-3.5 py-2 pr-9 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowSmtpPassword(!showSmtpPassword)} 
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showSmtpPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center border-t pt-4">
+              <button 
+                type="button"
+                onClick={() => handleOpenTestSmtpInWizard(smtpForm)}
+                className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition border border-blue-200 flex items-center gap-1.5 shadow-sm"
+              >
+                <Send size={13} />
+                <span>Test Connection</span>
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAddSmtpModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl text-xs font-semibold border transition">Cancel</button>
+                <button onClick={handleSaveSmtpInWizard} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm">Save SMTP Config</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test SMTP Connection Modal in Wizard */}
+      {showTestSmtpModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <Mail size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Test SMTP Connection</h3>
+                  <p className="text-xs text-gray-500">Verify SMTP settings & dispatch test email</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTestSmtpModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                <p><span className="text-gray-500">Sender Profile:</span> <strong className="text-gray-800">{testSmtpSender?.name || 'New Sender'}</strong> &lt;{testSmtpSender?.email || 'N/A'}&gt;</p>
+                <p><span className="text-gray-500">SMTP Host & Port:</span> <strong className="text-gray-800">{testSmtpSender?.smtp_host || 'smtp.gmail.com'}:{testSmtpSender?.smtp_port || 465}</strong></p>
+                <p><span className="text-gray-500">SMTP User:</span> <strong className="text-gray-800">{testSmtpSender?.smtp_user || testSmtpSender?.email || '—'}</strong></p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Test Recipient Email Address *</label>
+                <input 
+                  type="email" 
+                  value={testEmailInput} 
+                  onChange={e => setTestEmailInput(e.target.value)} 
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  placeholder="vimal@bexcodeservices.com"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">A verification email will be dispatched to this address using the configured SMTP server.</p>
+              </div>
+
+              {testSmtpResult && (
+                <div className={`p-4 rounded-xl border text-xs font-medium space-y-1 ${
+                  testSmtpResult.success 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                    : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                  <div className="flex items-center gap-1.5 font-bold text-sm">
+                    {testSmtpResult.success ? '✅ Test Email Dispatched!' : '❌ SMTP Connection Failed'}
+                  </div>
+                  <p>{testSmtpResult.message}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-4">
+              <button 
+                onClick={() => setShowTestSmtpModal(false)} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl text-xs font-semibold border transition"
+              >
+                Close
+              </button>
+              <button 
+                onClick={handleRunSmtpTestInWizard} 
+                disabled={testSmtpLoading}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {testSmtpLoading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                {testSmtpLoading ? 'Testing SMTP...' : 'Send Test Email'}
+              </button>
+            </div>
           </div>
         </div>
       )}

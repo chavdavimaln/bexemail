@@ -1,14 +1,15 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, Database } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, ChevronLeft, Database } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [openDropdowns, setOpenDropdowns] = React.useState({ 
-    campaigns: location.pathname.startsWith('/campaigns') || location.pathname.startsWith('/templates'),
-    automations: location.pathname.startsWith('/automations'),
     contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists'),
-    backups: location.pathname.startsWith('/backups') || location.pathname.startsWith('/history')
+    campaigns: location.pathname.startsWith('/campaigns') || location.pathname.startsWith('/templates'),
+    backups: location.pathname.startsWith('/backups') || location.pathname.startsWith('/history'),
+    settings: location.pathname.startsWith('/settings') || location.pathname.startsWith('/developer')
   });
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -17,27 +18,6 @@ const Sidebar = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-    { 
-      name: 'Campaigns', 
-      id: 'campaigns',
-      icon: <Megaphone size={20} />,
-      subItems: [
-        { name: 'Campaign List', path: '/campaigns' },
-        { name: 'Email Templates', path: '/templates' },
-      ]
-    },
-    { 
-      name: 'Automations', 
-      id: 'automations',
-      icon: <Workflow size={20} />,
-      subItems: [
-        { name: 'Dashboard', path: '/automations' },
-        { name: 'All Automations', path: '/automations/list' },
-        { name: 'Templates', path: '/automations/templates' },
-      ]
-    },
-    { name: 'Integrations', path: '/integrations', icon: <Code size={20} /> },
-    { name: 'Forms', path: '/forms', icon: <Code size={20} /> },
     { 
       name: 'Contacts', 
       id: 'contacts',
@@ -50,10 +30,18 @@ const Sidebar = () => {
         { name: 'Export Directory', path: '/contacts/export' },
       ]
     },
-    { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
-    { name: 'API Access', path: '/developer', icon: <Key size={20} /> },
     { 
-      name: 'Backups and history', 
+      name: 'Campaigns', 
+      id: 'campaigns',
+      icon: <Megaphone size={20} />,
+      subItems: [
+        { name: 'Campaign List', path: '/campaigns' },
+        { name: 'Email Templates', path: '/templates' },
+      ]
+    },
+    { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
+    { 
+      name: 'Backup and History', 
       id: 'backups',
       icon: <Database size={20} />,
       subItems: [
@@ -62,21 +50,26 @@ const Sidebar = () => {
         { name: 'History Logs', path: '/history' },
       ]
     },
-    { name: 'Profile', path: '/profiles', icon: <Users size={20} /> },
-    { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
+    { name: 'Profiles', path: '/profiles', icon: <Users size={20} /> },
+    { 
+      name: 'Settings', 
+      id: 'settings',
+      icon: <Settings size={20} />,
+      subItems: [
+        { name: 'System Settings', path: '/settings/system' },
+        { name: 'API Access', path: '/settings/api-access' },
+      ]
+    },
   ];
 
   const checkPermission = (item) => {
-    if (userRole === 'Super Admin') return true;
+    if (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Sub Admin' || !userRole) return true;
     
     // Default allowed items
     if (item.path === '/' || item.path === '/profile') return true;
     
     const permissionMap = {
       'campaigns': 'campaigns',
-      'automations': 'automations',
-      '/integrations': 'integrations',
-      '/forms': 'forms',
       'contacts': 'contacts',
       '/contacts/export': 'contacts',
       'backups': 'history_logs',
@@ -87,7 +80,10 @@ const Sidebar = () => {
       '/developer': 'api_access',
       '/history': 'history_logs',
       '/profiles': 'profiles',
-      '/settings': 'settings'
+      'settings': 'settings',
+      '/settings': 'settings',
+      '/settings/system': 'settings',
+      '/settings/api-access': 'api_access'
     };
 
     const key = item.id || item.path;
@@ -101,16 +97,48 @@ const Sidebar = () => {
   const filteredNavItems = navItems.filter(checkPermission);
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col h-full">
-      <div className="h-16 flex items-center px-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-primary-600 tracking-tight">BexEmail</h1>
+    <aside className={`${isCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col h-full transition-all duration-300 ease-in-out`}>
+      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
+        {!isCollapsed ? (
+          <h1 className="text-xl font-bold text-primary-600 tracking-tight transition-all">BexEmail</h1>
+        ) : (
+          <div className="w-full text-center font-extrabold text-xl text-primary-600">B</div>
+        )}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
       </div>
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {filteredNavItems.map((item) => {
           if (item.subItems) {
             const isDropdownOpen = openDropdowns[item.id];
             const isAnyChildActive = item.subItems.some(sub => location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path)));
-            
+
+            if (isCollapsed) {
+              return (
+                <div key={item.name} className="relative group">
+                  <button
+                    onClick={() => {
+                      setIsCollapsed(false);
+                      setOpenDropdowns(prev => ({ ...prev, [item.id]: true }));
+                    }}
+                    className={`w-full flex items-center justify-center p-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      isAnyChildActive ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    title={item.name}
+                  >
+                    <span className={isAnyChildActive ? 'text-primary-600' : 'text-gray-500'}>
+                      {item.icon}
+                    </span>
+                  </button>
+                </div>
+              );
+            }
+
             return (
               <div key={item.name} className="space-y-1">
                 <button
@@ -118,10 +146,10 @@ const Sidebar = () => {
                     const nextVal = !prev[item.id];
                     if (nextVal) {
                       return {
-                        campaigns: item.id === 'campaigns',
-                        automations: item.id === 'automations',
                         contacts: item.id === 'contacts',
-                        backups: item.id === 'backups'
+                        campaigns: item.id === 'campaigns',
+                        backups: item.id === 'backups',
+                        settings: item.id === 'settings'
                       };
                     } else {
                       return { ...prev, [item.id]: false };
@@ -145,7 +173,7 @@ const Sidebar = () => {
                       .filter(checkPermission)
                       .filter(sub => !(userRole === 'User' && sub.path === '/lists'))
                       .map(sub => {
-                        const isSubActive = location.pathname === sub.path;
+                        const isSubActive = location.pathname === sub.path || (sub.path === '/settings/system' && location.pathname === '/settings') || (sub.path === '/settings/api-access' && location.pathname === '/developer');
                         return (
                           <Link
                             key={sub.name}
@@ -165,6 +193,23 @@ const Sidebar = () => {
           }
 
           const isActive = location.pathname === item.path;
+          if (isCollapsed) {
+            return (
+              <Link
+                key={item.name}
+                to={item.path}
+                className={`flex items-center justify-center p-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={item.name}
+              >
+                <span className={isActive ? 'text-primary-600' : 'text-gray-500'}>
+                  {item.icon}
+                </span>
+              </Link>
+            );
+          }
+
           return (
             <Link
               key={item.name}

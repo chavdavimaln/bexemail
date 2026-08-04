@@ -29,21 +29,31 @@ async function enqueueSubscribers(db, campaignId, listId, isAbTest, targetEmail)
       console.log(`[Campaigns] Target mode: Individual Contact(s) (${emails.join(', ')}, Subscriber IDs: ${subscribers.map(s => s.id).join(', ')})`);
     } else {
       // Mode 2: Audience List target
-      const [rows] = await db.query(
-        `SELECT DISTINCT s.id 
-         FROM subscribers s
-         JOIN subscriber_lists sl ON s.id = sl.subscriber_id
-         WHERE sl.list_id = ? AND s.status = 'subscribed'`,
-        [listId]
-      );
-      subscribers = rows;
-
-      // Fallback: If no list mapping exists, fetch all subscribed contacts
-      if (subscribers.length === 0) {
-        const [allSubs] = await db.query(
-          `SELECT id FROM subscribers WHERE status = 'subscribed'`
+      if (listId === 'all' || (typeof listId === 'string' && listId.includes('all'))) {
+        const [allRows] = await db.query(
+          `SELECT DISTINCT s.id FROM subscribers s WHERE s.status = 'subscribed'`
         );
-        subscribers = allSubs;
+        subscribers = allRows;
+      } else {
+        const listIds = String(listId || '').split(',').map(id => id.trim()).filter(Boolean);
+        if (listIds.length > 0) {
+          const [rows] = await db.query(
+            `SELECT DISTINCT s.id 
+             FROM subscribers s
+             JOIN subscriber_lists sl ON s.id = sl.subscriber_id
+             WHERE sl.list_id IN (?) AND s.status = 'subscribed'`,
+            [listIds]
+          );
+          subscribers = rows;
+        }
+
+        // Fallback: If no list mapping exists, fetch all subscribed contacts
+        if (subscribers.length === 0) {
+          const [allSubs] = await db.query(
+            `SELECT id FROM subscribers WHERE status = 'subscribed'`
+          );
+          subscribers = allSubs;
+        }
       }
     }
 
@@ -314,3 +324,5 @@ exports.updateCampaignStatus = async (req, res) => {
     res.status(500).json({ error: 'Database error' });
   }
 };
+
+exports.createCampaign = exports.dispatchCampaign;

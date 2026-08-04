@@ -74,10 +74,10 @@ async function processQueue() {
        FROM email_queue q
        JOIN campaigns c ON q.campaign_id = c.id
        JOIN subscribers s ON q.recipient_id = s.id
-       LEFT JOIN senders snd ON c.sender_id = snd.id
+       LEFT JOIN senders snd ON (c.sender_id = CAST(snd.id AS CHAR) OR FIND_IN_SET(snd.id, c.sender_id) > 0)
        WHERE q.status = 'pending' 
        AND (c.status = 'sending' OR (c.status = 'scheduled' AND (c.scheduled_at IS NULL OR c.scheduled_at <= NOW())))
-       ORDER BY q.created_at ASC
+       ORDER BY (q.id % 10) ASC, q.created_at ASC
        LIMIT 1 FOR UPDATE`
     );
 

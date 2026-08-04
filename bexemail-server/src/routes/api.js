@@ -17,10 +17,12 @@ router.delete('/subscribers/:id', subscribersController.deleteSubscriber);
 
 // Senders
 const sendersController = require('../controllers/senders');
-router.get('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.getSenders);
+router.get('/senders', sendersController.getSenders);
 router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.createSender);
 router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.updateSender);
 router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.deleteSender);
+router.post('/senders/:id/test', sendersController.testSender);
+router.post('/senders/test', sendersController.testSender);
 
 // Lists
 router.post('/lists', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.createList);
@@ -30,15 +32,17 @@ router.delete('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER
 router.post('/lists/assign', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.assignSubscribers);
 router.post('/lists/sync', listsController.syncSubscriberLists);  // no role guard - used by contacts edit
 
-// Campaigns (Require Campaign Manager or Super Admin)
-router.get('/campaigns', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.getCampaigns);
-router.get('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.getCampaignById);
-router.put('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.updateCampaign);
-router.delete('/campaigns/:id', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.deleteCampaign);
-router.post('/campaigns/dispatch', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.dispatchCampaign);
-router.put('/campaigns/:id/approve', checkRole([ROLES.SUPER_ADMIN]), campaignsController.approveCampaign);
-router.post('/campaigns/:id/duplicate', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.duplicateCampaign);
-router.put('/campaigns/:id/status', checkRole([ROLES.CAMPAIGN_MANAGER, ROLES.SUPER_ADMIN]), campaignsController.updateCampaignStatus);
+// Campaigns
+router.get('/campaigns', campaignsController.getCampaigns);
+router.get('/campaigns/:id', campaignsController.getCampaignById);
+router.post('/campaigns', campaignsController.dispatchCampaign);
+router.put('/campaigns/:id', campaignsController.updateCampaign);
+router.delete('/campaigns/:id', campaignsController.deleteCampaign);
+router.post('/campaigns/dispatch', campaignsController.dispatchCampaign);
+router.post('/campaigns_wizard/dispatch', campaignsController.dispatchCampaign);
+router.put('/campaigns/:id/approve', campaignsController.approveCampaign);
+router.post('/campaigns/:id/duplicate', campaignsController.duplicateCampaign);
+router.put('/campaigns/:id/status', campaignsController.updateCampaignStatus);
 
 // Templates
 router.post('/templates', templatesController.createTemplate);

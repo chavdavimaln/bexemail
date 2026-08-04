@@ -25,8 +25,17 @@ const CampaignReport = () => {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/analytics/${id}`);
-      setStats(res.data);
+      let targetId = id;
+      if (!targetId) {
+        const campRes = await axios.get('http://localhost:5000/api/campaigns');
+        if (campRes.data && campRes.data.length > 0) {
+          targetId = campRes.data[0].id;
+        }
+      }
+      if (targetId) {
+        const res = await axios.get(`http://localhost:5000/api/analytics/${targetId}`);
+        setStats(res.data);
+      }
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {

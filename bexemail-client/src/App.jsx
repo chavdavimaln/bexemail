@@ -90,8 +90,11 @@ function App() {
             <Route path="templates" element={<TemplatesList />} />
             <Route path="templates/new" element={<TemplateEditor />} />
             <Route path="templates/:id/edit" element={<TemplateEditor />} />
+            <Route path="reports" element={<CampaignReport />} />
             <Route path="reports/:id" element={<CampaignReport />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/system" element={<Settings />} />
+            <Route path="settings/api-access" element={<DeveloperAPI />} />
             <Route path="automations/*" element={
               <AutomationErrorBoundary>
                 <AutomationProvider>

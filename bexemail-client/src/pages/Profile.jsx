@@ -3,11 +3,13 @@ import { User, Lock, Phone, Save, Camera, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 
 const Profile = () => {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [profileData, setProfileData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    username: currentUser.username || currentUser.email?.split('@')[0] || 'subscriber',
+    firstName: currentUser.first_name || currentUser.name || '',
+    lastName: currentUser.last_name || '',
+    email: currentUser.email || '',
+    phone: currentUser.phone || '',
     avatar: null
   });
 
@@ -30,8 +32,11 @@ const Profile = () => {
       const res = await axios.get('http://localhost:5000/api/auth/me');
       setProfileData(prev => ({
         ...prev,
-        email: res.data.email,
-        firstName: res.data.role // Mock mapping for now
+        username: res.data.username || res.data.email?.split('@')[0] || currentUser.username || 'subscriber',
+        email: res.data.email || currentUser.email || '',
+        firstName: res.data.first_name || res.data.name || prev.firstName,
+        lastName: res.data.last_name || prev.lastName,
+        phone: res.data.phone || prev.phone
       }));
     } catch (err) {
       console.error(err);
@@ -153,16 +158,26 @@ const Profile = () => {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+                  <input
+                    type="text"
+                    value={profileData.username}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-200 bg-gray-100 rounded-lg text-gray-500 font-mono outline-none cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">Username cannot be modified</p>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
                   <input
                     type="email"
                     value={profileData.email}
                     disabled
-                    className="w-full px-4 py-2 border border-gray-200 bg-gray-50 rounded-lg text-gray-500 outline-none cursor-not-allowed"
+                    className="w-full px-4 py-2 border border-gray-200 bg-gray-100 rounded-lg text-gray-500 font-mono outline-none cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">Contact support to change your email</p>
+                  <p className="text-xs text-gray-400 mt-1.5">Email ID cannot be modified</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">

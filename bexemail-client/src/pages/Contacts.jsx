@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload, Settings2, Search, Tag, RefreshCw, Layers, CheckSquare, Square, FolderPlus, UserPlus, Filter, CheckCircle2, SlidersHorizontal, CheckSquare2, Sparkles, Globe } from 'lucide-react';
+import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload, Settings2, Search, Tag, RefreshCw, Layers, CheckSquare, Square, FolderPlus, UserPlus, Filter, CheckCircle2, SlidersHorizontal, CheckSquare2, Sparkles, Globe, Eye, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
 const Contacts = () => {
@@ -57,6 +57,19 @@ const Contacts = () => {
   const [adminUsers, setAdminUsers] = useState([]);
   const [newContactAdminId, setNewContactAdminId] = useState('');
   const [newListAdminId, setNewListAdminId] = useState('');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [jumpPageInput, setJumpPageInput] = useState('1');
+
+  // Target List View/Edit Modal state
+  const [targetListModal, setTargetListModal] = useState({
+    show: false,
+    subscriber: null,
+    isEditing: false,
+    selectedListIds: []
+  });
 
   useEffect(() => {
     fetchData();
@@ -471,6 +484,96 @@ const Contacts = () => {
     return matchesSearch && matchesStatus && matchesList;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, listFilter]);
+
+  const totalItems = filteredSubscribers.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalItems, totalPages, currentPage]);
+
+  useEffect(() => {
+    setJumpPageInput(currentPage.toString());
+  }, [currentPage]);
+
+  const indexOfFirstItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const indexOfLastItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const paginatedSubscribers = filteredSubscribers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handleJumpPage = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const pageNum = parseInt(jumpPageInput, 10);
+    if (!isNaN(pageNum)) {
+      const clamped = Math.min(Math.max(1, pageNum), totalPages);
+      setCurrentPage(clamped);
+      setJumpPageInput(clamped.toString());
+    } else {
+      setJumpPageInput(currentPage.toString());
+    }
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = startPage + maxVisiblePages - 1;
+
+    if (endPage > totalPages) {
+      endPage = totalPages;
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  const openTargetListModal = (sub) => {
+    const currentIds = getSubListIds(sub);
+    setTargetListModal({
+      show: true,
+      subscriber: sub,
+      isEditing: false,
+      selectedListIds: currentIds
+    });
+  };
+
+  const saveModalListChanges = async () => {
+    if (!targetListModal.subscriber) return;
+    try {
+      const sub = targetListModal.subscriber;
+      await axios.put(`http://localhost:5000/api/contacts/${sub.id}/update`, {
+        email: sub.email,
+        first_name: sub.first_name || '',
+        status: sub.status || 'subscribed',
+        list_ids: targetListModal.selectedListIds
+      });
+      setTargetListModal({ show: false, subscriber: null, isEditing: false, selectedListIds: [] });
+      await fetchData();
+      customAlert({
+        title: 'Success',
+        message: 'Target list membership updated successfully!',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error(error);
+      customAlert({
+        title: 'Error',
+        message: 'Failed to update target list membership.',
+        type: 'danger'
+      });
+    }
+  };
+
   // Filtered subscribers for Target List Membership Manager
   const managerFilteredSubscribers = subscribers.filter(sub => {
     return (sub.email || '').toLowerCase().includes(managerSearchTerm.toLowerCase()) ||
@@ -639,7 +742,7 @@ const Contacts = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredSubscribers.map(sub => {
+                  paginatedSubscribers.map(sub => {
                     const isAll = isAssignedToAllLists(sub);
 
                     return (
@@ -743,76 +846,51 @@ const Contacts = () => {
                             </div>
                           ) : (
                             <div className="flex flex-col gap-1.5 items-start">
-                              
-                              {/* Displayed List Badges - Includes Special 'Assigned To All Lists' Tag */}
-                              <div className="flex flex-col gap-1 items-start">
-                                {isAll ? (
-                                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-extrabold rounded-lg flex items-center gap-1.5 shadow-sm">
-                                    <Sparkles size={13} className="text-emerald-600" />
-                                    Assigned To All Lists ({lists.length})
-                                  </span>
-                                ) : sub.all_lists && sub.all_lists.length > 0 ? (
-                                  sub.all_lists.map(l => (
-                                    <span key={l.id} className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold rounded-lg flex items-center gap-1">
-                                      <Tag size={11} className="text-blue-500" />
-                                      {l.name}
-                                    </span>
-                                  ))
-                                ) : sub.list_names ? (
-                                  <span className="text-gray-700 text-xs font-semibold">{sub.list_names}</span>
-                                ) : (
-                                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-semibold italic border border-amber-200">Unassigned</span>
-                                )}
-                              </div>
+                              {(() => {
+                                const assignedCount = isAll ? lists.length : (sub.all_lists ? sub.all_lists.length : getSubListIds(sub).length);
+                                const firstListName = sub.all_lists && sub.all_lists.length > 0 
+                                  ? sub.all_lists[0].name 
+                                  : (lists.find(l => getSubListIds(sub).includes(Number(l.id)))?.name || 'Assigned List');
 
-                              {/* Direct Quick Assign Button */}
+                                if (assignedCount === 0) {
+                                  return (
+                                    <button
+                                      onClick={() => openTargetListModal(sub)}
+                                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition shadow-xs"
+                                      title="Click to assign target lists"
+                                    >
+                                      <Eye size={13} className="text-amber-600" />
+                                      <span>Unassigned (0 lists)</span>
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold rounded-lg flex items-center gap-1 max-w-[150px] truncate" title={firstListName}>
+                                      <Tag size={11} className="text-blue-500 flex-shrink-0" />
+                                      <span className="truncate">{firstListName}</span>
+                                    </span>
+
+                                    <button
+                                      onClick={() => openTargetListModal(sub)}
+                                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold rounded-lg flex items-center gap-1 transition shadow-xs"
+                                      title="Click to view all assigned target lists & change lists"
+                                    >
+                                      <Eye size={13} className="text-indigo-600" />
+                                      <span>{assignedCount} {assignedCount === 1 ? 'List' : 'Lists'}</span>
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                              
                               <button
                                 type="button"
-                                onClick={() => quickAssignSubId === sub.id ? setQuickAssignSubId(null) : openQuickAssign(sub)}
-                                className="text-[11px] font-bold text-primary-600 hover:text-primary-700 flex items-center gap-0.5 hover:underline mt-0.5"
+                                onClick={() => openTargetListModal(sub)}
+                                className="text-[11px] font-bold text-primary-600 hover:text-primary-700 flex items-center gap-0.5 hover:underline"
                               >
-                                <Plus size={11} /> Change Lists
+                                + Change Lists
                               </button>
-
-                              {/* Quick Assign Popover */}
-                              {quickAssignSubId === sub.id && (
-                                <div className="absolute left-6 top-12 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-56 space-y-2 animate-in fade-in-50">
-                                  <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                                    <span className="text-xs font-bold text-gray-900">Assign Target Lists</span>
-                                    <button onClick={() => setQuickAssignSubId(null)} className="text-gray-400 hover:text-gray-600">
-                                      <X size={14} />
-                                    </button>
-                                  </div>
-                                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                                    {lists.map(l => (
-                                      <label key={l.id} className="flex items-center gap-2 text-xs text-gray-700 p-1 hover:bg-gray-50 rounded cursor-pointer">
-                                        <input 
-                                          type="checkbox"
-                                          checked={quickAssignListIds.includes(l.id)}
-                                          onChange={() => {
-                                            setQuickAssignListIds(prev => 
-                                              prev.includes(l.id) ? prev.filter(id => id !== l.id) : [...prev, l.id]
-                                            );
-                                          }}
-                                          className="rounded text-primary-600 focus:ring-primary-500 w-3.5 h-3.5"
-                                        />
-                                        <span className="truncate">{l.name}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                  <div className="pt-1 flex gap-2 border-t border-gray-100">
-                                    <button
-                                      type="button"
-                                      disabled={savingQuickAssign}
-                                      onClick={() => saveQuickAssign(sub)}
-                                      className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-1 text-xs rounded-lg transition disabled:opacity-50"
-                                    >
-                                      {savingQuickAssign ? 'Saving...' : 'Save Lists'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
                             </div>
                           )}
                         </td>
@@ -843,6 +921,144 @@ const Contacts = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Directory Table Pagination Bar */}
+          {filteredSubscribers.length > 0 && (
+            <div className="px-6 py-4 bg-gray-50/70 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+              {/* Page Info & Rows Per Page Selector */}
+              <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-gray-600">
+                <div>
+                  Showing <span className="font-extrabold text-gray-900">{indexOfFirstItem}</span> to{' '}
+                  <span className="font-extrabold text-gray-900">{indexOfLastItem}</span> of{' '}
+                  <span className="font-extrabold text-gray-900">{totalItems}</span> contacts
+                </div>
+
+                <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
+                  <span className="text-gray-500 font-medium">Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer shadow-xs"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                <form onSubmit={handleJumpPage} className="flex items-center gap-1.5 pl-2 border-l border-gray-200">
+                  <span className="text-gray-500 font-medium">Go to page:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={jumpPageInput}
+                    onChange={(e) => setJumpPageInput(e.target.value)}
+                    onBlur={handleJumpPage}
+                    className="w-14 text-center bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-primary-500 shadow-xs"
+                  />
+                  <span className="text-gray-500 font-medium">/ {totalPages}</span>
+                  <button
+                    type="submit"
+                    className="px-2.5 py-1 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 rounded-lg text-xs font-bold transition-all shadow-xs"
+                  >
+                    Go
+                  </button>
+                </form>
+              </div>
+
+              {/* Page Controls */}
+              <div className="flex items-center gap-1.5">
+                {/* First Page */}
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                  title="First Page"
+                >
+                  <ChevronsLeft size={16} />
+                </button>
+
+                {/* Previous Page */}
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                  title="Previous Page"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {getPageNumbers()[0] > 1 && (
+                    <>
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        className="px-3 py-1 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        1
+                      </button>
+                      {getPageNumbers()[0] > 2 && <span className="px-1 text-gray-400 font-bold">...</span>}
+                    </>
+                  )}
+
+                  {getPageNumbers().map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        currentPage === pageNum
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+
+                  {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+                    <>
+                      {getPageNumbers()[getPageNumbers().length - 1] < totalPages - 1 && (
+                        <span className="px-1 text-gray-400 font-bold">...</span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="px-3 py-1 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Next Page */}
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                  title="Next Page"
+                >
+                  <ChevronRight size={16} />
+                </button>
+
+                {/* Last Page */}
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                  title="Last Page"
+                >
+                  <ChevronsRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1309,6 +1525,156 @@ const Contacts = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Target Lists View & Change Modal */}
+      {targetListModal.show && targetListModal.subscriber && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 border border-gray-200">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/80">
+              <div>
+                <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <Layers size={18} className="text-indigo-600" />
+                  <span>Target Lists Membership</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5 font-medium">
+                  Contact: <span className="font-bold text-gray-800">{targetListModal.subscriber.email}</span>
+                </p>
+              </div>
+              <button 
+                onClick={() => setTargetListModal({ show: false, subscriber: null, isEditing: false, selectedListIds: [] })} 
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 max-h-[420px] overflow-y-auto">
+              
+              {!targetListModal.isEditing ? (
+                /* VIEW MODE INSIDE MODAL */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700">Assigned Target Lists</span>
+                    <span className="text-xs px-2.5 py-0.5 bg-indigo-100 text-indigo-800 font-extrabold rounded-full border border-indigo-200">
+                      {targetListModal.selectedListIds.length} Total Assigned
+                    </span>
+                  </div>
+
+                  {targetListModal.selectedListIds.length === 0 ? (
+                    <div className="p-6 text-center text-gray-400 font-medium text-xs border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                      This contact is currently not assigned to any target lists.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {lists
+                        .filter(l => targetListModal.selectedListIds.includes(Number(l.id)))
+                        .map(list => (
+                          <div key={list.id} className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-1.5 bg-blue-100 rounded-lg text-blue-600">
+                                <Tag size={15} />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-900">{list.name}</h4>
+                                {list.description && <p className="text-[11px] text-gray-500 leading-tight">{list.description}</p>}
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-extrabold rounded-md">Assigned</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* EDIT MODE INSIDE MODAL */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-800">Select Target Lists to Assign</span>
+                    <span className="text-[11px] text-gray-500 font-medium">Check or uncheck target lists</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {lists.map(list => {
+                      const isChecked = targetListModal.selectedListIds.includes(Number(list.id));
+                      return (
+                        <label 
+                          key={list.id} 
+                          className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer ${
+                            isChecked ? 'bg-indigo-50/70 border-indigo-200 text-indigo-900' : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                const listIdNum = Number(list.id);
+                                setTargetListModal(prev => ({
+                                  ...prev,
+                                  selectedListIds: isChecked 
+                                    ? prev.selectedListIds.filter(id => id !== listIdNum)
+                                    : [...prev.selectedListIds, listIdNum]
+                                }));
+                              }}
+                              className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
+                            />
+                            <div>
+                              <h4 className="text-xs font-bold">{list.name}</h4>
+                              {list.description && <p className="text-[11px] text-gray-500">{list.description}</p>}
+                            </div>
+                          </div>
+                          {isChecked && <Check size={16} className="text-indigo-600 flex-shrink-0" />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              {!targetListModal.isEditing ? (
+                <>
+                  <button
+                    onClick={() => setTargetListModal({ show: false, subscriber: null, isEditing: false, selectedListIds: [] })}
+                    className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200 rounded-xl transition"
+                  >
+                    Close
+                  </button>
+
+                  <button
+                    onClick={() => setTargetListModal(prev => ({ ...prev, isEditing: true }))}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center gap-1.5"
+                  >
+                    <Edit2 size={14} /> Change Lists
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setTargetListModal(prev => ({ ...prev, isEditing: false }))}
+                    className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200 rounded-xl transition"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={saveModalListChanges}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center gap-1.5"
+                  >
+                    <Check size={15} /> Save Target Lists
+                  </button>
+                </>
+              )}
+            </div>
+
           </div>
         </div>
       )}

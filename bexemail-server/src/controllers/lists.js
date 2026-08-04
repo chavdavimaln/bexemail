@@ -64,7 +64,22 @@ exports.getLists = async (req, res) => {
   try {
     const hasPerm = user ? await hasListsPermission(user.id) : false;
     let query = `
-      SELECT l.*, u.role AS admin_role, u.email AS admin_email, u.username AS admin_username 
+      SELECT l.*, 
+             u.role AS admin_role, u.email AS admin_email, u.username AS admin_username,
+             (
+               SELECT COUNT(DISTINCT sub_id) FROM (
+                 SELECT subscriber_id AS sub_id FROM subscriber_lists WHERE list_id = l.id
+                 UNION
+                 SELECT subscriber_id AS sub_id FROM subscriber_list_origins WHERE list_id = l.id
+               ) AS combined_subs
+             ) AS subscriber_count,
+             (
+               SELECT COUNT(DISTINCT sub_id) FROM (
+                 SELECT subscriber_id AS sub_id FROM subscriber_lists WHERE list_id = l.id
+                 UNION
+                 SELECT subscriber_id AS sub_id FROM subscriber_list_origins WHERE list_id = l.id
+               ) AS combined_subs
+             ) AS contacts_count
       FROM lists l 
       LEFT JOIN admin_users u ON l.admin_id = u.id 
       WHERE l.is_deleted = FALSE

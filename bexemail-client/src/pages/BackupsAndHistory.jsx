@@ -7,6 +7,7 @@ import {
   Upload, Lock, ExternalLink, Code
 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
+import { Link } from 'react-router-dom';
 
 const MODULE_OPTIONS = [
   { id: 'all', name: 'All System Backup', icon: <Database className="text-primary-600" size={20} />, color: 'bg-primary-50 text-primary-700 border-primary-200', desc: 'Full snapshot for ALL components, database tables, programming & UI configs.' },
@@ -68,6 +69,10 @@ const MODULE_COMPONENTS = {
 export default function BackupsAndHistory({ initialTab = 'management' }) {
   const { confirm, alert: customAlert } = useModal();
   const [activeTab, setActiveTab] = useState(initialTab); // 'management', 'schedules', 'history'
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Logged in user info
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -548,47 +553,88 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
       
-      {/* Top Banner Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-200/60 gap-4">
-        <div>
-          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
-            <ShieldCheck className="text-primary-600" size={26} /> Backups & History Logs
-          </h2>
-          <p className="text-gray-500 mt-1 text-sm">
-            Centralized backup snapshots, database SQL dumps, system code & UI config packages, automated schedules, and audit trails.
-          </p>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => handleOpenCreateModal('all')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold shadow transition"
-          >
-            <Plus size={15} /> Take Full Backup
-          </button>
+      {/* Dynamic Top Banner Header per page */}
+      {activeTab === 'management' && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-200/60 gap-4">
+          <div>
+            <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
+              <Database className="text-primary-600" size={26} /> Backups Management
+            </h2>
+            <p className="text-gray-500 mt-1 text-sm">
+              Centralized backup snapshots, database SQL dumps, system code & UI config packages.
+            </p>
+          </div>
           
-          <button
-            onClick={triggerDownloadFullSql}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow transition"
-            title="Download SQL Database Dump"
-          >
-            <Download size={15} /> Download DB SQL
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => handleOpenCreateModal('all')}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold shadow transition"
+            >
+              <Plus size={15} /> Take Full Backup
+            </button>
+            
+            <button
+              onClick={triggerDownloadFullSql}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow transition"
+              title="Download SQL Database Dump"
+            >
+              <Download size={15} /> Download DB SQL
+            </button>
 
-          <button
-            onClick={triggerDownloadCodeUi}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow transition"
-            title="Download System Code & UI Config Package"
-          >
-            <Code size={15} /> Download Code & UI
-          </button>
+            <button
+              onClick={triggerDownloadCodeUi}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow transition"
+              title="Download System Code & UI Config Package"
+            >
+              <Code size={15} /> Download Code & UI
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Primary Navigation Tabs */}
+      {activeTab === 'schedules' && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-200/60 gap-4">
+          <div>
+            <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
+              <Clock className="text-emerald-600" size={26} /> Auto Backup & Reminders
+            </h2>
+            <p className="text-gray-500 mt-1 text-sm">
+              Automated backup frequency schedules, target module components, and email notification reminders.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+              <CheckCircle2 size={15} className="mr-1.5 text-emerald-600" /> Auto Backup Engine Active
+            </span>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-200/60 gap-4">
+          <div>
+            <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
+              <History className="text-indigo-600" size={26} /> History & Audit Logs
+            </h2>
+            <p className="text-gray-500 mt-1 text-sm">
+              Comprehensive audit trail and activity log of system events, database updates, and backup operations.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchHistoryLogs}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition shadow-xs"
+            >
+              <RefreshCw size={15} className={loadingLogs ? "animate-spin text-primary-600" : ""} /> Refresh Logs
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Primary Navigation Pills */}
       <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 rounded-2xl shadow-sm">
-        <button
-          onClick={() => setActiveTab('management')}
+        <Link
+          to="/backups"
           className={`flex items-center gap-2 py-4 px-5 text-xs font-bold border-b-2 transition ${
             activeTab === 'management'
               ? 'border-primary-600 text-primary-600'
@@ -599,13 +645,13 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-primary-100 text-primary-800 font-extrabold">
             {backups.length}
           </span>
-        </button>
+        </Link>
 
-        <button
-          onClick={() => setActiveTab('schedules')}
+        <Link
+          to="/backups/schedules"
           className={`flex items-center gap-2 py-4 px-5 text-xs font-bold border-b-2 transition ${
             activeTab === 'schedules'
-              ? 'border-primary-600 text-primary-600'
+              ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -613,13 +659,13 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-extrabold">
             Active
           </span>
-        </button>
+        </Link>
 
-        <button
-          onClick={() => setActiveTab('history')}
+        <Link
+          to="/history"
           className={`flex items-center gap-2 py-4 px-5 text-xs font-bold border-b-2 transition ${
             activeTab === 'history'
-              ? 'border-primary-600 text-primary-600'
+              ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -627,7 +673,7 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 font-extrabold text-gray-700">
             {logs.length}
           </span>
-        </button>
+        </Link>
       </div>
 
       {/* TAB 1: BACKUPS MANAGEMENT */}

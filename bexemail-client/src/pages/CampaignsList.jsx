@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Play, CheckCircle2, AlertCircle, Clock, Search, Filter, MoreVertical, FileEdit, Copy, CalendarClock, Save, BarChart, Trash2, Eye, X, Send, RefreshCw, Mail, Users, FileText, XCircle } from 'lucide-react';
+import { Play, CheckCircle2, AlertCircle, Clock, Search, Filter, MoreVertical, FileEdit, Copy, CalendarClock, Save, BarChart, Trash2, Eye, X, Send, RefreshCw, Mail, Users, FileText, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useModal } from '../context/ModalContext';
 
@@ -18,6 +18,9 @@ const CampaignsList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [jumpPageInput, setJumpPageInput] = useState('1');
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
@@ -93,6 +96,59 @@ const CampaignsList = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
+
+  const totalItems = filteredCampaigns.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalItems, totalPages, currentPage]);
+
+  useEffect(() => {
+    setJumpPageInput(currentPage.toString());
+  }, [currentPage]);
+
+  const handleJumpPage = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const pageNum = parseInt(jumpPageInput, 10);
+    if (!isNaN(pageNum)) {
+      const clamped = Math.min(Math.max(1, pageNum), totalPages);
+      setCurrentPage(clamped);
+      setJumpPageInput(clamped.toString());
+    } else {
+      setJumpPageInput(currentPage.toString());
+    }
+  };
+
+  const indexOfFirstItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const indexOfLastItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const paginatedCampaigns = filteredCampaigns.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = startPage + maxVisiblePages - 1;
+
+    if (endPage > totalPages) {
+      endPage = totalPages;
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -333,28 +389,30 @@ const CampaignsList = () => {
                   <td colSpan="7" className="px-4 py-12 text-center text-gray-400 font-semibold">No email campaigns found matching your criteria.</td>
                 </tr>
               ) : (
-                filteredCampaigns.map(camp => (
+                paginatedCampaigns.map(camp => (
                   <tr key={camp.id} className="hover:bg-gray-50/70 transition-colors">
-                    <td className="px-4 py-3.5 font-bold text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-extrabold">#{camp.id}</span>
-                        <span className="text-xs font-bold truncate max-w-[140px] block">{camp.name}</span>
+                    <td className="px-4 py-3 font-bold text-gray-900 max-w-[160px]">
+                      <div className="flex items-start gap-2">
+                        <span className="font-mono text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-extrabold flex-shrink-0 mt-0.5">#{camp.id}</span>
+                        <span className="text-xs font-bold whitespace-normal break-words leading-tight">{camp.name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 font-medium text-gray-800 max-w-[160px] truncate" title={camp.subject}>{camp.subject}</td>
-                    <td className="px-4 py-3.5 font-medium text-gray-700 max-w-[200px]">
+                    <td className="px-4 py-3 font-medium text-gray-800 max-w-[180px] whitespace-normal break-words leading-tight" title={camp.subject}>
+                      {camp.subject}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-700 max-w-[200px]">
                       {(() => {
                         if (camp.target_email) {
                           const emails = camp.target_email.split(',').map(e => e.trim()).filter(Boolean);
                           if (emails.length > 1) {
                             return (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-gray-900 font-semibold text-xs truncate max-w-[110px]" title={camp.target_email}>
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="text-gray-900 font-semibold text-xs truncate max-w-[170px] block" title={camp.target_email}>
                                   {emails[0]}
                                 </span>
                                 <button
                                   onClick={() => setEmailListModal({ show: true, campaignName: camp.name, emails: emails })}
-                                  className="whitespace-nowrap flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold border border-indigo-200 rounded-md text-[10px] transition-colors shadow-xs"
+                                  className="whitespace-nowrap inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold border border-indigo-200 rounded-md text-[10px] transition-colors shadow-xs"
                                   title="Click to view recipient email list"
                                 >
                                   <Eye size={11} className="text-indigo-600 flex-shrink-0" />
@@ -364,23 +422,29 @@ const CampaignsList = () => {
                             );
                           }
                           return (
-                            <span className="text-gray-900 font-semibold text-xs truncate block max-w-[180px]" title={camp.target_email}>
-                              {camp.target_email}
-                            </span>
+                            <div className="flex flex-col items-start gap-0.5">
+                              <span className="text-gray-900 font-semibold text-xs truncate block max-w-[180px]" title={camp.target_email}>
+                                {camp.target_email}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-medium">Single Recipient</span>
+                            </div>
                           );
                         }
                         return (
-                          <span className="text-gray-700 text-xs font-semibold truncate block max-w-[180px]" title={camp.list_name || 'All Subscribers List'}>
-                            {camp.list_name || 'All Subscribers List'}
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="text-gray-900 font-semibold text-xs truncate block max-w-[180px]" title={camp.list_name || 'All Subscribers List'}>
+                              {camp.list_name || 'All Subscribers List'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium">Target Audience List</span>
+                          </div>
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {getStatusBadge(camp.status, camp.scheduled_at)}
                     </td>
-                    <td className="px-4 py-3.5 font-medium whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
+                    <td className="px-4 py-3 font-medium whitespace-nowrap">
+                      <div className="flex flex-col items-start gap-1">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-green-50 text-green-700 border border-green-200" title="Opened Emails">
                           <Eye size={11} className="mr-1 text-green-600" /> {camp.opened_count || 0} Opened
                         </span>
@@ -389,8 +453,11 @@ const CampaignsList = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 font-medium text-gray-500 whitespace-nowrap text-[11px]">
-                      {new Date(camp.created_at).toLocaleString()}
+                    <td className="px-4 py-3 font-medium text-gray-500 whitespace-nowrap text-[11px]">
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className="font-bold text-gray-900 text-xs">{new Date(camp.created_at).toLocaleDateString()}</span>
+                        <span className="text-gray-400 text-[11px] font-medium">{new Date(camp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-right relative whitespace-nowrap">
                       <div className="flex items-center justify-end space-x-2">
@@ -466,6 +533,144 @@ const CampaignsList = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {filteredCampaigns.length > 0 && (
+          <div className="px-6 py-4 bg-gray-50/70 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+            {/* Page Info & Items Per Page Selector */}
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-gray-600">
+              <div>
+                Showing <span className="font-extrabold text-gray-900">{indexOfFirstItem}</span> to{' '}
+                <span className="font-extrabold text-gray-900">{indexOfLastItem}</span> of{' '}
+                <span className="font-extrabold text-gray-900">{totalItems}</span> campaigns
+              </div>
+
+              <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
+                <span className="text-gray-500 font-medium">Rows per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer shadow-xs"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <form onSubmit={handleJumpPage} className="flex items-center gap-1.5 pl-2 border-l border-gray-200">
+                <span className="text-gray-500 font-medium">Go to page:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={totalPages}
+                  value={jumpPageInput}
+                  onChange={(e) => setJumpPageInput(e.target.value)}
+                  onBlur={handleJumpPage}
+                  className="w-14 text-center bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-primary-500 shadow-xs"
+                />
+                <span className="text-gray-500 font-medium">/ {totalPages}</span>
+                <button
+                  type="submit"
+                  className="px-2.5 py-1 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 rounded-lg text-xs font-bold transition-all shadow-xs"
+                >
+                  Go
+                </button>
+              </form>
+            </div>
+
+            {/* Page Controls */}
+            <div className="flex items-center gap-1.5">
+              {/* First Page */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                title="First Page"
+              >
+                <ChevronsLeft size={16} />
+              </button>
+
+              {/* Previous Page */}
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                title="Previous Page"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-1">
+                {getPageNumbers()[0] > 1 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      className="px-3 py-1 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      1
+                    </button>
+                    {getPageNumbers()[0] > 2 && <span className="px-1 text-gray-400 font-bold">...</span>}
+                  </>
+                )}
+
+                {getPageNumbers().map(pageNum => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      currentPage === pageNum
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+                  <>
+                    {getPageNumbers()[getPageNumbers().length - 1] < totalPages - 1 && (
+                      <span className="px-1 text-gray-400 font-bold">...</span>
+                    )}
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="px-3 py-1 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Next Page */}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                title="Next Page"
+              >
+                <ChevronRight size={16} />
+              </button>
+
+              {/* Last Page */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs"
+                title="Last Page"
+              >
+                <ChevronsRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Schedule Modal */}

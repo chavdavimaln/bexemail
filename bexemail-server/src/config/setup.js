@@ -54,6 +54,13 @@ async function setupDB() {
       }
     }
 
+    // Ensure campaigns.sender_id is VARCHAR(255) for multi-sender selection
+    try {
+      await pool.query('ALTER TABLE campaigns MODIFY COLUMN sender_id VARCHAR(255) NULL');
+    } catch (e) {
+      // Column might already be VARCHAR(255), ignore error
+    }
+
     // Add is_deleted to lists if not exists
     try {
       await pool.query('ALTER TABLE lists ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE');
@@ -168,7 +175,10 @@ async function setupDB() {
     const migrationQueries = [
       "ALTER TABLE admin_users ADD COLUMN username VARCHAR(255) NULL",
       "ALTER TABLE admin_users ADD COLUMN permissions JSON NULL",
-      "ALTER TABLE admin_users MODIFY COLUMN role ENUM('Super Admin','Admin','User','Sub Admin','Subscriber') DEFAULT 'User'",
+      "ALTER TABLE admin_users MODIFY COLUMN role VARCHAR(255) DEFAULT 'Developer'",
+      "UPDATE admin_users SET role = 'Admin' WHERE role = 'Super Admin'",
+      "UPDATE admin_users SET role = 'Associates' WHERE role IN ('Sub Admin', 'Subscriber')",
+      "UPDATE admin_users SET role = 'Developer' WHERE role IN ('User', 'user')",
       "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
       "ALTER TABLE lists ADD COLUMN admin_id INT NULL",
       "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL"
