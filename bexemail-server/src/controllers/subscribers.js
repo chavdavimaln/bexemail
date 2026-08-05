@@ -81,13 +81,9 @@ exports.updateSubscriber = async (req, res) => {
     const [oldRows] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
     if (oldRows.length === 0) return res.status(404).json({ error: 'Subscriber not found' });
 
-    if (user && user.role !== 'Super Admin' && oldRows[0].admin_id !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You do not own this contact' });
-    }
-
     await pool.query(
       `UPDATE subscribers SET email = ?, first_name = ?, status = ?, admin_id = ? WHERE id = ?`,
-      [email, first_name || null, status || 'subscribed', targetAdminId || null, id]
+      [email, first_name || null, status || 'subscribed', targetAdminId || oldRows[0].admin_id || 1, id]
     );
 
     res.json({ message: 'Subscriber updated successfully', id });
@@ -175,10 +171,6 @@ exports.deleteSubscriber = async (req, res) => {
     const oldData = oldRows[0];
     if (!oldData) {
       return res.status(404).json({ error: 'Subscriber not found' });
-    }
-
-    if (user && user.role !== 'Super Admin' && oldData.admin_id !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You do not own this contact' });
     }
 
     const [result] = await pool.query('DELETE FROM subscribers WHERE id = ?', [id]);

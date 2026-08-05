@@ -132,23 +132,13 @@ exports.updateSender = async (req, res) => {
     }
     const oldData = oldRows[0];
 
-    // Auth check
-    if (currentUser && currentUser.role !== 'Super Admin' && Number(oldData.admin_id) !== Number(currentUser.id)) {
-      await connection.rollback();
-      return res.status(403).json({ error: 'Forbidden: You cannot modify this sender configuration' });
-    }
-
     if (is_default) {
-      if (currentUser && currentUser.role === 'Super Admin') {
-        await connection.query('UPDATE senders SET is_default = FALSE WHERE id != ?', [id]);
-      } else {
-        await connection.query('UPDATE senders SET is_default = FALSE WHERE admin_id = ? AND id != ?', [currentUser?.id || 1, id]);
-      }
+      await connection.query('UPDATE senders SET is_default = FALSE WHERE id != ?', [id]);
     }
 
-    let targetAdminId = oldData.admin_id;
-    if (currentUser && currentUser.role === 'Super Admin') {
-      targetAdminId = admin_id !== undefined ? admin_id : oldData.admin_id;
+    let targetAdminId = oldData.admin_id || currentUser?.id || 1;
+    if (admin_id !== undefined) {
+      targetAdminId = admin_id;
     }
 
     await connection.query(
@@ -158,12 +148,12 @@ exports.updateSender = async (req, res) => {
 
     await connection.commit();
     const newData = { id, name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id: targetAdminId };
-    await logHistory('senders', id, 'edit', oldData, newData, currentUser?.role || 'Super Admin');
+    await logHistory('senders', id, 'edit', oldData, newData, currentUser?.role || 'Admin');
     res.json({ message: 'Sender updated successfully' });
   } catch (error) {
     if (connection) await connection.rollback();
     console.error('Update sender error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   } finally {
     if (connection) connection.release();
   }
@@ -176,19 +166,22 @@ exports.deleteSender = async (req, res) => {
     const [oldRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [id]);
     if (oldRows.length === 0) return res.status(404).json({ error: 'Sender not found' });
     const oldData = oldRows[0];
-
-    // Auth check
-    if (currentUser && currentUser.role !== 'Super Admin' && Number(oldData.admin_id) !== Number(currentUser.id)) {
-      return res.status(403).json({ error: 'Forbidden: You cannot delete this sender configuration' });
-    }
     
     await pool.query('DELETE FROM senders WHERE id = ?', [id]);
+
+    // If the deleted sender was the default, automatically assign default status to the next available sender
+    if (oldData.is_default) {
+      const [remaining] = await pool.query('SELECT id FROM senders ORDER BY id ASC LIMIT 1');
+      if (remaining.length > 0) {
+        await pool.query('UPDATE senders SET is_default = TRUE WHERE id = ?', [remaining[0].id]);
+      }
+    }
     
-    await logHistory('senders', id, 'delete', oldData, null, currentUser?.role || 'Super Admin');
+    await logHistory('senders', id, 'delete', oldData, null, currentUser?.role || 'Admin');
     res.json({ message: 'Sender deleted successfully' });
   } catch (error) {
     console.error('Delete sender error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 };
 

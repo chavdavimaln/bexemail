@@ -114,10 +114,7 @@ exports.updateList = async (req, res) => {
     const oldData = oldRows[0];
     if (!oldData) return res.status(404).json({ error: 'List not found' });
 
-    const hasPerm = user ? await hasListsPermission(user.id) : false;
-    if (user && user.role !== 'Super Admin' && !hasPerm && oldData.admin_id !== null && oldData.admin_id !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You do not own this list' });
-    }
+    const targetAdminId = oldData.admin_id || user?.id || 1;
     
     await pool.query(
       'UPDATE lists SET name = ?, description = ?, admin_id = ? WHERE id = ?',
@@ -136,17 +133,11 @@ exports.updateList = async (req, res) => {
 // Soft Delete a List
 exports.deleteList = async (req, res) => {
   const { id } = req.params;
-  const user = getRequestUser(req);
   try {
-    const hasPerm = user ? await hasListsPermission(user.id) : false;
     const [oldRows] = await pool.query('SELECT * FROM lists WHERE id = ?', [id]);
     const oldData = oldRows[0];
     if (!oldData) return res.status(404).json({ error: 'List not found' });
 
-    if (user && user.role !== 'Super Admin' && !hasPerm && oldData.admin_id !== null && oldData.admin_id !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You do not own this list' });
-    }
-    
     await pool.query('UPDATE lists SET is_deleted = TRUE WHERE id = ?', [id]);
     
     if (oldData) {
