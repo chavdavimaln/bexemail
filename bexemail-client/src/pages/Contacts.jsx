@@ -78,14 +78,19 @@ const Contacts = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [subsRes, listsRes, adminsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/bulk-import/subscribers'),
-        axios.get('http://localhost:5000/api/lists'),
+      const [subsRes, directSubsRes, listsRes, adminsRes] = await Promise.all([
+        axios.get('http://localhost:5000/api/bulk-import/subscribers').catch(() => ({ data: { data: [] } })),
+        axios.get('http://localhost:5000/api/subscribers?limit=500').catch(() => ({ data: { data: [] } })),
+        axios.get('http://localhost:5000/api/lists').catch(() => ({ data: [] })),
         axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }))
       ]);
-      const fetchedSubs = subsRes.data.data || [];
-      const fetchedLists = listsRes.data || [];
-      const fetchedAdmins = adminsRes.data || [];
+
+      const rawBulk = subsRes.data?.data || (Array.isArray(subsRes.data) ? subsRes.data : []);
+      const rawDirect = directSubsRes.data?.data || (Array.isArray(directSubsRes.data) ? directSubsRes.data : []);
+
+      const fetchedSubs = rawBulk.length > 0 ? rawBulk : rawDirect;
+      const fetchedLists = Array.isArray(listsRes.data) ? listsRes.data : [];
+      const fetchedAdmins = Array.isArray(adminsRes.data) ? adminsRes.data : [];
       
       setSubscribers(fetchedSubs);
       setLists(fetchedLists);
@@ -1124,7 +1129,7 @@ const Contacts = () => {
                 </div>
                 <span className="px-3.5 py-1.5 bg-primary-600 text-white font-extrabold text-xs rounded-full shadow-sm">
                   {selectedTargetListId === 'all_lists' 
-                    ? `${subscribers.filter(s => isAssignedToAllLists(s)).length} / ${subscribers.length} Contacts Assigned to ALL Lists`
+                    ? `${subscribers.filter(s => getSubListIds(s).length > 0).length} / ${subscribers.length} Contacts Assigned to Target Lists`
                     : `${subscribers.filter(s => getSubListIds(s).includes(Number(selectedTargetListId))).length} Assigned Contacts`
                   }
                 </span>
@@ -1208,7 +1213,7 @@ const Contacts = () => {
                   managerFilteredSubscribers.map(sub => {
                     const isAll = isAssignedToAllLists(sub);
                     const isAssigned = selectedTargetListId === 'all_lists'
-                      ? isAll
+                      ? getSubListIds(sub).length > 0
                       : getSubListIds(sub).includes(Number(selectedTargetListId));
 
                     const isChecked = selectedSubIds.includes(sub.id);
@@ -1247,13 +1252,13 @@ const Contacts = () => {
                               <Sparkles size={12} className="text-emerald-600" />
                               Assigned To All Lists ({lists.length})
                             </span>
-                          ) : isAssigned ? (
+                          ) : getSubListIds(sub).length > 0 ? (
                             <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full border border-blue-200 flex items-center gap-1">
-                              <Check size={12} /> Assigned to {selectedTargetListObj.name}
+                              <Check size={12} /> Assigned to {getSubListIds(sub).length} List{getSubListIds(sub).length > 1 ? 's' : ''} ({sub.list_names || 'Target Lists'})
                             </span>
                           ) : (
                             <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-semibold rounded-full border border-gray-200">
-                              Not Assigned
+                              Not Assigned to Any List
                             </span>
                           )}
 

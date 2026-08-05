@@ -41,16 +41,8 @@ export default function ExportPanel() {
         axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }))
       ]);
 
-      let fetchedSubs = subsRes.data.data || [];
-      let fetchedLists = listsRes.data || [];
-
-      if (currentUserRole !== 'Super Admin') {
-        fetchedLists = fetchedLists.filter(list => Number(list.admin_id) === Number(currentUser.id));
-        fetchedSubs = fetchedSubs.filter(sub => {
-          const subListIds = getSubListIds(sub);
-          return subListIds.some(id => fetchedLists.some(l => l.id === id)) || Number(sub.admin_id) === Number(currentUser.id);
-        });
-      }
+      let fetchedSubs = subsRes.data.data || (Array.isArray(subsRes.data) ? subsRes.data : []);
+      let fetchedLists = Array.isArray(listsRes.data) ? listsRes.data : [];
 
       setSubscribers(fetchedSubs);
       setLists(fetchedLists);

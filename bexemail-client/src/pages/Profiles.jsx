@@ -110,8 +110,8 @@ const Profiles = () => {
         axios.get('/api/senders', { headers }).catch(() => axios.get('http://localhost:5000/api/senders', { headers })).catch(() => ({ data: [] }))
       ]);
 
-      const rawUsers = usersRes.data?.data || usersRes.data || [];
-      const rawSenders = sendersRes.data?.data || sendersRes.data || [];
+      const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.data || []);
+      const rawSenders = Array.isArray(sendersRes.data) ? sendersRes.data : (sendersRes.data?.data || []);
 
       let finalUsers = Array.isArray(rawUsers) ? rawUsers : [];
       let finalSenders = Array.isArray(rawSenders) ? rawSenders : [];

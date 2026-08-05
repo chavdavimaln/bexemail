@@ -90,7 +90,9 @@ export default function CampaignWizard() {
     template_id: '',
     html_content: '',
     scheduled_at: '',
-    dispatch_option: 'review'
+    dispatch_option: 'review',
+    sender_mode: 'broadcast',
+    sender_mapping: {}
   });
 
   useEffect(() => {
@@ -155,24 +157,34 @@ export default function CampaignWizard() {
             headers: { 'x-user-role': 'Super Admin' }
           });
           const c = res.data;
-          const targetEmail = c.target_email || '';
+          const targetEmail = String(c.target_email || '');
           const emails = targetEmail.split(',').map(e => e.trim()).filter(Boolean);
-          const allInSubscribers = emails.length > 0 && emails.every(email => subData.some(s => s.email === email));
+          const allInSubscribers = emails.length > 0 && emails.every(email => subData.some(s => s && s.email === email));
+
+          let formattedScheduledAt = '';
+          if (c.scheduled_at) {
+            try {
+              const d = new Date(c.scheduled_at);
+              if (!isNaN(d.getTime())) {
+                formattedScheduledAt = d.toISOString().slice(0, 16);
+              }
+            } catch (e) {}
+          }
 
           setFormData(prev => ({
             ...prev,
             name: c.name || '',
             subject: c.subject || '',
-            sender_id: c.sender_id ? c.sender_id.toString() : prev.sender_id,
+            sender_id: c.sender_id ? String(c.sender_id) : prev.sender_id,
             target_type: c.target_email ? (allInSubscribers ? 'individual_subscriber' : 'custom_email') : 'list',
-            list_id: c.list_id ? c.list_id.toString() : '',
-            target_email: c.target_email || '',
+            list_id: c.list_id ? String(c.list_id) : '',
+            target_email: String(c.target_email || ''),
             is_ab_test: Boolean(c.is_ab_test),
             variant_b_subject: c.variant_b_subject || '',
             variant_b_html: c.variant_b_html || '',
-            template_id: c.template_id || '',
+            template_id: c.template_id ? String(c.template_id) : '',
             html_content: c.html_content || '',
-            scheduled_at: c.scheduled_at ? new Date(c.scheduled_at).toISOString().slice(0, 16) : ''
+            scheduled_at: formattedScheduledAt
           }));
         } catch (error) {
           console.error('Failed to load campaign for editing:', error);
@@ -364,14 +376,14 @@ export default function CampaignWizard() {
       const payload = {
         name: dataToSave.name || 'Untitled Campaign Draft',
         subject: dataToSave.subject || 'No Subject',
-        sender_id: dataToSave.sender_id ? Number(dataToSave.sender_id) : null,
+        sender_id: dataToSave.sender_id ? String(dataToSave.sender_id) : null,
         target_type: dataToSave.target_type || 'list',
-        list_id: isSingleEmail ? null : (dataToSave.list_id ? Number(dataToSave.list_id) : null),
+        list_id: isSingleEmail ? null : (dataToSave.list_id && !isNaN(Number(dataToSave.list_id)) ? Number(dataToSave.list_id) : null),
         target_email: isSingleEmail ? (dataToSave.target_email || '') : null,
         is_ab_test: dataToSave.is_ab_test || false,
         variant_b_subject: dataToSave.variant_b_subject || null,
         variant_b_html: dataToSave.variant_b_html || null,
-        template_id: dataToSave.template_id ? Number(dataToSave.template_id) : null,
+        template_id: dataToSave.template_id && !isNaN(Number(dataToSave.template_id)) ? Number(dataToSave.template_id) : null,
         html_content: contentToSave,
         status: 'draft'
       };
@@ -490,12 +502,20 @@ export default function CampaignWizard() {
         finalHtml = finalHtml + DEFAULT_FOOTER_HTML;
       }
 
+      const targetStatus = (formData.dispatch_option === 'schedule' || formData.scheduled_at)
+        ? 'scheduled'
+        : (formData.dispatch_option === 'direct_send' ? 'sending' : 'submitted_for_review');
+
       const payload = {
         name: formData.name,
         campaignName: formData.name,
         subject: formData.subject,
         sender_id: formData.sender_id,
         senderId: formData.sender_id,
+        sender_mode: formData.sender_mode || 'broadcast',
+        senderMode: formData.sender_mode || 'broadcast',
+        sender_mapping: formData.sender_mapping || null,
+        senderMapping: formData.sender_mapping || null,
         list_id: isSingleEmail ? null : formData.list_id,
         listId: isSingleEmail ? null : formData.list_id,
         target_email: isSingleEmail ? formData.target_email.trim() : null,
@@ -510,18 +530,26 @@ export default function CampaignWizard() {
         html_content: finalHtml,
         htmlContent: finalHtml,
         scheduled_at: formData.scheduled_at || null,
-        status: formData.dispatch_option === 'schedule' ? 'scheduled' : 'sending'
+        status: targetStatus
       };
 
       if (editId) {
         await axios.put(`http://localhost:5000/api/campaigns/${editId}`, payload, {
           headers: { 'x-user-role': 'Admin' }
-        }).catch(() => {});
+        });
+      } else {
+        await axios.post('http://localhost:5000/api/campaigns/dispatch', payload);
       }
-
-      await axios.post('http://localhost:5000/api/campaigns/dispatch', payload);
       setDispatchedSuccess(true);
-      customAlert({ title: 'Success', message: 'Campaign dispatched successfully!', type: 'success' });
+
+      const alertTitle = targetStatus === 'submitted_for_review' 
+        ? 'Submitted for Review' 
+        : (targetStatus === 'scheduled' ? 'Campaign Scheduled' : 'Campaign Dispatched');
+      const alertMsg = targetStatus === 'submitted_for_review' 
+        ? 'Campaign saved successfully and submitted for admin review!' 
+        : (targetStatus === 'scheduled' ? 'Campaign scheduled successfully!' : 'Campaign dispatched for immediate sending!');
+
+      customAlert({ title: alertTitle, message: alertMsg, type: 'success' });
     } catch (error) {
       console.error('Dispatch error:', error);
       customAlert({ title: 'Dispatch Error', message: error.response?.data?.error || 'Failed to dispatch campaign.', type: 'danger' });
@@ -568,10 +596,14 @@ export default function CampaignWizard() {
 
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-1.5">
-            {formData.scheduled_at ? 'Campaign Scheduled Successfully!' : 'Campaign Dispatched Successfully!'}
+            {formData.dispatch_option === 'review' || (!formData.dispatch_option && !formData.scheduled_at)
+              ? 'Submitted for Admin Review!'
+              : (formData.scheduled_at ? 'Campaign Scheduled Successfully!' : 'Campaign Dispatched Successfully!')}
           </h2>
           <p className="text-sm text-gray-500 max-w-md mx-auto">
-            Your campaign <strong className="text-gray-800">{formData.name}</strong> has been saved and queued for sending in the database.
+            {formData.dispatch_option === 'review' || (!formData.dispatch_option && !formData.scheduled_at)
+              ? <>Your campaign <strong className="text-gray-800">{formData.name}</strong> has been saved with status <span className="text-amber-700 font-bold">Review Pending</span>. It will not be sent until an admin accepts and confirms review.</>
+              : <>Your campaign <strong className="text-gray-800">{formData.name}</strong> has been saved and queued for sending in the database.</>}
           </p>
         </div>
 
@@ -727,7 +759,7 @@ export default function CampaignWizard() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2 border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Sender Details</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Select one or multiple sender profiles for your campaign.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Select an active sender profile / SMTP configuration for your campaign.</p>
               </div>
               <button
                 type="button"
@@ -738,157 +770,64 @@ export default function CampaignWizard() {
               </button>
             </div>
 
-            {/* Multi-Select Senders UI */}
-            {(() => {
-              const selectedIds = (formData.sender_id || '')
-                .split(',')
-                .map(id => id.trim())
-                .filter(Boolean);
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Who is sending this email? <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="sender_id"
+                  value={formData.sender_id}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-primary-500 focus:border-primary-500 bg-white font-medium shadow-xs"
+                >
+                  {senders.map(s => (
+                    <option key={s.id} value={s.id.toString()}>
+                      {s.name} &lt;{s.email}&gt; {s.smtp_host ? `(SMTP: ${s.smtp_host}:${s.smtp_port || 587})` : ''} {s.is_default ? '• Default Sender' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1.5">Emails will be dispatched using the selected SMTP sender profile credentials.</p>
+              </div>
 
-              const toggleSender = (idStr) => {
-                let current = [...selectedIds];
-                if (current.includes(idStr)) {
-                  if (current.length > 1) {
-                    current = current.filter(i => i !== idStr);
-                  }
-                } else {
-                  current.push(idStr);
-                }
-                setFormData(prev => ({ ...prev, sender_id: current.join(',') }));
-              };
+              {/* Dynamic SMTP Details Banner for Selected Sender */}
+              {(() => {
+                const selectedSender = senders.find(s => s.id.toString() === String(formData.sender_id || '')) || senders.find(s => s.is_default) || senders[0];
+                if (!selectedSender) return null;
 
-              const selectAll = () => {
-                const allIds = senders.map(s => s.id.toString());
-                setFormData(prev => ({ ...prev, sender_id: allIds.join(',') }));
-              };
+                const activeSmtpUser = selectedSender?.smtp_user || selectedSender?.email || systemSmtp.smtp_user || 'info@bexcodeservices.com';
+                const host = selectedSender?.smtp_host || systemSmtp.smtp_host || 'smtp.gmail.com';
+                const port = selectedSender?.smtp_port || systemSmtp.smtp_port || 465;
+                const secure = selectedSender?.smtp_secure || systemSmtp.smtp_secure || 'ssl';
+                const isCustom = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
 
-              const selectedSenders = senders.filter(s => selectedIds.includes(s.id.toString()));
-              if (selectedSenders.length === 0 && senders.length > 0) {
-                selectedSenders.push(senders[0]);
-              }
-
-              return (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="block text-sm font-semibold text-gray-700">
-                        Who is sending this email? <span className="text-red-500">*</span>
-                        <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 ml-2 font-bold">
-                          Multi-Select ({selectedSenders.length} Selected)
-                        </span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={selectAll}
-                        className="text-xs font-bold text-primary-600 hover:text-primary-700 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-200 transition"
-                      >
-                        Select All
-                      </button>
-                    </div>
-
-                    {/* Selected Sender Badges */}
-                    {selectedSenders.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-                        {selectedSenders.map(s => (
-                          <span 
-                            key={s.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-primary-700 text-xs font-bold rounded-lg border border-primary-200 shadow-2xs"
-                          >
-                            <Mail size={12} className="text-primary-600" />
-                            <span>{s.name} &lt;{s.email}&gt;</span>
-                            {selectedSenders.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSender(s.id.toString());
-                                }}
-                                className="text-gray-400 hover:text-red-600 p-0.5 rounded-full"
-                              >
-                                <X size={12} />
-                              </button>
-                            )}
-                          </span>
-                        ))}
+                return (
+                  <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
+                        <Mail size={18} className="text-blue-600" />
                       </div>
-                    )}
-
-                    {/* Interactive Checkbox List for Multi-Select */}
-                    <div className="border border-gray-300 rounded-xl p-2 bg-white max-h-56 overflow-y-auto space-y-1.5 shadow-2xs">
-                      {senders.map(s => {
-                        const isSelected = selectedIds.includes(s.id.toString());
-                        return (
-                          <div
-                            key={s.id}
-                            onClick={() => toggleSender(s.id.toString())}
-                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
-                              isSelected 
-                                ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-400/30' 
-                                : 'bg-white border-gray-100 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-                                isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'
-                              }`}>
-                                {isSelected && <Check size={14} />}
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold text-gray-900">{s.name} <span className="text-gray-500 font-normal">&lt;{s.email}&gt;</span></p>
-                                <p className="text-[11px] text-gray-400">SMTP User: {s.smtp_user || s.email} {s.is_default ? '• Default Profile' : ''}</p>
-                              </div>
-                            </div>
-                            {s.smtp_host && (
-                              <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded border border-slate-200">
-                                {s.smtp_host}:{s.smtp_port || 587}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                      <div>
+                        <span className="block text-xs font-bold text-gray-900">
+                          Active SMTP Email: <span className="text-blue-700">{activeSmtpUser}</span> ({selectedSender.name})
+                        </span>
+                        <span className="block text-[11px] text-gray-500 mt-0.5">
+                          SMTP Configuration: <strong className="text-gray-700">{host}:{port}</strong> ({secure}) — {isCustom ? 'Custom Sender SMTP' : 'System Default SMTP'}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-1.5">Check one or multiple sender profiles. Emails will be dynamically rotated across all selected senders during campaign dispatches.</p>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTestSmtpInWizard(selectedSender)}
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 shrink-0"
+                    >
+                      <Send size={13} /> Test SMTP Connection
+                    </button>
                   </div>
-
-                  {/* Dynamic SMTP Details Banners for Selected Senders */}
-                  <div className="space-y-2 pt-1">
-                    {selectedSenders.map(selectedSender => {
-                      const activeSmtpUser = selectedSender?.smtp_user || selectedSender?.email || systemSmtp.smtp_user || 'info@bexcodeservices.com';
-                      const host = selectedSender?.smtp_host || systemSmtp.smtp_host || 'smtp.gmail.com';
-                      const port = selectedSender?.smtp_port || systemSmtp.smtp_port || 465;
-                      const secure = selectedSender?.smtp_secure || systemSmtp.smtp_secure || 'ssl';
-                      const isCustom = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
-
-                      return (
-                        <div key={selectedSender.id} className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
-                              <Mail size={16} className="text-blue-600" />
-                            </div>
-                            <div>
-                              <span className="block text-xs font-bold text-gray-900">
-                                Active SMTP Email: <span className="text-blue-700">{activeSmtpUser}</span> ({selectedSender.name})
-                              </span>
-                              <span className="block text-[11px] text-gray-500 mt-0.5">
-                                SMTP Configuration: <strong className="text-gray-700">{host}:{port}</strong> ({secure}) — {isCustom ? 'Custom Sender SMTP' : 'System Default SMTP'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenTestSmtpInWizard(selectedSender)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 shrink-0"
-                          >
-                            <Send size={13} /> Test SMTP Connection
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -958,6 +897,103 @@ export default function CampaignWizard() {
                 </div>
               </label>
             </div>
+
+            {/* SMTP Sender Routing Box for Target Audience (When 2+ senders selected) */}
+            {(() => {
+              const selectedSenderIds = (formData.sender_id || '')
+                .split(',')
+                .map(id => id.trim())
+                .filter(Boolean);
+
+              const selectedSendersObj = senders.filter(s => selectedSenderIds.includes(s.id.toString()));
+
+              if (selectedSendersObj.length <= 1) return null;
+
+              return (
+                <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-2">
+                      <Mail size={16} className="text-emerald-600" /> SMTP Sender Routing for Target Audience
+                    </h4>
+                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                      {selectedSendersObj.length} Senders Active
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-emerald-800 font-medium">
+                    Configure which SMTP email account sends to this Target Audience:
+                  </p>
+
+                  <div className="space-y-2">
+                    {/* Option 1: Broadcast to Audience from ALL Selected Senders */}
+                    <label 
+                      onClick={() => {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          sender_mode: 'broadcast',
+                          sender_mapping: { ...prev.sender_mapping, 'all': selectedSendersObj.map(s => s.id) } 
+                        }));
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                        (!formData.sender_mode || formData.sender_mode === 'broadcast')
+                          ? 'border-emerald-600 bg-white shadow-sm ring-1 ring-emerald-300'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 text-xs font-bold text-gray-900">
+                        <input 
+                          type="radio" 
+                          name="smtp_routing_option" 
+                          checked={!formData.sender_mode || formData.sender_mode === 'broadcast'} 
+                          readOnly 
+                          className="text-emerald-600 focus:ring-emerald-500" 
+                        />
+                        <span>Send from ALL Selected Senders (Dual Broadcast from {selectedSendersObj.map(s => s.email).join(' & ')})</span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                        Receive from BOTH Senders
+                      </span>
+                    </label>
+
+                    {/* Option 2: Individual Sender routing */}
+                    {selectedSendersObj.map(s => {
+                      const isSingleSelected = formData.sender_mode === 'custom' && formData.sender_mapping?.['all']?.[0] === s.id;
+                      return (
+                        <label 
+                          key={s.id}
+                          onClick={() => {
+                            setFormData(prev => ({ 
+                              ...prev, 
+                              sender_mode: 'custom',
+                              sender_mapping: { ...prev.sender_mapping, 'all': [s.id] } 
+                            }));
+                          }}
+                          className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                            isSingleSelected
+                              ? 'border-emerald-600 bg-white shadow-sm ring-1 ring-emerald-300'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 text-xs font-bold text-gray-900">
+                            <input 
+                              type="radio" 
+                              name="smtp_routing_option" 
+                              checked={isSingleSelected} 
+                              readOnly 
+                              className="text-emerald-600 focus:ring-emerald-500" 
+                            />
+                            <span>Send to this Audience ONLY from: <strong className="text-emerald-900">{s.name} &lt;{s.email}&gt;</strong></span>
+                          </div>
+                          <span className="text-[10px] font-bold bg-gray-100 text-gray-700 px-2 py-0.5 rounded border border-gray-200">
+                            Single SMTP Only
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Option A: Select List (Multi-Select Supported) */}
             {formData.target_type === 'list' && (
@@ -1173,9 +1209,10 @@ export default function CampaignWizard() {
                     type="button"
                     onClick={() => {
                       const filtered = subscribers.filter(sub => {
-                        const search = subscriberSearch.toLowerCase();
-                        return sub.email.toLowerCase().includes(search) || 
-                          (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                        if (!sub || !sub.email) return false;
+                        const search = String(subscriberSearch || '').toLowerCase();
+                        return String(sub.email).toLowerCase().includes(search) || 
+                          (sub.first_name && String(sub.first_name).toLowerCase().includes(search));
                       });
                       const allFilteredEmails = filtered.map(sub => sub.email);
                       const union = Array.from(new Set([...selectedEmails, ...allFilteredEmails]));
@@ -1199,17 +1236,19 @@ export default function CampaignWizard() {
                 {/* Scrollable list of subscribers */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
                   {subscribers.filter(sub => {
-                    const search = subscriberSearch.toLowerCase();
-                    return sub.email.toLowerCase().includes(search) || 
-                      (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                    if (!sub || !sub.email) return false;
+                    const search = String(subscriberSearch || '').toLowerCase();
+                    return String(sub.email).toLowerCase().includes(search) || 
+                      (sub.first_name && String(sub.first_name).toLowerCase().includes(search));
                   }).length === 0 ? (
                     <div className="p-4 text-center text-sm text-gray-500">No subscribers found</div>
                   ) : (
                     subscribers
                       .filter(sub => {
-                        const search = subscriberSearch.toLowerCase();
-                        return sub.email.toLowerCase().includes(search) || 
-                          (sub.first_name && sub.first_name.toLowerCase().includes(search));
+                        if (!sub || !sub.email) return false;
+                        const search = String(subscriberSearch || '').toLowerCase();
+                        return String(sub.email).toLowerCase().includes(search) || 
+                          (sub.first_name && String(sub.first_name).toLowerCase().includes(search));
                       })
                       .map(sub => {
                         const isChecked = selectedEmails.includes(sub.email);
@@ -1657,18 +1696,39 @@ export default function CampaignWizard() {
         )}
 
         {step === 9 && (() => {
-          // Resolve Sender
-          const selectedSender = senders.find(s => s.id.toString() === (formData.sender_id || '').toString()) || senders.find(s => s.is_default) || senders[0];
-          const senderName = selectedSender?.name || 'Default System Sender';
-          const senderEmail = selectedSender?.email || 'noreply@bexcodeservices.com';
-          const smtpUser = selectedSender?.smtp_user || systemSmtp?.smtp_user || senderEmail;
-          const smtpHost = selectedSender?.smtp_host || systemSmtp?.smtp_host || 'smtp.gmail.com';
-          const smtpPort = selectedSender?.smtp_port || systemSmtp?.smtp_port || 465;
-          const smtpSecure = selectedSender?.smtp_secure || systemSmtp?.smtp_secure || 'ssl';
-          const isCustomSmtp = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
+          // Resolve Sender(s)
+          const senderIds = String(formData.sender_id || '').split(',').map(id => id.trim()).filter(Boolean);
+          const selectedSenders = senders.filter(s => senderIds.includes(s.id.toString()));
+          const isMultiSender = selectedSenders.length > 1;
+
+          const senderName = isMultiSender
+            ? selectedSenders.map(s => s.name).join(' & ')
+            : (selectedSenders[0]?.name || senders.find(s => s.is_default)?.name || 'Default System Sender');
+
+          const senderEmail = isMultiSender
+            ? selectedSenders.map(s => s.email).join(' & ')
+            : (selectedSenders[0]?.email || senders.find(s => s.is_default)?.email || 'noreply@bexcodeservices.com');
+
+          const smtpUser = isMultiSender
+            ? selectedSenders.map(s => `${s.name} <${s.smtp_user || s.email}>`).join(' | ')
+            : (selectedSenders[0]?.smtp_user || systemSmtp?.smtp_user || senderEmail);
+
+          const smtpHost = isMultiSender
+            ? selectedSenders.map(s => s.smtp_host || 'smtp.gmail.com').join(' | ')
+            : (selectedSenders[0]?.smtp_host || systemSmtp?.smtp_host || 'smtp.gmail.com');
+
+          const smtpPort = isMultiSender
+            ? selectedSenders.map(s => s.smtp_port || 587).join(' | ')
+            : (selectedSenders[0]?.smtp_port || systemSmtp?.smtp_port || 587);
+
+          const smtpSecure = isMultiSender
+            ? selectedSenders.map(s => s.smtp_secure || 'tls').join(' | ')
+            : (selectedSenders[0]?.smtp_secure || systemSmtp?.smtp_secure || 'tls');
+
+          const isCustomSmtp = isMultiSender || !!(selectedSenders[0]?.smtp_host && selectedSenders[0]?.smtp_port);
 
           // Resolve Audience
-          const selectedList = lists.find(l => l.id.toString() === (formData.list_id || '').toString());
+          const selectedList = lists.find(l => l && l.id !== undefined && String(l.id) === String(formData.list_id || ''));
           let audienceTypeTag = 'Subscriber List';
           let audienceTitle = 'All Contacts Directory';
           let audienceDetail = 'Sending to all contacts';
@@ -1686,20 +1746,20 @@ export default function CampaignWizard() {
             }
           } else if (formData.target_type === 'individual_subscriber') {
             audienceTypeTag = 'Selected Contacts';
-            const emails = formData.target_email ? formData.target_email.split(',').map(e => e.trim()).filter(Boolean) : [];
+            const emails = String(formData.target_email || '').split(',').map(e => e.trim()).filter(Boolean);
             contactCount = emails.length;
             audienceTitle = `${emails.length} Selected Contact(s)`;
             audienceDetail = emails.slice(0, 3).join(', ') + (emails.length > 3 ? ` ...+${emails.length - 3} more` : '');
           } else if (formData.target_type === 'custom_email') {
             audienceTypeTag = 'Custom Email';
-            const emails = formData.target_email ? formData.target_email.split(',').map(e => e.trim()).filter(Boolean) : [];
+            const emails = String(formData.target_email || '').split(',').map(e => e.trim()).filter(Boolean);
             contactCount = emails.length || 1;
             audienceTitle = formData.target_email || 'Single Email Recipient';
             audienceDetail = 'Custom recipient address';
           }
 
           // Resolve Template & Content
-          const selectedTemplate = templates.find(t => t.id.toString() === (formData.template_id || '').toString());
+          const selectedTemplate = templates.find(t => t && t.id !== undefined && String(t.id) === String(formData.template_id || ''));
           const templateName = selectedTemplate ? (selectedTemplate.name || selectedTemplate.template_name) : (formData.html_content ? 'Custom Content' : 'Blank Template');
           const designMode = editorMode === 'visual' ? '🎨 Drag & Drop Visual Builder' : '💻 Custom HTML Code Editor';
           const textSnippet = (formData.html_content || '').replace(/<[^>]+>/g, ' ').slice(0, 150).trim();

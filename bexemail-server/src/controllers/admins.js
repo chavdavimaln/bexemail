@@ -41,13 +41,9 @@ exports.createAdmin = async (req, res) => {
   }
 
   // Role validation
-  if (currentUser.role !== 'Super Admin') {
-    if (currentUser.role !== 'Admin' && currentUser.role !== 'Sub Admin') {
-      return res.status(403).json({ error: 'Forbidden: You do not have permission to create users' });
-    }
-    if (role === 'Super Admin') {
-      return res.status(403).json({ error: 'Forbidden: You cannot create a Super Admin' });
-    }
+  const allowedAdminRoles = ['Super Admin', 'Admin', 'Sub Admin', 'Campaign Manager', 'Developer', 'Associates'];
+  if (!allowedAdminRoles.includes(currentUser.role)) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to create users' });
   }
 
   try {

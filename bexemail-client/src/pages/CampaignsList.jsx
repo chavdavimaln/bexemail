@@ -373,6 +373,7 @@ const CampaignsList = () => {
                 <th className="px-4 py-3.5">Campaign Name</th>
                 <th className="px-4 py-3.5">Subject Line</th>
                 <th className="px-4 py-3.5">Target Audience</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Sender Email Counter</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Status</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Opened / Not Opened</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Date Created</th>
@@ -382,11 +383,11 @@ const CampaignsList = () => {
             <tbody className="divide-y divide-gray-100">
               {loading && campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-4 py-12 text-center text-gray-400 font-medium">Loading campaigns...</td>
+                  <td colSpan="8" className="px-4 py-12 text-center text-gray-400 font-medium">Loading campaigns...</td>
                 </tr>
               ) : filteredCampaigns.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-4 py-12 text-center text-gray-400 font-semibold">No email campaigns found matching your criteria.</td>
+                  <td colSpan="8" className="px-4 py-12 text-center text-gray-400 font-semibold">No email campaigns found matching your criteria.</td>
                 </tr>
               ) : (
                 paginatedCampaigns.map(camp => (
@@ -436,6 +437,32 @@ const CampaignsList = () => {
                               {camp.list_name || 'All Subscribers List'}
                             </span>
                             <span className="text-[10px] text-gray-400 font-medium">Target Audience List</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const historyIds = String(camp.sender_history_ids || camp.sender_history || camp.sender_id || '').split(',').map(s => s.trim()).filter(Boolean);
+                        const count = camp.sender_count || Math.max(historyIds.length, 1);
+                        const usedSendersList = senders.filter(s => historyIds.includes(String(s.id)));
+                        const primarySender = usedSendersList[0] || senders.find(s => s.id.toString() === String(camp.sender_id)) || senders.find(s => s.is_default);
+
+                        return (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-800 font-extrabold text-[11px] rounded-lg border border-blue-200 shadow-2xs">
+                              <Mail size={12} className="text-blue-600" />
+                              <span>{count} Sender{count > 1 ? 's' : ''} Used</span>
+                            </span>
+                            {usedSendersList.length > 0 ? (
+                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[150px]" title={usedSendersList.map(s => s.email).join(', ')}>
+                                {usedSendersList.map(s => s.name || s.email).join(', ')}
+                              </span>
+                            ) : primarySender ? (
+                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[150px]" title={primarySender.email}>
+                                {primarySender.name || primarySender.email}
+                              </span>
+                            ) : null}
                           </div>
                         );
                       })()}
@@ -770,19 +797,36 @@ const CampaignsList = () => {
 
       {/* View Details & Review Modal (Matching Image 2 Rich Layout) */}
       {viewModal && (() => {
-        // Resolve Sender
-        const selectedSender = senders.find(s => s.id.toString() === (viewModal.sender_id || '').toString()) ||
-                              senders.find(s => s.name === viewModal.sender_name) ||
-                              senders.find(s => s.is_default) ||
-                              senders[0];
+        // Resolve Sender(s)
+        const senderIds = String(viewModal.sender_id || '').split(',').map(id => id.trim()).filter(Boolean);
+        const selectedSenders = senders.filter(s => senderIds.includes(s.id.toString()));
+        const isMultiSender = selectedSenders.length > 1;
 
-        const senderName = viewModal.sender_name || selectedSender?.name || 'Default System Sender';
-        const senderEmail = viewModal.sender_email || selectedSender?.email || 'noreply@bexcodeservices.com';
-        const smtpUser = selectedSender?.smtp_user || systemSmtp?.smtp_user || senderEmail;
-        const smtpHost = selectedSender?.smtp_host || systemSmtp?.smtp_host || 'smtp.gmail.com';
-        const smtpPort = selectedSender?.smtp_port || systemSmtp?.smtp_port || 465;
-        const smtpSecure = selectedSender?.smtp_secure || systemSmtp?.smtp_secure || 'ssl';
-        const isCustomSmtp = !!(selectedSender?.smtp_host && selectedSender?.smtp_port);
+        const senderName = isMultiSender
+          ? selectedSenders.map(s => s.name).join(' & ')
+          : (selectedSenders[0]?.name || senders.find(s => s.is_default)?.name || 'Default System Sender');
+
+        const senderEmail = isMultiSender
+          ? selectedSenders.map(s => s.email).join(' & ')
+          : (selectedSenders[0]?.email || senders.find(s => s.is_default)?.email || 'noreply@bexcodeservices.com');
+
+        const smtpUser = isMultiSender
+          ? selectedSenders.map(s => `${s.name} <${s.smtp_user || s.email}>`).join(' | ')
+          : (selectedSenders[0]?.smtp_user || systemSmtp?.smtp_user || senderEmail);
+
+        const smtpHost = isMultiSender
+          ? selectedSenders.map(s => s.smtp_host || 'smtp.gmail.com').join(' | ')
+          : (selectedSenders[0]?.smtp_host || systemSmtp?.smtp_host || 'smtp.gmail.com');
+
+        const smtpPort = isMultiSender
+          ? selectedSenders.map(s => s.smtp_port || 587).join(' | ')
+          : (selectedSenders[0]?.smtp_port || systemSmtp?.smtp_port || 587);
+
+        const smtpSecure = isMultiSender
+          ? selectedSenders.map(s => s.smtp_secure || 'tls').join(' | ')
+          : (selectedSenders[0]?.smtp_secure || systemSmtp?.smtp_secure || 'tls');
+
+        const isCustomSmtp = isMultiSender || !!(selectedSenders[0]?.smtp_host && selectedSenders[0]?.smtp_port);
 
         // Resolve Audience
         const selectedList = lists.find(l => l.id.toString() === (viewModal.list_id || '').toString()) ||
@@ -794,7 +838,7 @@ const CampaignsList = () => {
         let contactCount = selectedList?.subscriber_count || selectedList?.contacts_count || viewModal.total_subscribers || 'Active';
 
         if (viewModal.target_email && !viewModal.list_id) {
-          const emails = viewModal.target_email.split(',').map(e => e.trim()).filter(Boolean);
+          const emails = String(viewModal.target_email || '').split(',').map(e => e.trim()).filter(Boolean);
           if (emails.length > 1) {
             audienceTypeTag = 'Selected Contacts';
             contactCount = emails.length;
@@ -978,6 +1022,16 @@ const CampaignsList = () => {
                         <p className="font-medium text-gray-700 mt-0.5">
                           <strong className="text-gray-900">{smtpHost}:{smtpPort}</strong> ({smtpSecure.toUpperCase()}) — {isCustomSmtp ? 'Custom Sender SMTP' : 'System Default SMTP'}
                         </p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">SENDER EMAIL COUNTER</span>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-xs">
+                            <Mail size={13} />
+                            <span>{viewModal.sender_count || selectedSenders.length || 1} Sender Profile(s) Recorded</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>

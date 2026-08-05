@@ -139,8 +139,9 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   const fetchBackups = async () => {
     try {
       setLoadingBackups(true);
-      const res = await axios.get('/api/backup/list');
-      setBackups(res.data || []);
+      const res = await axios.get('/api/backup/list').catch(() => axios.get('http://localhost:5000/api/backup/list'));
+      const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setBackups(data);
     } catch (err) {
       console.error('Fetch backups error:', err);
     } finally {
@@ -151,10 +152,11 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   const fetchSchedules = async () => {
     try {
       setLoadingSchedules(true);
-      const res = await axios.get('/api/backup/schedules');
-      setSchedules(res.data || []);
-      if (res.data && res.data.length > 0) {
-        const first = res.data[0];
+      const res = await axios.get('/api/backup/schedules').catch(() => axios.get('http://localhost:5000/api/backup/schedules'));
+      const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setSchedules(data);
+      if (data && data.length > 0) {
+        const first = data[0];
         const mod = first.module_type || 'all';
         setScheduleModule(mod);
         setScheduleComponents((MODULE_COMPONENTS[mod] || MODULE_COMPONENTS.all).map(c => c.id));
@@ -173,8 +175,9 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   const fetchHistoryLogs = async () => {
     try {
       setLoadingLogs(true);
-      const res = await axios.get('/api/history');
-      setLogs(res.data || []);
+      const res = await axios.get('/api/history').catch(() => axios.get('http://localhost:5000/api/history'));
+      const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setLogs(data);
     } catch (err) {
       console.error('Fetch logs error:', err);
     } finally {

@@ -41,6 +41,7 @@ router.delete('/campaigns/:id', campaignsController.deleteCampaign);
 router.post('/campaigns/dispatch', campaignsController.dispatchCampaign);
 router.post('/campaigns_wizard/dispatch', campaignsController.dispatchCampaign);
 router.put('/campaigns/:id/approve', campaignsController.approveCampaign);
+router.get('/campaigns/:id/logs', campaignsController.getCampaignLogs);
 router.post('/campaigns/:id/duplicate', campaignsController.duplicateCampaign);
 router.put('/campaigns/:id/status', campaignsController.updateCampaignStatus);
 

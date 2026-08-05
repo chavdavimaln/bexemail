@@ -54,11 +54,34 @@ async function setupDB() {
       }
     }
 
-    // Ensure campaigns.sender_id is VARCHAR(255) for multi-sender selection
+    // Ensure campaigns.sender_id is VARCHAR(255) with matching collation for multi-sender selection
     try {
-      await pool.query('ALTER TABLE campaigns MODIFY COLUMN sender_id VARCHAR(255) NULL');
+      await pool.query('ALTER TABLE campaigns MODIFY COLUMN sender_id VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL');
     } catch (e) {
       // Column might already be VARCHAR(255), ignore error
+    }
+
+    // Add sender_mode and sender_mapping columns to campaigns for Multi-SMTP configuration
+    try {
+      await pool.query("ALTER TABLE campaigns ADD COLUMN sender_mode VARCHAR(50) DEFAULT 'broadcast' AFTER sender_id");
+    } catch (e) { /* ignore existing column */ }
+    try {
+      await pool.query("ALTER TABLE campaigns ADD COLUMN sender_mapping JSON NULL AFTER sender_mode");
+    } catch (e) { /* ignore existing column */ }
+
+    // Add sender_id column to email_queue for per-email SMTP assignment
+    try {
+      await pool.query("ALTER TABLE email_queue ADD COLUMN sender_id INT NULL AFTER campaign_id");
+    } catch (e) { /* ignore existing column */ }
+
+    // Align core table collations to prevent collation mismatch errors
+    try {
+      await pool.query('ALTER TABLE campaigns CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+      await pool.query('ALTER TABLE senders CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+      await pool.query('ALTER TABLE email_queue CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+      await pool.query('ALTER TABLE subscribers CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+    } catch (collErr) {
+      // Ignore if tables don't exist yet
     }
 
     // Add is_deleted to lists if not exists

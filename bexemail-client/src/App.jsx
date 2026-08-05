@@ -67,6 +67,8 @@ import { ModalProvider } from './context/ModalContext';
 
 import BackupsAndHistory from './pages/BackupsAndHistory';
 
+import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+
 function App() {
   return (
     <ModalProvider>
@@ -74,7 +76,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><GlobalErrorBoundary><Layout /></GlobalErrorBoundary></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="campaigns" element={<CampaignsList />} />
             <Route path="campaigns/new" element={<CampaignWizard />} />

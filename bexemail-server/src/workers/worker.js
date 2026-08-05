@@ -26,8 +26,8 @@ function createMailTransporter(senderObj, sysSettings = {}, forceDefault = false
 
   const host = cleanEnv(senderObj?.smtp_host) || sysSettings.smtp_host || defaultHost;
   const port = parseInt(senderObj?.smtp_port || sysSettings.smtp_port) || defaultPort;
-  const user = cleanEnv(senderObj?.smtp_user) || sysSettings.smtp_user || defaultUser;
-  const pass = cleanEnv(senderObj?.smtp_pass) || sysSettings.smtp_pass || sysSettings.smtp_password || defaultPass;
+  const user = cleanEnv(senderObj?.smtp_user) || cleanEnv(senderObj?.sender_email) || sysSettings.smtp_user || defaultUser;
+  const pass = cleanEnv(senderObj?.smtp_pass || sysSettings.smtp_pass || sysSettings.smtp_password || defaultPass).replace(/\s+/g, '');
   const isSecure = (senderObj?.smtp_secure === 'true' || senderObj?.smtp_secure === 'ssl' || sysSettings.smtp_secure === 'true' || port === 465);
 
   return nodemailer.createTransport({
@@ -48,13 +48,12 @@ async function resolveCompletedCampaigns(connection) {
       SET c.status = CASE 
         WHEN (SELECT COUNT(*) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'sent') > 0 THEN 'sent' 
         WHEN (SELECT COUNT(*) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'failed') > 0 THEN 'failed'
-        ELSE 'sent'
+        ELSE c.status 
       END
-      WHERE c.status = 'sending' 
-      AND NOT EXISTS (SELECT 1 FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.status = 'pending')
+      WHERE c.status IN ('sending', 'scheduled', 'draft', 'in_progress', 'review');
     `);
   } catch (err) {
-    console.error('[Worker] Error resolving completed campaigns:', err);
+    console.error('[Worker] Error resolving campaign status:', err.message);
   }
 }
 
@@ -63,29 +62,47 @@ async function processQueue() {
   try {
     connection = await pool.getConnection();
 
-    // Check & resolve any completed/stuck campaigns first
-    await resolveCompletedCampaigns(connection);
-
-    // Fetch one pending email at a time
-    const [rows] = await connection.query(
-      `SELECT q.id, q.recipient_id, q.campaign_id, c.subject, c.html_content, c.status as campaign_status,
-              s.email, s.first_name, snd.name as sender_name, snd.email as sender_email,
-              snd.smtp_host, snd.smtp_port, snd.smtp_user, snd.smtp_pass, snd.smtp_secure
-       FROM email_queue q
-       JOIN campaigns c ON q.campaign_id = c.id
-       JOIN subscribers s ON q.recipient_id = s.id
-       LEFT JOIN senders snd ON (c.sender_id = CAST(snd.id AS CHAR) OR FIND_IN_SET(snd.id, c.sender_id) > 0)
-       WHERE q.status = 'pending' 
-       AND (c.status = 'sending' OR (c.status = 'scheduled' AND (c.scheduled_at IS NULL OR c.scheduled_at <= NOW())))
-       ORDER BY (q.id % 10) ASC, q.created_at ASC
-       LIMIT 1 FOR UPDATE`
-    );
-
-    if (rows.length === 0) {
-      return; // No pending emails
+    // 1. Acquire MySQL named lock to guarantee SINGLE-INSTANCE worker execution across all processes
+    const [lockRes] = await connection.query(`SELECT GET_LOCK('bexemail_worker_singleton_lock', 0) as acquired`);
+    if (!lockRes || lockRes[0]?.acquired !== 1) {
+      return; // Another process is currently executing queue processing
     }
 
-    const job = rows[0];
+    try {
+      const [rows] = await connection.query(`
+        SELECT q.id, q.recipient_id, q.campaign_id, q.sender_id as queue_sender_id,
+               c.subject, c.html_content, c.status as campaign_status,
+               s.email, s.first_name, snd.id as sender_id, snd.name as sender_name, snd.email as sender_email,
+               snd.smtp_host, snd.smtp_port, snd.smtp_user, snd.smtp_pass, snd.smtp_secure
+        FROM email_queue q
+         JOIN campaigns c ON q.campaign_id = c.id
+         JOIN subscribers s ON q.recipient_id = s.id
+         LEFT JOIN senders snd ON (
+           (q.sender_id IS NOT NULL AND snd.id = q.sender_id) OR
+           (q.sender_id IS NULL AND (c.sender_id COLLATE utf8mb4_general_ci = CAST(snd.id AS CHAR) COLLATE utf8mb4_general_ci OR FIND_IN_SET(CAST(snd.id AS CHAR), c.sender_id COLLATE utf8mb4_general_ci) > 0))
+         )
+         WHERE q.status = 'pending' 
+         AND (c.status = 'sending' OR (c.status = 'scheduled' AND (c.scheduled_at IS NULL OR c.scheduled_at <= NOW())))
+         ORDER BY (q.id % 10) ASC, q.created_at ASC
+         LIMIT 1 FOR UPDATE`
+      );
+
+      if (rows.length === 0) {
+        return; // No pending emails
+      }
+
+      const job = rows[0];
+
+      // 2. Atomically claim the job status
+      const [claimRes] = await connection.query(
+        `UPDATE email_queue SET status = 'processing' WHERE id = ? AND status = 'pending'`,
+        [job.id]
+      );
+
+      if (claimRes.affectedRows === 0) {
+        return; // Job already claimed by another worker tick
+      }
+
     console.log(`[Worker] Processing email queue job #${job.id} for recipient: ${job.email}`);
 
     // Process HTML tracking
@@ -169,6 +186,9 @@ async function processQueue() {
     // Check if campaign is fully completed
     await resolveCompletedCampaigns(connection);
 
+    } finally {
+      await connection.query(`SELECT RELEASE_LOCK('bexemail_worker_singleton_lock')`).catch(() => {});
+    }
   } catch (err) {
     console.error('[Worker] Database error in queue worker:', err);
   } finally {

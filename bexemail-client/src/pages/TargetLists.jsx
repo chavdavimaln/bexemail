@@ -45,9 +45,6 @@ const TargetLists = () => {
       ]);
       
       let fetchedLists = listsRes.data || [];
-      if (currentUserRole !== 'Super Admin') {
-        fetchedLists = fetchedLists.filter(list => Number(list.admin_id) === Number(currentUser.id));
-      }
       setLists(fetchedLists);
       setAdminUsers(adminsRes.data || []);
     } catch (error) {

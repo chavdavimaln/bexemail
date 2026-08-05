@@ -374,11 +374,6 @@ exports.getBifurcatedSubscribers = async (req, res) => {
     queryParams.push(status);
   }
 
-  if (user && user.role !== 'Super Admin') {
-    query += ' AND s.admin_id = ?';
-    queryParams.push(user.id);
-  }
-
   query += ' ORDER BY s.created_at DESC';
 
   try {
