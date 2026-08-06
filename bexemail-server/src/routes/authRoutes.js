@@ -12,5 +12,6 @@ router.put('/password', checkRole([]), authController.updatePassword);
 // Password Reset endpoints (public)
 const adminsController = require('../controllers/admins');
 router.post('/forget-password', adminsController.sendForgetPassword);
+router.post('/reset-password-public', authController.resetPasswordPublic);
 
 module.exports = router;

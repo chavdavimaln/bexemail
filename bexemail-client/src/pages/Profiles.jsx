@@ -80,6 +80,17 @@ const Profiles = () => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showUserPassword, setShowUserPassword] = useState(false);
+  const [showConfirmUserPassword, setShowConfirmUserPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [resetTargetUser, setResetTargetUser] = useState(null);
+
+  // View Profile Modal State
+  const [showViewProfileModal, setShowViewProfileModal] = useState(false);
+  const [viewProfileData, setViewProfileData] = useState(null);
+  const [showViewProfilePassword, setShowViewProfilePassword] = useState(false);
+
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [showSmtpModal, setShowSmtpModal] = useState(false);
@@ -217,14 +228,27 @@ const Profiles = () => {
 
   const triggerForgetPassword = async (email) => {
     try {
-      await axios.post('http://localhost:5000/api/auth/forget-password', { email });
-      customAlert({ title: 'Reset Link Sent', message: `Forget password link has been sent to ${email} (simulated).`, type: 'success' });
+      await axios.post('/api/auth/forget-password', { email }).catch(() => axios.post('http://localhost:5000/api/auth/forget-password', { email }));
+      customAlert({ 
+        title: 'Reset Link Dispatched', 
+        message: `Password reset link email has been dispatched via SMTP to registered email (${email})!`, 
+        type: 'success' 
+      });
     } catch (err) {
-      customAlert({ title: 'Error', message: 'Failed to trigger password reset link.', type: 'danger' });
+      customAlert({ 
+        title: 'Dispatch Error', 
+        message: err.response?.data?.error || 'Failed to dispatch password reset link email.', 
+        type: 'danger' 
+      });
     }
   };
 
   const handleManualPasswordReset = async () => {
+    if (!passwordForm.newPassword || passwordForm.newPassword.trim() === '') {
+      customAlert({ title: 'Validation Error', message: 'New password cannot be empty.', type: 'danger' });
+      return;
+    }
+
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
       customAlert({ title: 'Validation Error', message: 'Passwords do not match.', type: 'danger' });
       return;
@@ -235,6 +259,7 @@ const Profiles = () => {
       customAlert({ title: 'Success', message: 'Password has been manually reset successfully.', type: 'success' });
       setShowResetPasswordModal(false);
       setPasswordForm({ userId: null, newPassword: '', confirmNewPassword: '' });
+      await fetchData();
     } catch (err) {
       customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to reset password.', type: 'danger' });
     }
@@ -635,6 +660,19 @@ const Profiles = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
+                      {/* View Profile Action */}
+                      <button 
+                        onClick={() => {
+                          setViewProfileData({ user: u, perms });
+                          setShowViewProfilePassword(false);
+                          setShowViewProfileModal(true);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                        title="View Profile Details"
+                      >
+                        <Eye size={16} />
+                      </button>
+
                       {/* Password Actions */}
                       <button 
                         onClick={() => triggerForgetPassword(u.email)}
@@ -645,7 +683,11 @@ const Profiles = () => {
                       </button>
                       <button 
                         onClick={() => {
+                          setResetTargetUser(u);
                           setPasswordForm({ userId: u.id, newPassword: '', confirmNewPassword: '' });
+                          setShowOldPassword(false);
+                          setShowResetPassword(false);
+                          setShowResetConfirmPassword(false);
                           setShowResetPasswordModal(true);
                         }}
                         className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
@@ -936,11 +978,18 @@ const Profiles = () => {
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Confirm Password *</label>
                     <div className="relative">
                       <input 
-                        type={showUserPassword ? 'text' : 'password'} 
+                        type={showConfirmUserPassword ? 'text' : 'password'} 
                         value={userForm.confirmPassword || ''} 
                         onChange={e => setUserForm({...userForm, confirmPassword: e.target.value})} 
                         className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" 
                       />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowConfirmUserPassword(!showConfirmUserPassword)} 
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showConfirmUserPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1103,6 +1152,30 @@ const Profiles = () => {
             </div>
             
             <div className="space-y-4">
+              {/* Display Old/Current Password option for Admin */}
+              {(() => {
+                const targetUser = users.find(u => Number(u.id) === Number(passwordForm.userId)) || resetTargetUser;
+                if (!targetUser) return null;
+                return (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">CURRENT / OLD PASSWORD</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowOldPassword(!showOldPassword)}
+                        className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 focus:outline-none"
+                      >
+                        {showOldPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                        <span>{showOldPassword ? 'Hide Old Password' : 'View Old Password'}</span>
+                      </button>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-slate-800 bg-white px-3 py-1.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                      <span>{showOldPassword ? (targetUser.plain_password || 'Not stored (Pre-existing)') : '••••••••••••'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">New Password *</label>
@@ -1130,13 +1203,13 @@ const Profiles = () => {
                 </div>
                 <div className="relative">
                   <input 
-                    type={showPassword ? "text" : "password"} 
+                    type={showResetPassword ? "text" : "password"} 
                     value={passwordForm.newPassword} 
                     onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} 
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" 
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" 
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  <button type="button" onClick={() => setShowResetPassword(!showResetPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 focus:outline-none">
+                    {showResetPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
@@ -1145,13 +1218,13 @@ const Profiles = () => {
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Confirm New Password *</label>
                 <div className="relative">
                   <input 
-                    type={showPassword ? "text" : "password"} 
+                    type={showResetConfirmPassword ? "text" : "password"} 
                     value={passwordForm.confirmNewPassword} 
                     onChange={e => setPasswordForm({...passwordForm, confirmNewPassword: e.target.value})} 
                     className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" 
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  <button type="button" onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+                    {showResetConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
@@ -1231,6 +1304,121 @@ const Profiles = () => {
               >
                 {testSmtpLoading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                 {testSmtpLoading ? 'Testing SMTP...' : 'Send Test Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: View Profile Details */}
+      {showViewProfileModal && viewProfileData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-6 max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+            <div className="flex justify-between items-center pb-3 border-b shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">User Profile Details</h3>
+                  <p className="text-xs text-gray-500">Full account information & module permissions</p>
+                </div>
+              </div>
+              <button onClick={() => setShowViewProfileModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+              {/* Profile Card Header */}
+              <div className="p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl flex items-center justify-between shadow-sm">
+                <div>
+                  <h4 className="text-base font-extrabold">{viewProfileData.user.name}</h4>
+                  <p className="text-xs text-slate-300 font-mono mt-0.5">@{viewProfileData.user.username || 'no-username'}</p>
+                </div>
+                <span className="px-3 py-1 bg-white/10 text-white border border-white/20 text-xs font-bold rounded-xl backdrop-blur-md">
+                  {viewProfileData.user.role === 'Super Admin' ? 'Admin' : (viewProfileData.user.role === 'Subscriber' || viewProfileData.user.role === 'Sub Admin' ? 'Associates' : (viewProfileData.user.role === 'User' ? 'Developer' : viewProfileData.user.role))}
+                </span>
+              </div>
+
+              {/* Profile Info Details Grid */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <span className="text-gray-400 font-bold uppercase tracking-wider block text-[10px] mb-0.5">EMAIL ADDRESS</span>
+                  <span className="font-extrabold text-gray-800 break-all">{viewProfileData.user.email}</span>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <span className="text-gray-400 font-bold uppercase tracking-wider block text-[10px] mb-0.5">MOBILE NUMBER</span>
+                  <span className="font-extrabold text-gray-800">{viewProfileData.user.number || '—'}</span>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 col-span-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-gray-400 font-bold uppercase tracking-wider text-[10px]">CURRENT PASSWORD</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowViewProfilePassword(!showViewProfilePassword)}
+                      className="text-[11px] font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 focus:outline-none"
+                    >
+                      {showViewProfilePassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                      <span>{showViewProfilePassword ? 'Hide Password' : 'View Password'}</span>
+                    </button>
+                  </div>
+                  <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border border-gray-200 inline-block">
+                    {showViewProfilePassword ? ((users.find(u => Number(u.id) === Number(viewProfileData.user.id)) || viewProfileData.user).plain_password || 'Not stored (Pre-existing)') : '••••••••••••'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Module Permissions Breakdown */}
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-bold text-gray-700 uppercase tracking-wider">ALLOWED MODULE ACCESS</span>
+                  <span className="text-[11px] font-extrabold text-primary-600">
+                    {viewProfileData.user.role === 'Super Admin' || viewProfileData.user.role === 'Admin' 
+                      ? 'All Access (Admin)' 
+                      : `${Object.values(viewProfileData.perms || {}).filter(Boolean).length} / ${MODULES.length} Allowed`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {MODULES.map(m => {
+                    const isAllowed = viewProfileData.user.role === 'Super Admin' || viewProfileData.user.role === 'Admin' || !!viewProfileData.perms[m.id];
+                    return (
+                      <div 
+                        key={m.id} 
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-semibold ${
+                          isAllowed 
+                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' 
+                            : 'bg-gray-50 border-gray-100 text-gray-400 opacity-60'
+                        }`}
+                      >
+                        {isAllowed ? <CheckSquare size={15} className="text-emerald-600 flex-shrink-0" /> : <Square size={15} className="text-gray-300 flex-shrink-0" />}
+                        <span className="truncate">{m.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center border-t pt-4 shrink-0">
+              <button 
+                onClick={() => setShowViewProfileModal(false)} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl text-xs font-semibold border transition"
+              >
+                Close
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setShowViewProfileModal(false);
+                  setUserForm({ ...viewProfileData.user, permissions: viewProfileData.perms, password: '' });
+                  setShowUserModal(true);
+                }} 
+                className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+              >
+                <Edit size={14} />
+                <span>Edit Profile</span>
               </button>
             </div>
           </div>

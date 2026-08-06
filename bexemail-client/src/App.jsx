@@ -19,6 +19,7 @@ import DeveloperAPI from './pages/DeveloperAPI';
 import HistoryLogs from './pages/HistoryLogs';
 import Profile from './pages/Profile';
 import Profiles from './pages/Profiles';
+import ResetPassword from './pages/ResetPassword';
 import Login from './pages/Login';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
 import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
@@ -114,6 +115,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
           {/* Public Routes */}
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/preferences/:id" element={<PreferenceCenter />} />
         </Routes>
       </BrowserRouter>

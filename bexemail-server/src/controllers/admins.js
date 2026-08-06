@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { logHistory } = require('../utils/historyLogger');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 
 // Helper to hash password
 const hashPassword = async (password) => {
@@ -24,7 +25,7 @@ const getCurrentUser = (req) => {
 
 exports.getAdmins = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, name, username, email, number, role, permissions, created_at FROM admin_users ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT id, name, username, email, number, role, permissions, plain_password, created_at FROM admin_users ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Fetch admins error:', error);
@@ -56,11 +57,11 @@ exports.createAdmin = async (req, res) => {
     const permissionsStr = permissions ? JSON.stringify(permissions) : null;
 
     const [result] = await pool.query(
-      'INSERT INTO admin_users (name, username, email, number, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, username || null, email, number || null, hashedPassword, role, permissionsStr]
+      'INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, username || null, email, number || null, hashedPassword, password, role, permissionsStr]
     );
 
-    const newAdmin = { id: result.insertId, name, username, email, number, role, permissions };
+    const newAdmin = { id: result.insertId, name, username, email, number, role, permissions, plain_password: password };
     await logHistory('admin_users', result.insertId, 'add', null, newAdmin, currentUser.role);
     
     res.status(201).json({ message: 'User created successfully', id: result.insertId });
@@ -91,7 +92,7 @@ exports.updateAdmin = async (req, res) => {
   }
 
   try {
-    const [oldDataRows] = await pool.query('SELECT id, name, username, email, number, role, password, permissions FROM admin_users WHERE id = ?', [id]);
+    const [oldDataRows] = await pool.query('SELECT id, name, username, email, number, role, password, plain_password, permissions FROM admin_users WHERE id = ?', [id]);
     if (oldDataRows.length === 0) return res.status(404).json({ error: 'User not found' });
     
     const oldData = oldDataRows[0];
@@ -99,8 +100,10 @@ exports.updateAdmin = async (req, res) => {
     delete oldDataForHistory.password;
 
     let finalPassword = oldData.password;
+    let finalPlainPassword = oldData.plain_password;
     if (password && password.trim() !== '') {
       finalPassword = await hashPassword(password);
+      finalPlainPassword = password;
     }
 
     const permissionsStr = permissions ? JSON.stringify(permissions) : (oldData.permissions ? JSON.stringify(oldData.permissions) : null);
@@ -112,7 +115,7 @@ exports.updateAdmin = async (req, res) => {
     }
 
     await pool.query(
-      'UPDATE admin_users SET name = ?, username = ?, email = ?, number = ?, role = ?, password = ?, permissions = ? WHERE id = ?',
+      'UPDATE admin_users SET name = ?, username = ?, email = ?, number = ?, role = ?, password = ?, plain_password = ?, permissions = ? WHERE id = ?',
       [
         name || oldData.name, 
         username !== undefined ? username : oldData.username, 
@@ -120,12 +123,13 @@ exports.updateAdmin = async (req, res) => {
         number !== undefined ? number : oldData.number, 
         finalRole, 
         finalPassword, 
+        finalPlainPassword,
         permissionsStr,
         id
       ]
     );
 
-    const [newDataRows] = await pool.query('SELECT id, name, username, email, number, role, permissions FROM admin_users WHERE id = ?', [id]);
+    const [newDataRows] = await pool.query('SELECT id, name, username, email, number, role, permissions, plain_password FROM admin_users WHERE id = ?', [id]);
     await logHistory('admin_users', id, 'edit', oldDataForHistory, newDataRows[0], currentUser.role);
 
     res.json({ message: 'User updated successfully' });
@@ -190,7 +194,7 @@ exports.resetPasswordManually = async (req, res) => {
 
   try {
     const hashedPassword = await hashPassword(newPassword);
-    await pool.query('UPDATE admin_users SET password = ? WHERE id = ?', [hashedPassword, id]);
+    await pool.query('UPDATE admin_users SET password = ?, plain_password = ? WHERE id = ?', [hashedPassword, newPassword, id]);
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error('Reset password error:', error);
@@ -202,20 +206,86 @@ exports.sendForgetPassword = async (req, res) => {
   const { email } = req.body;
   
   if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
+    return res.status(400).json({ error: 'Registered email address is required' });
   }
 
   try {
-    const [rows] = await pool.query('SELECT id FROM admin_users WHERE email = ?', [email]);
+    const [rows] = await pool.query('SELECT id, name, username, email, plain_password FROM admin_users WHERE email = ?', [email]);
     if (rows.length === 0) {
-      // Silently return success to avoid email harvesting
-      return res.json({ message: 'If the email exists, a password reset link has been sent' });
+      return res.status(404).json({ error: 'No user profile found for this registered email address.' });
     }
+    const user = rows[0];
+
+    // Fetch active SMTP sender configuration
+    const [senderRows] = await pool.query('SELECT * FROM senders ORDER BY is_default DESC, id ASC LIMIT 1');
+    const sender = senderRows[0] || {};
+
+    const host = (sender.smtp_host || 'smtp.gmail.com').trim();
+    let port = Number(sender.smtp_port || 465);
+    if (!port || isNaN(port)) port = 465;
+    const smtpUser = (sender.smtp_user || sender.email || 'info@bexcodeservices.com').trim();
     
-    console.log(`[Password Reset] Forget password requested for: ${email}. A mock reset link would be dispatched.`);
-    res.json({ message: 'Password reset link sent successfully' });
+    let pass = (sender.smtp_pass && sender.smtp_pass !== '********') ? sender.smtp_pass : null;
+    if (!pass) {
+      const [settingsRows] = await pool.query('SELECT setting_key, setting_value FROM settings');
+      const sysSettings = (settingsRows || []).reduce((acc, curr) => {
+        acc[curr.setting_key] = curr.setting_value;
+        return acc;
+      }, {});
+      pass = sysSettings.smtp_pass || sysSettings.smtp_password || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || 'tbwffkmwugtbaiuw';
+    }
+
+    const isSecure = (sender.smtp_secure === 'ssl' || sender.smtp_secure === 'true' || port === 465);
+    const fromEmail = sender.email || smtpUser;
+    const fromName = sender.name || 'BexEmail Security';
+    const resetLink = `http://localhost:5173/reset-password?email=${encodeURIComponent(user.email)}`;
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: isSecure,
+      auth: smtpUser && pass ? { user: smtpUser, pass: pass.trim() } : undefined,
+      tls: { rejectUnauthorized: false }
+    });
+
+    const mailOptions = {
+      from: `"${fromName}" <${fromEmail}>`,
+      to: user.email,
+      subject: `🔐 Password Reset Instructions - BexEmail`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 550px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <h2 style="color: #2563eb; margin-top: 0;">🔐 Password Reset Instructions</h2>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+            Hello <strong>${user.name || user.email}</strong>,
+          </p>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+            A password reset link was requested for your registered account: <code>${user.email}</code>.
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin: 15px 0;">
+            <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: bold; color: #475569;">ACCOUNT SECURITY DETAILS:</p>
+            <ul style="color: #475569; font-size: 13px; padding-left: 20px; margin: 0; line-height: 1.6;">
+              <li><strong>Registered Email:</strong> ${user.email}</li>
+              <li><strong>Account Name:</strong> ${user.name || 'User'}</li>
+              <li><strong>Direct Profile Reset Link:</strong> <a href="${resetLink}" style="color: #2563eb; font-weight: bold;">${resetLink}</a></li>
+            </ul>
+          </div>
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${resetLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
+              Open Profile & Reset Password
+            </a>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px; border-top: 1px solid #f1f5f9; padding-top: 15px; margin-top: 20px;">
+            If you did not request this email, you can safely ignore it.
+          </p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[Password Reset] Reset link email dispatched successfully via SMTP to: ${user.email}`);
+    res.json({ message: `Password reset link email dispatched successfully to ${user.email}` });
   } catch (error) {
     console.error('Forget password error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Failed to send password reset email: ' + error.message });
   }
 };

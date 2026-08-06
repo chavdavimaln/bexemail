@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { User, Lock, Phone, Save, Camera, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
+import { useModal } from '../context/ModalContext';
 
 const Profile = () => {
+  const { alert: customAlert } = useModal();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [profileData, setProfileData] = useState({
     username: currentUser.username || currentUser.email?.split('@')[0] || 'subscriber',
@@ -29,51 +31,114 @@ const Profile = () => {
 
   const fetchProfile = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/auth/me');
+      const headers = {
+        'x-user-id': currentUser.id || 1,
+        'x-user-role': currentUser.role || 'Super Admin'
+      };
+      const res = await axios.get('/api/auth/me', { headers }).catch(() => axios.get('http://localhost:5000/api/auth/me', { headers }));
+      const fetched = res.data;
       setProfileData(prev => ({
         ...prev,
-        username: res.data.username || res.data.email?.split('@')[0] || currentUser.username || 'subscriber',
-        email: res.data.email || currentUser.email || '',
-        firstName: res.data.first_name || res.data.name || prev.firstName,
-        lastName: res.data.last_name || prev.lastName,
-        phone: res.data.phone || prev.phone
+        username: fetched.username || fetched.email?.split('@')[0] || currentUser.username || 'subscriber',
+        email: fetched.email || currentUser.email || '',
+        firstName: fetched.name || fetched.first_name || prev.firstName,
+        lastName: fetched.last_name || prev.lastName,
+        phone: fetched.number || fetched.phone || prev.phone
+      }));
+
+      const activePassword = fetched.plain_password || currentUser.plain_password || 'vimal1234';
+      setPasswords(prev => ({
+        ...prev,
+        current: activePassword
       }));
     } catch (err) {
-      console.error(err);
+      console.error('Fetch profile error:', err);
     }
   };
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     try {
-      await axios.put('http://localhost:5000/api/auth/profile', { email: profileData.email });
-      alert('Profile updated successfully!');
+      const headers = {
+        'x-user-id': currentUser.id || 1,
+        'x-user-role': currentUser.role || 'Super Admin'
+      };
+      await axios.put('/api/auth/profile', {
+        name: `${profileData.firstName} ${profileData.lastName}`.trim(),
+        email: profileData.email,
+        phone: profileData.phone
+      }, { headers }).catch(() => axios.put('http://localhost:5000/api/auth/profile', {
+        name: `${profileData.firstName} ${profileData.lastName}`.trim(),
+        email: profileData.email,
+        phone: profileData.phone
+      }, { headers }));
+
+      customAlert({ title: 'Success', message: 'Profile updated successfully!', type: 'success' });
     } catch (err) {
-      alert('Failed to update profile.');
+      customAlert({ title: 'Error', message: 'Failed to update profile.', type: 'danger' });
     }
   };
 
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
+    if (!passwords.new || passwords.new.trim() === '') {
+      customAlert({ title: 'Validation Required', message: 'Please enter a new password!', type: 'warning' });
+      return;
+    }
     if (passwords.new !== passwords.confirm) {
-      alert('New passwords do not match!');
+      customAlert({ title: 'Validation Error', message: 'New passwords do not match!', type: 'danger' });
       return;
     }
     try {
-      await axios.put('http://localhost:5000/api/auth/password', {
+      const headers = {
+        'x-user-id': currentUser.id || 1,
+        'x-user-role': currentUser.role || 'Super Admin'
+      };
+      const res = await axios.put('/api/auth/password', {
         currentPassword: passwords.current,
         newPassword: passwords.new
+      }, { headers }).catch(() => axios.put('http://localhost:5000/api/auth/password', {
+        currentPassword: passwords.current,
+        newPassword: passwords.new
+      }, { headers }));
+
+      const updatedPassword = res.data?.plain_password || passwords.new;
+      customAlert({ title: 'Password Updated', message: 'Password updated successfully!', type: 'success' });
+      
+      const updatedUser = { ...currentUser, plain_password: updatedPassword };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+
+      setPasswords({
+        current: updatedPassword,
+        new: '',
+        confirm: ''
       });
-      alert('Password updated successfully!');
-      setPasswords({ current: '', new: '', confirm: '' });
+      fetchProfile();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update password.');
+      customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to update password.', type: 'danger' });
     }
   };
 
-  const handleForgotPassword = () => {
-    // Simulate password reset email
-    alert('A password reset link has been sent to your email address.');
+  const handleForgotPassword = async () => {
+    const targetEmail = profileData.email || currentUser.email;
+    if (!targetEmail) {
+      customAlert({ title: 'Error', message: 'No registered email found for this profile.', type: 'danger' });
+      return;
+    }
+    try {
+      await axios.post('/api/auth/forget-password', { email: targetEmail }).catch(() => axios.post('http://localhost:5000/api/auth/forget-password', { email: targetEmail }));
+      customAlert({ 
+        title: 'Reset Link Dispatched', 
+        message: `Password reset link email has been dispatched via SMTP to your registered email (${targetEmail})!`, 
+        type: 'success' 
+      });
+    } catch (err) {
+      customAlert({ 
+        title: 'Dispatch Error', 
+        message: err.response?.data?.error || 'Failed to send password reset email.', 
+        type: 'danger' 
+      });
+    }
   };
 
   const handleImageChange = (e) => {
