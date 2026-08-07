@@ -1,6 +1,7 @@
 import React from 'react';
+import axios from 'axios';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, ChevronLeft, Database } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, ChevronLeft, Database, ShieldCheck } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -9,12 +10,29 @@ const Sidebar = () => {
     contacts: location.pathname.startsWith('/contacts') || location.pathname.startsWith('/lists'),
     campaigns: location.pathname.startsWith('/campaigns') || location.pathname.startsWith('/templates'),
     backups: location.pathname.startsWith('/backups') || location.pathname.startsWith('/history'),
+    profiles: location.pathname.startsWith('/profiles') || location.pathname.startsWith('/permissions'),
     settings: location.pathname.startsWith('/settings') || location.pathname.startsWith('/developer')
   });
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const userRole = user.role;
-  const userPermissions = user.permissions || {};
+  
+  const getUserPermissions = (raw) => {
+    if (!raw) return {};
+    if (typeof raw === 'object' && raw !== null) return raw;
+    if (typeof raw === 'string') {
+      try {
+        let p = JSON.parse(raw);
+        if (typeof p === 'string') p = JSON.parse(p);
+        return typeof p === 'object' && p !== null ? p : {};
+      } catch (e) {
+        return {};
+      }
+    }
+    return {};
+  };
+
+  const [userPermissions, setUserPermissions] = React.useState(() => getUserPermissions(user.permissions));
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
@@ -50,7 +68,15 @@ const Sidebar = () => {
         { name: 'History Logs', path: '/history' },
       ]
     },
-    { name: 'Profiles', path: '/profiles', icon: <Users size={20} /> },
+    { 
+      name: 'Profiles', 
+      id: 'profiles',
+      icon: <Users size={20} />,
+      subItems: [
+        { name: 'User Profiles & Access', path: '/profiles' },
+        { name: 'Module Access Permissions', path: '/permissions', adminOnly: true }
+      ]
+    },
     { 
       name: 'Settings', 
       id: 'settings',
@@ -63,38 +89,89 @@ const Sidebar = () => {
   ];
 
   const checkPermission = (item) => {
-    if (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Sub Admin' || !userRole) return true;
+    if (item.adminOnly) {
+      const rawRoleStr = (userRole || '').toString().toLowerCase();
+      return rawRoleStr === 'super admin' || rawRoleStr === 'admin';
+    }
+
+    const rawUserRole = (userRole || '').toString().toLowerCase();
+    if (rawUserRole === 'super admin' || rawUserRole === 'admin') return true;
     
     // Default allowed items
     if (item.path === '/' || item.path === '/profile') return true;
-    
-    const permissionMap = {
-      'campaigns': 'campaigns',
-      'contacts': 'contacts',
-      '/contacts/export': 'contacts',
-      'backups': 'history_logs',
-      '/backups': 'history_logs',
-      '/backups/schedules': 'history_logs',
-      '/lists': 'lists',
-      '/reports': 'reports',
-      '/developer': 'api_access',
-      '/history': 'history_logs',
-      '/profiles': 'profiles',
-      'settings': 'settings',
-      '/settings': 'settings',
-      '/settings/system': 'settings',
-      '/settings/api-access': 'api_access'
-    };
 
     const key = item.id || item.path;
-    const permKey = permissionMap[key];
-    if (permKey) {
-      return userPermissions[permKey] === true;
+
+    if (key === 'contacts' || key === '/contacts' || key === '/lists' || key === '/contacts/bulk-import' || key === '/contacts/import-logs' || key === '/contacts/export') {
+      return true;
     }
-    return true;
+    if (key === 'campaigns' || key === '/campaigns' || key === '/templates') {
+      return true;
+    }
+    if (key === '/reports') {
+      return userPermissions.reports === true;
+    }
+    if (key === 'backups' || key === '/backups') {
+      return !!(userPermissions.backup_history_all || userPermissions.backup_history_management || userPermissions.backup_history_auto_backup || userPermissions.backup_history_logs);
+    }
+    if (key === '/backups/schedules') {
+      return !!(userPermissions.backup_history_all || userPermissions.backup_history_auto_backup);
+    }
+    if (key === '/history') {
+      return !!(userPermissions.backup_history_all || userPermissions.backup_history_logs);
+    }
+    if (key === 'profiles' || key === '/profiles') {
+      return !!(userPermissions.profiles_all || userPermissions.profiles_user_accounts || userPermissions.profiles_smtp_config || userPermissions.profiles_database_backup);
+    }
+    if (key === 'settings' || key === '/settings' || key === '/settings/system') {
+      return !!(userPermissions.settings_all || userPermissions.settings_system || userPermissions.settings_api_access);
+    }
+    if (key === '/settings/api-access' || key === '/developer') {
+      return !!(userPermissions.settings_all || userPermissions.settings_api_access);
+    }
+    return false;
   };
 
-  const filteredNavItems = navItems.filter(checkPermission);
+  React.useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      axios.get('http://localhost:5000/api/auth/me')
+        .then(res => {
+          const freshUser = res.data.user || res.data;
+          if (freshUser && freshUser.id) {
+            let perms = freshUser.permissions;
+            if (perms && typeof perms === 'string') {
+              try { perms = JSON.parse(perms); } catch (e) {}
+            }
+            if (perms && typeof perms === 'string') {
+              try { perms = JSON.parse(perms); } catch (e) {}
+            }
+            const parsedPerms = (perms && typeof perms === 'object') ? perms : {};
+            freshUser.permissions = parsedPerms;
+            localStorage.setItem('user', JSON.stringify(freshUser));
+            setUserPermissions(parsedPerms);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [location.pathname]);
+
+  const filteredNavItems = navItems
+    .map(item => {
+      if (item.subItems) {
+        const allowedSubItems = item.subItems.filter(sub => {
+          if (sub.adminOnly) {
+            const rawRoleStr = (userRole || '').toString().toLowerCase();
+            return rawRoleStr === 'super admin' || rawRoleStr === 'admin';
+          }
+          return checkPermission(sub);
+        });
+        if (allowedSubItems.length === 0) return null;
+        return { ...item, subItems: allowedSubItems };
+      }
+      return checkPermission(item) ? item : null;
+    })
+    .filter(Boolean);
 
   return (
     <aside className={`${isCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col h-full transition-all duration-300 ease-in-out`}>
@@ -149,6 +226,7 @@ const Sidebar = () => {
                         contacts: item.id === 'contacts',
                         campaigns: item.id === 'campaigns',
                         backups: item.id === 'backups',
+                        profiles: item.id === 'profiles',
                         settings: item.id === 'settings'
                       };
                     } else {

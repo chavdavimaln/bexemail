@@ -19,6 +19,7 @@ import DeveloperAPI from './pages/DeveloperAPI';
 import HistoryLogs from './pages/HistoryLogs';
 import Profile from './pages/Profile';
 import Profiles from './pages/Profiles';
+import PermissionsManager from './pages/PermissionsManager';
 import ResetPassword from './pages/ResetPassword';
 import Login from './pages/Login';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
@@ -111,6 +112,7 @@ function App() {
             <Route path="history" element={<BackupsAndHistory initialTab="history" />} />
             <Route path="profile" element={<Profile />} />
             <Route path="profiles" element={<Profiles />} />
+            <Route path="permissions" element={<PermissionsManager />} />
             {/* Add more routes here later */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -26,7 +26,17 @@ const getCurrentUser = (req) => {
 exports.getAdmins = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT id, name, username, email, number, role, permissions, plain_password, created_at FROM admin_users ORDER BY created_at DESC');
-    res.json(rows);
+    const parsedRows = rows.map(r => {
+      let perms = r.permissions;
+      if (typeof perms === 'string') {
+        try { perms = JSON.parse(perms); } catch (e) {}
+      }
+      if (typeof perms === 'string') {
+        try { perms = JSON.parse(perms); } catch (e) {}
+      }
+      return { ...r, permissions: perms || {} };
+    });
+    res.json(parsedRows);
   } catch (error) {
     console.error('Fetch admins error:', error);
     res.status(500).json({ error: 'Database error' });
@@ -54,7 +64,8 @@ exports.createAdmin = async (req, res) => {
     }
 
     const hashedPassword = await hashPassword(password);
-    const permissionsStr = permissions ? JSON.stringify(permissions) : null;
+    const defaultPerms = permissions || {};
+    const permissionsStr = JSON.stringify(defaultPerms);
 
     const [result] = await pool.query(
       'INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -106,7 +117,12 @@ exports.updateAdmin = async (req, res) => {
       finalPlainPassword = password;
     }
 
-    const permissionsStr = permissions ? JSON.stringify(permissions) : (oldData.permissions ? JSON.stringify(oldData.permissions) : null);
+    let permissionsStr = null;
+    if (permissions !== undefined) {
+      permissionsStr = typeof permissions === 'string' ? permissions : JSON.stringify(permissions);
+    } else if (oldData.permissions !== undefined && oldData.permissions !== null) {
+      permissionsStr = typeof oldData.permissions === 'string' ? oldData.permissions : JSON.stringify(oldData.permissions);
+    }
 
     // If a non-SuperAdmin is editing self, keep their role unchanged
     let finalRole = role || oldData.role;

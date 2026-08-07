@@ -32,14 +32,25 @@ exports.login = async (req, res) => {
             { expiresIn: '24h' }
         );
 
+        let perms = user.permissions;
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
+        }
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
+        }
+
         res.status(200).json({
             message: 'Login successful',
             token,
             user: {
                 id: user.id,
+                name: user.name,
+                username: user.username,
                 email: user.email,
+                number: user.number,
                 role: user.role,
-                permissions: user.permissions ? (typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions) : null
+                permissions: perms || {}
             }
         });
     } catch (error) {
@@ -59,9 +70,14 @@ exports.getMe = async (req, res) => {
         }
 
         const user = users[0];
-        if (user.permissions && typeof user.permissions === 'string') {
-            user.permissions = JSON.parse(user.permissions);
+        let perms = user.permissions;
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
         }
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
+        }
+        user.permissions = perms || {};
 
         res.status(200).json(user);
     } catch (error) {

@@ -7,21 +7,42 @@ import {
 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
-const MODULES = [
-  { id: 'campaigns', name: 'Campaigns & Templates' },
-  { id: 'automations', name: 'Automations & Workflows' },
-  { id: 'integrations', name: 'Integrations & Webhooks' },
-  { id: 'forms', name: 'Forms Builder' },
-  { id: 'contacts', name: 'Contacts & Directory' },
-  { id: 'lists', name: 'Target Lists Management' },
-  { id: 'reports', name: 'Reports & Analytics' },
-  { id: 'api_access', name: 'API Key Access' },
-  { id: 'history_logs', name: 'Audit History Logs' },
-  { id: 'settings', name: 'System Settings' },
-  { id: 'all_system_backup', name: 'All System Backup Access' },
-  { id: 'database_backup', name: 'Database Backup Access' },
-  { id: 'contacts_backup', name: 'Contacts Backup Access' }
+const MODULE_SECTIONS = [
+  {
+    category: 'Reports Permissions',
+    items: [
+      { id: 'reports', name: 'reports' }
+    ]
+  },
+  {
+    category: 'Backup and History Permissions',
+    items: [
+      { id: 'backup_history_all', name: 'backup and history - all', isAll: true, group: 'backup_history' },
+      { id: 'backup_history_management', name: 'backup and history - backup management', group: 'backup_history' },
+      { id: 'backup_history_auto_backup', name: 'backup and history - auto backup', group: 'backup_history' },
+      { id: 'backup_history_logs', name: 'backup and history - history logs', group: 'backup_history' }
+    ]
+  },
+  {
+    category: 'Profiles Permissions',
+    items: [
+      { id: 'profiles_all', name: 'profiles - all', isAll: true, group: 'profiles' },
+      { id: 'profiles_database_backup', name: 'profiles - database backup', group: 'profiles' },
+      { id: 'profiles_user_accounts', name: 'profiles - system settings - User Accounts & Permissions', group: 'profiles' },
+      { id: 'profiles_smtp_config', name: 'profiles - system settings - SMTP Server Configurations', group: 'profiles' }
+    ]
+  },
+  {
+    category: 'Settings Permissions',
+    items: [
+      { id: 'settings_all', name: 'settings - all', isAll: true, group: 'settings' },
+      { id: 'settings_system', name: 'settings - system settings', group: 'settings' },
+      { id: 'settings_api_access', name: 'settings - api access', group: 'settings' }
+    ]
+  }
 ];
+
+const MODULES = MODULE_SECTIONS.flatMap(sec => sec.items);
 
 const Profiles = () => {
   const { confirm, alert: customAlert } = useModal();
@@ -389,7 +410,26 @@ const Profiles = () => {
   const handleTogglePermission = (moduleId) => {
     setUserForm(prev => {
       const nextPerms = { ...prev.permissions };
-      nextPerms[moduleId] = !nextPerms[moduleId];
+      const targetItem = MODULES.find(m => m.id === moduleId);
+      const newValue = !nextPerms[moduleId];
+      nextPerms[moduleId] = newValue;
+
+      if (targetItem && targetItem.isAll && targetItem.group) {
+        // Toggle all items in this category group
+        const groupItems = MODULES.filter(m => m.group === targetItem.group);
+        groupItems.forEach(item => {
+          nextPerms[item.id] = newValue;
+        });
+      } else if (targetItem && targetItem.group) {
+        // Check if all group items are checked
+        const groupItems = MODULES.filter(m => m.group === targetItem.group && !m.isAll);
+        const allChecked = groupItems.every(item => nextPerms[item.id]);
+        const groupAllItem = MODULES.find(m => m.group === targetItem.group && m.isAll);
+        if (groupAllItem) {
+          nextPerms[groupAllItem.id] = allChecked;
+        }
+      }
+
       return { ...prev, permissions: nextPerms };
     });
   };
@@ -599,15 +639,23 @@ const Profiles = () => {
             <span>User Accounts & Permissions</span>
           </h3>
           {isAdmin && (
-            <button 
-              onClick={() => {
-                setUserForm({ id: null, name: '', username: '', email: '', number: '', password: '', role: 'User', permissions: {} });
-                setShowUserModal(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-xl text-xs font-bold transition shadow-sm"
-            >
-              <UserPlus size={15} /> Add User Profile
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => navigate('/permissions')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold transition border border-purple-200 shadow-xs"
+              >
+                <ShieldCheck size={15} /> Module Access Permissions
+              </button>
+              <button 
+                onClick={() => {
+                  setUserForm({ id: null, name: '', username: '', email: '', number: '', password: '', role: 'User', permissions: {} });
+                  setShowUserModal(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                <UserPlus size={15} /> Add User Profile
+              </button>
+            </div>
           )}
         </div>
         
@@ -654,9 +702,15 @@ const Profiles = () => {
                       {u.role === 'Super Admin' || u.role === 'Admin' ? (
                         <span className="text-xs text-purple-600 font-medium">All Access (Admin)</span>
                       ) : (
-                        <span className="text-xs text-gray-500 font-medium">
-                          {activePermsCount} / {MODULES.length} Modules Allowed
-                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => navigate(`/permissions?userId=${u.id}`)}
+                          className="text-xs text-primary-600 hover:text-primary-800 font-bold hover:underline flex items-center gap-1.5 focus:outline-none"
+                          title="Open Module Access Permissions on Separate Page"
+                        >
+                          <span>{activePermsCount} / {MODULES.length} Modules Allowed</span>
+                          <ShieldCheck size={14} className="text-primary-500" />
+                        </button>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
@@ -1014,25 +1068,25 @@ const Profiles = () => {
                 </select>
               </div>
 
-              {/* Module Checkbox Permissions */}
+              {/* Module Access Permissions Link */}
               {userForm.role !== 'Super Admin' && userForm.role !== 'Admin' && (
-                <div className="space-y-2 pt-2 border-t">
-                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Module Access Permissions</span>
-                  <div className="grid grid-cols-2 gap-3">
-                    {MODULES.map(m => {
-                      const isChecked = !!userForm.permissions[m.id];
-                      return (
-                        <button 
-                          key={m.id} 
-                          type="button" 
-                          onClick={() => handleTogglePermission(m.id)}
-                          className="flex items-center text-left gap-2 p-2 border border-gray-200 hover:border-primary-400 hover:bg-gray-50/50 rounded-xl text-xs font-semibold transition"
-                        >
-                          {isChecked ? <CheckSquare size={16} className="text-primary-600" /> : <Square size={16} className="text-gray-400" />}
-                          <span className="text-gray-700">{m.name}</span>
-                        </button>
-                      );
-                    })}
+                <div className="pt-3 border-t space-y-2">
+                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Module Access Permissions</span>
+                  <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-extrabold text-purple-900">Configure Module Access Permissions</p>
+                      <p className="text-[11px] text-purple-700">Manage granular database permissions on separate page</p>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setShowUserModal(false);
+                        navigate(userForm.id ? `/permissions?userId=${userForm.id}` : '/permissions');
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+                    >
+                      <ShieldCheck size={15} /> Open Permissions Page
+                    </button>
                   </div>
                 </div>
               )}
@@ -1370,7 +1424,7 @@ const Profiles = () => {
               </div>
 
               {/* Module Permissions Breakdown */}
-              <div className="space-y-2 pt-2 border-t">
+              <div className="space-y-3 pt-2 border-t">
                 <div className="flex items-center justify-between">
                   <span className="block text-xs font-bold text-gray-700 uppercase tracking-wider">ALLOWED MODULE ACCESS</span>
                   <span className="text-[11px] font-extrabold text-primary-600">
@@ -1380,23 +1434,32 @@ const Profiles = () => {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {MODULES.map(m => {
-                    const isAllowed = viewProfileData.user.role === 'Super Admin' || viewProfileData.user.role === 'Admin' || !!viewProfileData.perms[m.id];
-                    return (
-                      <div 
-                        key={m.id} 
-                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-semibold ${
-                          isAllowed 
-                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' 
-                            : 'bg-gray-50 border-gray-100 text-gray-400 opacity-60'
-                        }`}
-                      >
-                        {isAllowed ? <CheckSquare size={15} className="text-emerald-600 flex-shrink-0" /> : <Square size={15} className="text-gray-300 flex-shrink-0" />}
-                        <span className="truncate">{m.name}</span>
+                <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+                  {MODULE_SECTIONS.map(section => (
+                    <div key={section.category} className="p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl space-y-1.5">
+                      <h4 className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
+                        {section.category}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                        {section.items.map(m => {
+                          const isAllowed = viewProfileData.user.role === 'Super Admin' || viewProfileData.user.role === 'Admin' || !!viewProfileData.perms[m.id];
+                          return (
+                            <div 
+                              key={m.id} 
+                              className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-xs font-semibold ${
+                                isAllowed 
+                                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' 
+                                  : 'bg-white border-gray-100 text-gray-400 opacity-60'
+                              }`}
+                            >
+                              {isAllowed ? <CheckSquare size={14} className="text-emerald-600 flex-shrink-0" /> : <Square size={14} className="text-gray-300 flex-shrink-0" />}
+                              <span className="truncate">{m.name}</span>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

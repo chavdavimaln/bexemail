@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { Users, Plus, Mail, User, Edit2, Trash2, List as ListIcon, Check, X, Upload, Settings2, Search, Tag, RefreshCw, Layers, CheckSquare, Square, FolderPlus, UserPlus, Filter, CheckCircle2, SlidersHorizontal, CheckSquare2, Sparkles, Globe, Eye, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
+const capitalize = (str) => (!str ? '' : str.charAt(0).toUpperCase() + str.slice(1));
+
 const Contacts = () => {
   const { confirm, alert: customAlert } = useModal();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -28,6 +30,7 @@ const Contacts = () => {
   // Single Add Form State
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
+  const [selectedProfileIds, setSelectedProfileIds] = useState([]);
   const [selectedListIds, setSelectedListIds] = useState([]);
   const [adding, setAdding] = useState(false);
   
@@ -127,10 +130,46 @@ const Contacts = () => {
 
   const handleAddContact = async (e) => {
     e.preventDefault();
-    if (!newEmail || selectedListIds.length === 0) {
+
+    const contactsToAdd = [];
+
+    // 1. Add manual email if entered
+    if (newEmail && newEmail.trim()) {
+      contactsToAdd.push({
+        email: newEmail.trim(),
+        name: newName.trim(),
+        conflictAction: 'merge'
+      });
+    }
+
+    // 2. Add selected registered profiles
+    selectedProfileIds.forEach(profileId => {
+      const profile = adminUsers.find(u => Number(u.id) === Number(profileId));
+      if (profile && profile.email) {
+        // Prevent duplicate if user also manually typed the exact same email
+        if (!contactsToAdd.some(c => c.email.toLowerCase() === profile.email.trim().toLowerCase())) {
+          contactsToAdd.push({
+            email: profile.email.trim(),
+            name: (profile.name || profile.username || profile.email.split('@')[0] || '').trim(),
+            conflictAction: 'merge'
+          });
+        }
+      }
+    });
+
+    if (contactsToAdd.length === 0) {
+      customAlert({
+        title: 'Validation Required',
+        message: 'Please enter an Email Address manually or select at least one registered User Profile email.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    if (selectedListIds.length === 0) {
       customAlert({
         title: 'Validation Error',
-        message: 'Please enter an email address and select at least one target list.',
+        message: 'Please select at least one Target List to assign.',
         type: 'warning'
       });
       return;
@@ -141,33 +180,30 @@ const Contacts = () => {
       await axios.post('http://localhost:5000/api/bulk-import/confirm', {
         originSite: window.location.hostname || 'localhost',
         importType: 'manual',
-        filename: 'Single Add',
+        filename: 'Manual & Profile Contact Add',
         listIds: selectedListIds.map(Number),
         adminId: currentUserRole === 'Super Admin'
           ? (newContactAdminId !== '' && newContactAdminId !== null && newContactAdminId !== undefined ? Number(newContactAdminId) : null)
           : currentUser.id,
-        contacts: [{
-          email: newEmail.trim(),
-          name: newName.trim(),
-          conflictAction: 'merge'
-        }]
+        contacts: contactsToAdd
       });
 
       setNewEmail('');
       setNewName('');
+      setSelectedProfileIds([]);
       setNewContactAdminId('');
       setShowAddContactModal(false);
       await fetchData(); 
       customAlert({
         title: 'Success',
-        message: 'Contact and target lists assigned successfully!',
+        message: `Successfully added ${contactsToAdd.length} contact(s) and assigned target list(s)!`,
         type: 'success'
       });
     } catch (error) {
       console.error(error);
       customAlert({
         title: 'Error',
-        message: error.response?.data?.error || 'Failed to add contact.',
+        message: error.response?.data?.error || 'Failed to add contact(s).',
         type: 'danger'
       });
     } finally {
@@ -477,7 +513,14 @@ const Contacts = () => {
     const matchesSearch = (sub.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (sub.first_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === 'all' || sub.status === statusFilter;
+    const matchingAdmin = adminUsers.find(
+      u => u.email && u.email.trim().toLowerCase() === (sub.email || '').trim().toLowerCase()
+    );
+    const effectiveStatus = (matchingAdmin && matchingAdmin.role) ? matchingAdmin.role : sub.status;
+
+    const matchesStatus = statusFilter === 'all' || 
+                          sub.status === statusFilter || 
+                          (effectiveStatus && effectiveStatus.toLowerCase() === statusFilter.toLowerCase());
     
     let matchesList = true;
     if (listFilter !== 'all') {
@@ -640,7 +683,7 @@ const Contacts = () => {
             className="flex items-center gap-1.5 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs rounded-xl shadow-sm shadow-primary-200 transition"
           >
             <UserPlus size={15} />
-            + Add Contact
+            + Add Contact / Assign Target
           </button>
 
           <Link
@@ -811,22 +854,52 @@ const Contacts = () => {
                               <option value="subscribed">Subscribed</option>
                               <option value="unsubscribed">Unsubscribed</option>
                             </select>
-                          ) : sub.origins && sub.origins.length > 1 ? (
-                            <div className="space-y-1">
-                              {sub.origins.map(origin => (
-                                <div key={origin.origin_site} className="flex items-center gap-1">
-                                  <span className="text-[10px] text-gray-400 font-semibold">{origin.origin_site}:</span>
-                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${origin.status === 'subscribed' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                                    {origin.status}
-                                  </span>
+                          ) : (() => {
+                            const matchingAdmin = adminUsers.find(
+                              u => u.email && u.email.trim().toLowerCase() === (sub.email || '').trim().toLowerCase()
+                            );
+
+                            if (matchingAdmin && matchingAdmin.role) {
+                              const role = matchingAdmin.role;
+                              let badgeStyle = "bg-indigo-100 text-indigo-800 border border-indigo-300";
+                              const roleLower = role.toLowerCase();
+
+                              if (roleLower.includes('developer')) {
+                                badgeStyle = "bg-emerald-100 text-emerald-800 border border-emerald-300";
+                              } else if (roleLower.includes('associate')) {
+                                badgeStyle = "bg-blue-100 text-blue-800 border border-blue-300";
+                              } else if (roleLower.includes('admin')) {
+                                badgeStyle = "bg-purple-100 text-purple-800 border border-purple-300";
+                              }
+
+                              return (
+                                <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full shadow-xs ${badgeStyle}`}>
+                                  {capitalize(role)}
+                                </span>
+                              );
+                            }
+
+                            if (sub.origins && sub.origins.length > 1) {
+                              return (
+                                <div className="space-y-1">
+                                  {sub.origins.map(origin => (
+                                    <div key={origin.origin_site} className="flex items-center gap-1">
+                                      <span className="text-[10px] text-gray-400 font-semibold">{origin.origin_site}:</span>
+                                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${origin.status === 'subscribed' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                        {capitalize(origin.status)}
+                                      </span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${sub.status === 'subscribed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {sub.status}
-                            </span>
-                          )}
+                              );
+                            }
+
+                            return (
+                              <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${sub.status === 'subscribed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {capitalize(sub.status || 'subscribed')}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Target Lists */}
@@ -1311,7 +1384,7 @@ const Contacts = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-lg w-full p-6 space-y-5 animate-in fade-in-50">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <UserPlus size={18} className="text-primary-600" /> Add New Contacts
+                <UserPlus size={18} className="text-primary-600" /> Add new contacts and Assign target list
               </h3>
               <button onClick={() => setShowAddContactModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
@@ -1326,7 +1399,7 @@ const Contacts = () => {
                   addMode === 'single' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <User size={14} /> Single Add Form
+                <User size={14} /> Single / Profile Add Form
               </button>
               <button
                 onClick={() => setAddMode('bulk_file')}
@@ -1339,32 +1412,99 @@ const Contacts = () => {
             </div>
 
             {addMode === 'single' ? (
-              <form onSubmit={handleAddContact} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Email Address *</label>
-                  <input 
-                    type="email" 
-                    required
-                    value={newEmail}
-                    onChange={e => setNewEmail(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+              <form onSubmit={handleAddContact} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+                
+                {/* MANUAL EMAIL ENTRY */}
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                    Option 1: Manual Email Entry
+                  </span>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={newEmail}
+                      onChange={e => setNewEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">First Name</label>
+                    <input 
+                      type="text" 
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      placeholder="Enter contact name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">First Name</label>
-                  <input 
-                    type="text" 
-                    value={newName}
-                    onChange={e => setNewName(e.target.value)}
-                    placeholder="Optional name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+                {/* SELECT REGISTERED USER PROFILES */}
+                <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-100 space-y-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] font-extrabold text-blue-800 uppercase tracking-wider block">
+                      Option 2: Select Registered User Profiles (Multi Selection)
+                    </span>
+                    <div className="flex gap-2 text-[11px]">
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedProfileIds(adminUsers.map(u => u.id))}
+                        className="text-primary-600 hover:underline font-bold"
+                      >
+                        All
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedProfileIds([])}
+                        className="text-gray-500 hover:underline font-medium"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-gray-500">
+                    Select registered user profiles to automatically add their emails and fetch their names.
+                  </p>
+
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto p-2 border border-blue-200/60 rounded-xl bg-white">
+                    {adminUsers.length === 0 ? (
+                      <p className="text-xs text-gray-400 p-2 text-center">No registered user profiles found.</p>
+                    ) : (
+                      adminUsers.map(user => (
+                        <label key={user.id} className="flex items-center justify-between p-1.5 text-xs text-gray-700 cursor-pointer hover:bg-blue-50/60 rounded-lg transition-colors">
+                          <div className="flex items-center space-x-2.5">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedProfileIds.includes(user.id)}
+                              onChange={() => {
+                                setSelectedProfileIds(prev => 
+                                  prev.includes(user.id) ? prev.filter(id => id !== user.id) : [...prev, user.id]
+                                );
+                              }}
+                              className="rounded text-primary-600 focus:ring-primary-500 w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-bold text-gray-900">{user.name || user.username || 'User'}</span>
+                              <span className="text-[11px] text-gray-500 ml-1.5">({user.email})</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full border border-gray-200">
+                            {user.role || 'Profile'}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
                 </div>
+
                 {currentUserRole === 'Super Admin' && (
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Assign to Admin/User Profile</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Assign Owner (Admin/User Profile)</label>
                     <select
                       value={newContactAdminId}
                       onChange={e => setNewContactAdminId(e.target.value)}
@@ -1379,6 +1519,7 @@ const Contacts = () => {
                   </div>
                 )}
 
+                {/* TARGET LISTS ASSIGNMENT */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-bold text-gray-700">Assign Target Lists *</label>
