@@ -54,9 +54,13 @@ const PermissionsManager = () => {
   const rawRole = (currentUser.role || 'Super Admin').toString().toLowerCase();
   const isAdmin = rawRole === 'super admin' || rawRole === 'admin';
 
+  const activeSub = currentUser.subscription || {};
+  const activePlanCode = (activeSub.plan_code || currentUser.plan || 'free').toLowerCase();
+  const maxSeats = activeSub.seats_limit || (activePlanCode === 'free' ? 1 : activePlanCode === 'essentials' ? 3 : activePlanCode === 'standard' ? 5 : 10);
+
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [userRole, setUserRole] = useState('Associates');
+  const [userRole, setUserRole] = useState('Admin');
   const [permissions, setPermissions] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,9 +76,12 @@ const PermissionsManager = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/admins', {
-        headers: { 'x-user-role': 'Super Admin' }
-      });
+      const res = await axios.get('/api/admins', {
+        headers: { 'x-user-role': currentUser.role || 'Admin', 'x-user-id': currentUser.id || 1 }
+      }).catch(() => axios.get('http://localhost:5000/api/admins', {
+        headers: { 'x-user-role': currentUser.role || 'Admin', 'x-user-id': currentUser.id || 1 }
+      }));
+
       const userList = Array.isArray(res.data) ? res.data : [];
       setUsers(userList);
 
@@ -86,14 +93,12 @@ const PermissionsManager = () => {
         }
       }
 
-      const otherUsersList = userList.filter(u => {
-        const isSelf = Number(u.id) === Number(currentUser.id) ||
-          (u.email && currentUser.email && u.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim());
-        return !isSelf;
-      });
+      // Prioritize self access profile selection
+      const selfUser = userList.find(u => Number(u.id) === Number(currentUser.id) ||
+        (u.email && currentUser.email && u.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()));
 
-      if (otherUsersList.length > 0) {
-        selectUser(otherUsersList[0]);
+      if (selfUser) {
+        selectUser(selfUser);
       } else if (userList.length > 0) {
         selectUser(userList[0]);
       }
@@ -123,8 +128,9 @@ const PermissionsManager = () => {
       }
     }
 
-    if (!perms) {
+    if (!perms || Object.keys(perms).length === 0 || normalizedRole === 'Admin') {
       perms = {};
+      ALL_MODULES.forEach(m => { perms[m.id] = true; });
     }
     setPermissions(perms);
   };
@@ -225,13 +231,15 @@ const PermissionsManager = () => {
 
   const selectedUser = users.find(u => Number(u.id) === Number(selectedUserId));
 
-  const otherUsers = users.filter(u => {
-    const isSelf = Number(u.id) === Number(currentUser.id) ||
-      (u.email && currentUser.email && u.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim());
-    return !isSelf;
+  const displayUsers = users.filter(u => {
+    if (activePlanCode === 'free' || maxSeats <= 1) {
+      return Number(u.id) === Number(currentUser.id) ||
+        (u.email && currentUser.email && u.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim());
+    }
+    return true;
   });
 
-  const filteredUsers = (otherUsers.length > 0 ? otherUsers : users).filter(u => {
+  const filteredUsers = displayUsers.filter(u => {
     const q = searchFilter.toLowerCase();
     return (u.name || '').toLowerCase().includes(q) ||
            (u.email || '').toLowerCase().includes(q) ||
@@ -288,7 +296,7 @@ const PermissionsManager = () => {
               <span>Select Account Profile</span>
             </h3>
             <span className="text-xs font-extrabold bg-primary-50 text-primary-700 px-2.5 py-0.5 rounded-full border border-primary-100">
-              {users.length} Users
+              {displayUsers.length} {displayUsers.length === 1 ? 'User' : 'Users'}
             </span>
           </div>
 
@@ -311,6 +319,9 @@ const PermissionsManager = () => {
             ) : (
               filteredUsers.map(u => {
                 const isSelected = Number(u.id) === Number(selectedUserId);
+                const isSelf = Number(u.id) === Number(currentUser.id) ||
+                  (u.email && currentUser.email && u.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim());
+
                 return (
                   <div
                     key={u.id}
@@ -323,7 +334,14 @@ const PermissionsManager = () => {
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <h4 className="font-extrabold text-xs text-gray-900">{u.name}</h4>
+                        <h4 className="font-extrabold text-xs text-gray-900 flex items-center gap-1.5">
+                          <span>{u.name}</span>
+                          {isSelf && (
+                            <span className="text-[9px] font-black text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.2 rounded uppercase">
+                              Self Access
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-[11px] text-gray-500 break-all">{u.email}</p>
                       </div>
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
@@ -343,7 +361,19 @@ const PermissionsManager = () => {
 
         {/* Right Column: Permission Matrix */}
         <div className="lg:col-span-8 space-y-5">
-          
+
+          <div className="p-3.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-2xl text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} className="text-primary-600 flex-shrink-0" />
+              <span>
+                Active Subscription Plan: <strong className="uppercase text-primary-700">{activePlanCode} Plan</strong> ({displayUsers.length} / {maxSeats} Seats Configured)
+              </span>
+            </div>
+            <span className="px-2.5 py-1 bg-primary-100 text-primary-800 rounded-lg text-[10px] uppercase font-black flex-shrink-0">
+              {activePlanCode === 'free' ? '1 Admin Seat (Self Access Only)' : `${maxSeats} Seats (1 Mandatory Admin + ${maxSeats - 1} Team Members)`}
+            </span>
+          </div>
+
           {selectedUser ? (
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
               

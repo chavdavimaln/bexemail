@@ -223,7 +223,14 @@ exports.getUserSubscriptions = async (req, res) => {
         au.name as user_name,
         au.username as user_username,
         au.email as user_email,
+        au.domain as user_domain,
         au.role as user_role,
+        au.custom_seats_limit as user_custom_seats,
+        au.custom_contacts_limit as user_custom_contacts,
+        au.custom_emails_limit as user_custom_emails,
+        au.custom_campaigns_limit as user_custom_campaigns,
+        au.custom_admins_limit as user_custom_admins,
+        au.custom_associates_limit as user_custom_associates,
         us.id as subscription_id,
         us.plan_id,
         us.plan_code,
@@ -234,8 +241,12 @@ exports.getUserSubscriptions = async (req, res) => {
         p.name as plan_name,
         p.monthly_price,
         p.discount_percent,
-        p.contacts_limit,
-        p.emails_limit
+        COALESCE(au.custom_contacts_limit, us.custom_contacts_limit, p.contacts_limit) as contacts_limit,
+        COALESCE(au.custom_emails_limit, us.custom_emails_limit, p.emails_limit) as emails_limit,
+        COALESCE(au.custom_seats_limit, us.custom_seats_limit, us.seats_limit, p.seats_limit, 1) as seats_limit,
+        p.price_detail,
+        p.role_access_info,
+        p.contacts_limit_info
       FROM admin_users au
       LEFT JOIN user_subscriptions us ON au.id = us.user_id
       LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))

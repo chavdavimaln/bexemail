@@ -32,11 +32,8 @@ const Login = () => {
         <h2 className="mt-4 text-3xl font-bold text-gray-900 tracking-tight">
           Sign in to your account
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Or{' '}
-          <Link to="/register?trial=14-days" className="font-semibold text-primary-600 hover:text-primary-700 hover:underline transition-colors">
-            start your 14-day free trial
-          </Link>
+        <p className="mt-2 text-xs sm:text-sm text-gray-600">
+          Sign in to access your CRM domain dashboard and campaigns
         </p>
       </div>
 
@@ -132,8 +129,8 @@ const Login = () => {
             <div className="text-center pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-600 font-medium">
                 Don't have an account?{' '}
-                <Link to="/register?trial=14-days" className="font-extrabold text-primary-600 hover:text-primary-700 hover:underline transition">
-                  Register for 14-Day Free Trial
+                <Link to="/register" className="font-extrabold text-primary-600 hover:text-primary-700 hover:underline transition">
+                  Register here
                 </Link>
               </p>
             </div>

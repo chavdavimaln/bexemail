@@ -25,12 +25,43 @@ const getCurrentUser = (req) => {
 
 exports.getAdmins = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, name, username, email, number, role, permissions, plain_password, created_at FROM admin_users ORDER BY created_at DESC');
+    const currentUser = getCurrentUser(req);
+
+    // Fetch active user's subscription details and domain
+    const [subRows] = await pool.query(`
+      SELECT au.domain, us.plan_code, us.seats_limit as sub_seats, p.seats_limit as plan_seats, au.custom_seats_limit
+      FROM admin_users au
+      LEFT JOIN user_subscriptions us ON au.id = us.user_id
+      LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+      WHERE au.id = ?
+      ORDER BY us.id DESC LIMIT 1
+    `, [currentUser.id]);
+
+    const userMeta = subRows[0] || {};
+    const planCode = (userMeta.plan_code || 'free').toLowerCase();
+    const maxSeats = userMeta.custom_seats_limit || userMeta.sub_seats || userMeta.plan_seats || (planCode === 'free' ? 1 : planCode === 'essentials' ? 3 : planCode === 'standard' ? 5 : 10);
+    const userDomain = userMeta.domain || null;
+
+    let query = 'SELECT id, name, username, email, number, domain, role, permissions, plain_password, created_at FROM admin_users';
+    let params = [];
+
+    // Free plan users or 1-seat users can ONLY access their own 1 Admin profile
+    if (planCode === 'free' || maxSeats <= 1) {
+      query += ' WHERE id = ?';
+      params.push(currentUser.id);
+    } else if (userDomain) {
+      query += ' WHERE domain = ? OR id = ?';
+      params.push(userDomain, currentUser.id);
+    }
+
+    query += ' ORDER BY created_at DESC';
+    if (maxSeats > 0) {
+      query += ` LIMIT ${Number(maxSeats)}`;
+    }
+
+    const [rows] = await pool.query(query, params);
     const parsedRows = rows.map(r => {
       let perms = r.permissions;
-      if (typeof perms === 'string') {
-        try { perms = JSON.parse(perms); } catch (e) {}
-      }
       if (typeof perms === 'string') {
         try { perms = JSON.parse(perms); } catch (e) {}
       }
@@ -39,7 +70,7 @@ exports.getAdmins = async (req, res) => {
     res.json(parsedRows);
   } catch (error) {
     console.error('Fetch admins error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 };
 
@@ -63,6 +94,46 @@ exports.createAdmin = async (req, res) => {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
+    // Check seat capacity limits against active plan and custom DB overrides
+    const [currentUsers] = await pool.query('SELECT COUNT(*) as totalCount FROM admin_users');
+    const userCount = currentUsers[0]?.totalCount || 0;
+
+    // Get current user's subscription or default plan seat limits
+    const [subs] = await pool.query(`
+      SELECT us.custom_seats_limit, us.custom_admins_limit, us.custom_associates_limit, us.seats_limit as sub_seats_limit, p.seats_limit as plan_seats_limit, p.name as plan_name, au.custom_seats_limit as user_custom_seats
+      FROM admin_users au
+      LEFT JOIN user_subscriptions us ON au.id = us.user_id
+      LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+      WHERE au.id = ? OR au.role IN ('Super Admin', 'Admin')
+      ORDER BY us.id DESC LIMIT 1
+    `, [currentUser.id]);
+
+    const activeSub = subs[0] || {};
+    const maxSeats = activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
+
+    // If role is Admin, check admin limit
+    if (role === 'Admin' && activeSub.custom_admins_limit) {
+      const [adminsCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Admin"');
+      if ((adminsCountRows[0]?.count || 0) >= activeSub.custom_admins_limit) {
+        return res.status(400).json({ error: `Admin limit reached. Maximum allowed Admins configured in database is ${activeSub.custom_admins_limit}.` });
+      }
+    }
+
+    // If role is Associates, check associate limit
+    if (role === 'Associates' && activeSub.custom_associates_limit) {
+      const [assocCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Associates"');
+      if ((assocCountRows[0]?.count || 0) >= activeSub.custom_associates_limit) {
+        return res.status(400).json({ error: `Associates seat limit reached. Maximum allowed Associates configured in database is ${activeSub.custom_associates_limit}.` });
+      }
+    }
+
+    // Enforce overall seat limit
+    if (userCount >= maxSeats && currentUser.role !== 'Super Admin') {
+      return res.status(400).json({
+        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active plan tier allows up to ${maxSeats} seats (admin/associates). Upgrade your plan to add more team members.`
+      });
+    }
+
     const hashedPassword = await hashPassword(password);
     const defaultPerms = permissions || {};
     const permissionsStr = JSON.stringify(defaultPerms);
@@ -78,7 +149,7 @@ exports.createAdmin = async (req, res) => {
     res.status(201).json({ message: 'User created successfully', id: result.insertId });
   } catch (error) {
     console.error('Create admin error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 };
 

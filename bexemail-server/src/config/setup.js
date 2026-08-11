@@ -194,7 +194,7 @@ async function setupDB() {
       )
     `);
 
-    // Profile & User Management migrations
+    // Profile & User Management & CRM Domain & Plan migrations
     const migrationQueries = [
       "ALTER TABLE admin_users ADD COLUMN username VARCHAR(255) NULL",
       "ALTER TABLE admin_users ADD COLUMN permissions JSON NULL",
@@ -204,7 +204,27 @@ async function setupDB() {
       "UPDATE admin_users SET role = 'Developer' WHERE role IN ('User', 'user')",
       "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
       "ALTER TABLE lists ADD COLUMN admin_id INT NULL",
-      "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL"
+      "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN domain VARCHAR(255) NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_seats_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_contacts_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_emails_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_campaigns_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_admins_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN custom_associates_limit INT NULL",
+      "ALTER TABLE admin_users ADD COLUMN configured_modules JSON NULL",
+      "ALTER TABLE plans ADD COLUMN seats_limit INT DEFAULT 1",
+      "ALTER TABLE plans ADD COLUMN price_detail VARCHAR(255) NULL",
+      "ALTER TABLE plans ADD COLUMN role_access_info VARCHAR(255) NULL",
+      "ALTER TABLE plans ADD COLUMN contacts_limit_info VARCHAR(255) NULL",
+      "ALTER TABLE plans ADD COLUMN allowed_modules JSON NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN seats_limit INT DEFAULT 1",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_seats_limit INT NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_contacts_limit INT NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_emails_limit INT NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_campaigns_limit INT NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_admins_limit INT NULL",
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_associates_limit INT NULL"
     ];
     for (const q of migrationQueries) {
       try {
@@ -285,6 +305,65 @@ async function setupDB() {
         config_json JSON NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
+    `);
+
+    // Dedicated Payment Gateway Tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_gateways (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        gateway_code VARCHAR(50) NOT NULL UNIQUE,
+        gateway_name VARCHAR(100) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        mode VARCHAR(20) NOT NULL DEFAULT 'sandbox',
+        api_key_public VARCHAR(255) NULL,
+        api_key_secret VARCHAR(255) NULL,
+        webhook_secret VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await pool.query(`
+      INSERT IGNORE INTO payment_gateways (gateway_code, gateway_name, is_active, mode) VALUES
+      ('dummy', 'Dummy Gateway (Sandbox Test)', 1, 'sandbox'),
+      ('razorpay', 'Razorpay Payment Gateway', 0, 'sandbox'),
+      ('stripe', 'Stripe Payments', 0, 'sandbox'),
+      ('paypal', 'PayPal Express Checkout', 0, 'sandbox')
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id VARCHAR(100) NOT NULL UNIQUE,
+        user_id INT NOT NULL,
+        plan_code VARCHAR(50) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+        payment_method VARCHAR(50) NOT NULL DEFAULT 'card',
+        gateway_name VARCHAR(50) NOT NULL DEFAULT 'dummy',
+        gateway_payment_id VARCHAR(150) NULL,
+        gateway_order_id VARCHAR(150) NULL,
+        gateway_signature VARCHAR(255) NULL,
+        card_last4 VARCHAR(4) NULL,
+        card_brand VARCHAR(50) NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'completed',
+        ip_address VARCHAR(45) NULL,
+        notes TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id VARCHAR(100) NULL,
+        user_id INT NULL,
+        event_type VARCHAR(100) NOT NULL DEFAULT 'checkout',
+        payload JSON NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'info',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
     // Auto-assign any unassigned subscribers in the database to default list

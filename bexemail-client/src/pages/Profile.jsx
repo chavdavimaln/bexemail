@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { User, Lock, Phone, Save, Camera, Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Lock, Phone, Save, Camera, Eye, EyeOff, Globe, CreditCard, Sparkles, CheckCircle2, ShieldCheck, Wand2, Key } from 'lucide-react';
 import axios from 'axios';
 import { useModal } from '../context/ModalContext';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const { alert: customAlert } = useModal();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const initialSub = currentUser.subscription || {};
+
   const [profileData, setProfileData] = useState({
     username: currentUser.username || currentUser.email?.split('@')[0] || 'subscriber',
     firstName: currentUser.first_name || currentUser.name || '',
     lastName: currentUser.last_name || '',
     email: currentUser.email || '',
+    domain: currentUser.domain || 'bexcodeservices.com',
     phone: currentUser.phone || '',
     avatar: null
   });
+
+  const userPlanCode = (initialSub.plan_code || currentUser.plan || 'free').toLowerCase();
+  const [selectedPlan, setSelectedPlan] = useState(userPlanCode);
+  const [activeSub, setActiveSub] = useState(initialSub);
+  const [updatingPlan, setUpdatingPlan] = useState(false);
 
   const [passwords, setPasswords] = useState({
     current: '',
@@ -24,6 +34,46 @@ const Profile = () => {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleGeneratePassword = () => {
+    const lowercase = 'abcdefghjkmnpqrstuvwxyz';
+    const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const numbers = '23456789';
+    const symbols = '!@#$%^&*';
+    let pass = '';
+    pass += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+    pass += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+    pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
+    pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
+    const all = lowercase + uppercase + numbers + symbols;
+    for (let i = 0; i < 8; i++) {
+      pass += all.charAt(Math.floor(Math.random() * all.length));
+    }
+    const generated = pass.split('').sort(() => 0.5 - Math.random()).join('');
+    setPasswords(prev => ({
+      ...prev,
+      new: generated,
+      confirm: generated
+    }));
+    setShowNew(true);
+    setShowConfirm(true);
+  };
+
+  const newPasswordCriteria = {
+    hasLowercase: /[a-z]/.test(passwords.new),
+    hasUppercase: /[A-Z]/.test(passwords.new),
+    hasNumber: /[0-9]/.test(passwords.new),
+    hasSpecial: /[^A-Za-z0-9]/.test(passwords.new),
+    minLength: passwords.new.length >= 8,
+    noUsername: profileData.username ? !passwords.new.toLowerCase().includes(profileData.username.toLowerCase()) : true
+  };
+
+  const planOptions = [
+    { code: 'free', name: 'Free Plan', price: '₹0/month', seats: '1 Seat (Admin only)', contacts: 'Up to 250 contacts' },
+    { code: 'essentials', name: 'Essentials Plan', price: '₹300/mo (then ₹550/mo)', seats: '3 Seats (1 Admin + 2 Admin/Associates/Developers)', contacts: 'Up to 50,000 contacts' },
+    { code: 'standard', name: 'Standard Plan', price: '₹525/mo (then ₹800/mo)', seats: '5 Seats (1 Admin + 4 Admin/Associates/Developers)', contacts: 'Up to 100,000 contacts' },
+    { code: 'premium', name: 'Premium Plan', price: '₹10,000/mo (then ₹15,000/mo)', seats: '10 Seats (1 Admin + 9 Admin/Associates/Developers)', contacts: 'Up to 150,000 contacts' }
+  ];
 
   useEffect(() => {
     fetchProfile();
@@ -41,10 +91,19 @@ const Profile = () => {
         ...prev,
         username: fetched.username || fetched.email?.split('@')[0] || currentUser.username || 'subscriber',
         email: fetched.email || currentUser.email || '',
+        domain: fetched.domain || prev.domain,
         firstName: fetched.name || fetched.first_name || prev.firstName,
         lastName: fetched.last_name || prev.lastName,
         phone: fetched.number || fetched.phone || prev.phone
       }));
+
+      if (fetched.subscription) {
+        setActiveSub(fetched.subscription);
+        if (fetched.subscription.plan_code) {
+          setSelectedPlan(fetched.subscription.plan_code.toLowerCase());
+        }
+        localStorage.setItem('user', JSON.stringify({ ...currentUser, ...fetched }));
+      }
 
       const activePassword = fetched.plain_password || currentUser.plain_password || 'vimal1234';
       setPasswords(prev => ({
@@ -54,6 +113,11 @@ const Profile = () => {
     } catch (err) {
       console.error('Fetch profile error:', err);
     }
+  };
+
+  const handlePlanUpdate = (e) => {
+    e.preventDefault();
+    navigate(`/checkout?plan=${selectedPlan}`);
   };
 
   const handleProfileUpdate = async (e) => {
@@ -225,6 +289,21 @@ const Profile = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Registered Domain</label>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Globe className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={profileData.domain}
+                      onChange={(e) => setProfileData({...profileData, domain: e.target.value})}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                      placeholder="bexcodeservices.com"
+                    />
+                  </div>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
                   <input
                     type="text"
@@ -232,7 +311,7 @@ const Profile = () => {
                     disabled
                     className="w-full px-4 py-2 border border-gray-200 bg-gray-100 rounded-lg text-gray-500 font-mono outline-none cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">Username cannot be modified</p>
+                  <p className="text-xs text-gray-400 mt-1.5">Username reference</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
@@ -242,24 +321,25 @@ const Profile = () => {
                     disabled
                     className="w-full px-4 py-2 border border-gray-200 bg-gray-100 rounded-lg text-gray-500 font-mono outline-none cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">Email ID cannot be modified</p>
+                  <p className="text-xs text-gray-400 mt-1.5">Email ID reference</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                    Phone Number
-                  </label>
-                  <div className="relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <input
-                      type="tel"
-                      value={profileData.phone}
-                      onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
-                      placeholder="+1 (555) 000-0000"
-                    />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                  Phone Number
+                </label>
+                <div className="relative rounded-md shadow-sm max-w-md">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Phone className="h-4 w-4 text-gray-400" />
                   </div>
+                  <input
+                    type="tel"
+                    value={profileData.phone}
+                    onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    placeholder="+91 9876543210"
+                  />
                 </div>
               </div>
 
@@ -269,7 +349,91 @@ const Profile = () => {
                   className="flex items-center px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors focus:ring-4 focus:ring-primary-100 active:bg-primary-800"
                 >
                   <Save size={18} className="mr-2" />
-                  Save Changes
+                  Save Personal Info
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Active Subscription & Plan Update Section */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                <CreditCard className="mr-2 text-primary-600" size={20} />
+                My CRM Subscription Plan & Limits
+              </h2>
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-extrabold text-xs rounded-full uppercase tracking-wider">
+                Active Status: {activeSub.status || 'Active'}
+              </span>
+            </div>
+
+            <form onSubmit={handlePlanUpdate} className="space-y-5">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-medium text-slate-700">
+                <div>
+                  <div className="text-slate-400 uppercase text-[10px] font-bold">Active Plan</div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">
+                    {planOptions.find(p => p.code === selectedPlan)?.name || 'Free Plan'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 uppercase text-[10px] font-bold">Role-Based Seats</div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">
+                    {selectedPlan === 'free'
+                      ? '1 Seat (Admin only)'
+                      : selectedPlan === 'essentials'
+                      ? '3 Seats (1 Admin + 2 Admin/Associates/Developers)'
+                      : selectedPlan === 'standard'
+                      ? '5 Seats (1 Admin + 4 Admin/Associates/Developers)'
+                      : `${activeSub.seats_limit || 10} Seats (1 Admin + ${(activeSub.seats_limit || 10) - 1} Admin/Associates/Developers)`}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 uppercase text-[10px] font-bold">Max Contact Capacity</div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">
+                    {selectedPlan === 'free' ? '250 contacts' : selectedPlan === 'essentials' ? '50,000 contacts' : selectedPlan === 'standard' ? '100,000 contacts' : `${activeSub.contacts_limit ? Number(activeSub.contacts_limit).toLocaleString() : '150,000'} contacts`}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Switch / Update Your Plan Tier
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {planOptions.map(p => {
+                    const isSelected = selectedPlan === p.code;
+                    return (
+                      <div
+                        key={p.code}
+                        onClick={() => setSelectedPlan(p.code)}
+                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all ${
+                          isSelected
+                            ? 'border-primary-600 bg-primary-50/30 shadow-xs'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-gray-900">{p.name}</span>
+                          <span className="text-xs font-bold text-primary-600">{p.price}</span>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 space-y-0.5">
+                          <div>• {p.seats}</div>
+                          <div>• {p.contacts}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end border-t border-gray-100">
+                <button
+                  type="submit"
+                  disabled={updatingPlan}
+                  className="flex items-center px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors focus:ring-4 focus:ring-indigo-100 disabled:opacity-50"
+                >
+                  <Sparkles size={18} className="mr-2" />
+                  {updatingPlan ? 'Updating Plan...' : 'Update Subscription Plan'}
                 </button>
               </div>
             </form>
@@ -277,10 +441,20 @@ const Profile = () => {
 
           {/* Password Change Form */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center">
-              <Lock className="mr-2 text-primary-600" size={20} />
-              Security Settings
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Lock className="mr-2 text-primary-600" size={20} />
+                Security Settings
+              </h2>
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-extrabold transition-all shadow-xs"
+              >
+                <Wand2 size={14} className="text-amber-600" />
+                <span>Generate Strong Password</span>
+              </button>
+            </div>
             <form onSubmit={handlePasswordUpdate} className="space-y-5">
               <div>
                 <div className="flex justify-between items-center mb-1.5">
@@ -349,6 +523,33 @@ const Profile = () => {
                      </button>
                    </div>
                  </div>
+               </div>
+
+               {/* Password Requirements Checklist */}
+               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs text-slate-600 max-w-2xl">
+                 <div className="font-black uppercase text-[10px] text-slate-500 tracking-wider mb-1 text-left">
+                   PASSWORD REQUIREMENTS:
+                 </div>
+                 <div className={`flex items-center gap-2 ${newPasswordCriteria.hasLowercase ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                   <span>{newPasswordCriteria.hasLowercase ? '✓' : '•'}</span> One lowercase character
+                 </div>
+                 <div className={`flex items-center gap-2 ${newPasswordCriteria.hasUppercase ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                   <span>{newPasswordCriteria.hasUppercase ? '✓' : '•'}</span> One uppercase character
+                 </div>
+                 <div className={`flex items-center gap-2 ${newPasswordCriteria.hasNumber ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                   <span>{newPasswordCriteria.hasNumber ? '✓' : '•'}</span> One number
+                 </div>
+                 <div className={`flex items-center gap-2 ${newPasswordCriteria.hasSpecial ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                   <span>{newPasswordCriteria.hasSpecial ? '✓' : '•'}</span> One special character
+                 </div>
+                 <div className={`flex items-center gap-2 ${newPasswordCriteria.minLength ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                   <span>{newPasswordCriteria.minLength ? '✓' : '•'}</span> 8 characters minimum
+                 </div>
+                 {profileData.username && (
+                   <div className={`flex items-center gap-2 ${newPasswordCriteria.noUsername ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}`}>
+                     <span>{newPasswordCriteria.noUsername ? '✓' : '✗'}</span> Must not contain username
+                   </div>
+                 )}
                </div>
 
               <div className="pt-4 flex justify-end border-t border-gray-100">

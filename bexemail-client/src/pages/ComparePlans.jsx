@@ -7,12 +7,12 @@ const ComparePlans = () => {
 
   const matrixCategories = [
     {
-      title: 'Core Features & Limits',
+      title: 'Core Plan Specifications (PDF Specs)',
       features: [
-        { name: 'Monthly Email Sending Limit', free: '1,000 / mo', essentials: '5,000 / mo', standard: '6,000 / mo', premium: '150,000+ / mo' },
-        { name: 'Max Audience Contacts Capacity', free: '350 Contacts', essentials: '500 Contacts', standard: '500 Contacts', premium: '10,000+ Contacts' },
-        { name: '14-Day Free Trial Available', free: false, essentials: true, standard: true, premium: true },
-        { name: '50% Off Discount Promotion', free: false, essentials: true, standard: true, premium: true }
+        { name: 'Monthly Price', free: '0/month', essentials: '300/mo for 12 mos\n(Then ₹550/mo)', standard: '525/mo for 12 mos\n(Then ₹800/mo)', premium: '10,000/mo for 12 mos\n(Then ₹15,000/mo)' },
+        { name: 'Role-based Access', free: '1 Seat - admin only', essentials: '3 Seats (admin/associates)', standard: '5 Seats (admin/associates)', premium: '10 role (admin/associates)' },
+        { name: 'Maximum Contact Count', free: 'Up to 250 contacts', essentials: 'Up to 50,000 contacts ($300/mo tier)', standard: 'Up to 100,000 contacts ($800/mo tier)', premium: 'Contact us for a custom plan' },
+        { name: 'Monthly Email Sending Limit', free: '1,000 / mo', essentials: '5,000 / mo', standard: '6,000 / mo', premium: '150,000 / mo' }
       ]
     },
     {
@@ -63,10 +63,10 @@ const ComparePlans = () => {
         </div>
 
         <button
-          onClick={() => navigate('/register?trial=14-days')}
+          onClick={() => navigate('/register?plan=standard')}
           className="px-4 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-xs rounded-full transition"
         >
-          Start 14-Day Free Trial
+          Register CRM Account
         </button>
       </div>
 
@@ -75,13 +75,13 @@ const ComparePlans = () => {
         {/* Title */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
           <span className="px-3 py-1 bg-amber-100 text-amber-900 font-extrabold text-xs uppercase tracking-wider rounded-full inline-block">
-            Full Feature Matrix
+            Full Plan Matrix
           </span>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight">
             Compare BexEmail Marketing Plans
           </h1>
           <p className="text-sm text-slate-600 font-medium">
-            Explore detailed feature breakdowns across our Free, Essentials, Standard, and Premium tiers to pick the best fit.
+            Explore detailed feature breakdowns across our Premium, Standard, Essentials, and Free tiers.
           </p>
         </div>
 
@@ -95,24 +95,24 @@ const ComparePlans = () => {
                 <tr className="bg-slate-900 text-white border-b border-slate-800">
                   <th className="p-4 sm:p-6 w-1/3 text-sm font-black">Plan Specifications</th>
                   <th className="p-4 sm:p-6 text-center">
-                    <div className="font-extrabold text-xs text-slate-300">Free Tier</div>
-                    <div className="text-base font-black text-white">Under 350</div>
-                    <div className="text-[10px] text-slate-400 mt-1">₹0 / forever</div>
+                    <div className="font-extrabold text-xs text-slate-300">Free</div>
+                    <div className="text-base font-black text-white">0/month</div>
+                    <div className="text-[10px] text-slate-400 mt-1">1 Seat (admin only)</div>
                   </th>
                   <th className="p-4 sm:p-6 text-center">
                     <div className="font-extrabold text-xs text-indigo-300">Essentials</div>
-                    <div className="text-base font-black text-white">Essentials</div>
-                    <div className="text-[10px] text-slate-400 mt-1">₹387.50 / mo</div>
+                    <div className="text-base font-black text-white">300/mo</div>
+                    <div className="text-[10px] text-slate-400 mt-1">3 Seats (admin/assoc)</div>
                   </th>
                   <th className="p-4 sm:p-6 text-center bg-slate-800 border-x border-slate-700">
                     <span className="px-2 py-0.5 bg-amber-400 text-slate-900 font-black text-[9px] uppercase tracking-wider rounded">RECOMMENDED</span>
                     <div className="text-base font-black text-white mt-1">Standard</div>
-                    <div className="text-[10px] text-amber-300">₹575 / mo (14 Days Free)</div>
+                    <div className="text-[10px] text-amber-300">525/mo (5 Seats)</div>
                   </th>
                   <th className="p-4 sm:p-6 text-center">
-                    <div className="font-extrabold text-xs text-slate-300">Enterprise</div>
-                    <div className="text-base font-black text-white">Premium</div>
-                    <div className="text-[10px] text-slate-400 mt-1">₹11,500 / mo</div>
+                    <div className="font-extrabold text-xs text-amber-400">Premium</div>
+                    <div className="text-base font-black text-white">10,000/mo</div>
+                    <div className="text-[10px] text-slate-400 mt-1">10 role (admin/assoc)</div>
                   </th>
                 </tr>
               </thead>

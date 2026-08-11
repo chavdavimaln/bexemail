@@ -9,6 +9,7 @@ router.post('/register', authController.register);
 router.get('/me', checkRole([]), authController.getMe);
 router.put('/profile', checkRole([]), authController.updateProfile);
 router.put('/password', checkRole([]), authController.updatePassword);
+router.post('/my-subscription', checkRole([]), authController.updateMySubscription);
 
 // Password Reset endpoints (public)
 const adminsController = require('../controllers/admins');

@@ -25,6 +25,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Pricing from './pages/Pricing';
 import ComparePlans from './pages/ComparePlans';
+import Checkout from './pages/Checkout';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
 import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
 import { NotificationProvider } from './components/NotificationContext';
@@ -124,6 +125,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/compare-plans" element={<ComparePlans />} />
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/preferences/:id" element={<PreferenceCenter />} />
         </Routes>

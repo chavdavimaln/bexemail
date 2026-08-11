@@ -36,9 +36,17 @@ exports.login = async (req, res) => {
         if (typeof perms === 'string') {
             try { perms = JSON.parse(perms); } catch (e) {}
         }
-        if (typeof perms === 'string') {
-            try { perms = JSON.parse(perms); } catch (e) {}
-        }
+
+        // Fetch user active subscription & plan details
+        const [subs] = await db.query(`
+            SELECT us.*, p.name as plan_name, p.seats_limit as plan_seats_limit, p.contacts_limit as plan_contacts_limit, p.emails_limit as plan_emails_limit, p.role_access_info, p.contacts_limit_info
+            FROM user_subscriptions us
+            LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+            WHERE us.user_id = ?
+            ORDER BY us.id DESC LIMIT 1
+        `, [user.id]);
+
+        const sub = subs[0] || null;
 
         res.status(200).json({
             message: 'Login successful',
@@ -49,8 +57,17 @@ exports.login = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 number: user.number,
+                domain: user.domain || '',
                 role: user.role,
-                permissions: perms || {}
+                permissions: perms || {},
+                subscription: sub ? {
+                    plan_code: sub.plan_code,
+                    plan_name: sub.plan_name,
+                    seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
+                    contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
+                    emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+                    status: sub.status
+                } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' }
             }
         });
     } catch (error) {
@@ -61,7 +78,7 @@ exports.login = async (req, res) => {
 
 // POST /api/auth/register
 exports.register = async (req, res) => {
-    const { name, username, email, number, password, role, isTrial } = req.body;
+    const { name, username, email, number, domain, company_domain, password, role, isTrial, plan, plan_code } = req.body;
 
     if (!name || !email || !password) {
         return res.status(400).json({ error: 'Full name, email address, and password are required.' });
@@ -74,7 +91,8 @@ exports.register = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const userRole = role || 'Developer';
+        const userRole = role || 'Admin';
+        const clientDomain = (domain || company_domain || '').trim();
 
         // Default permissions for new self-registered trial users
         const defaultPerms = {
@@ -98,11 +116,25 @@ exports.register = async (req, res) => {
             : name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(100 + Math.random() * 900);
 
         const [result] = await db.query(
-            `INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name.trim(), genUsername, email.toLowerCase().trim(), number || null, hashedPassword, password, userRole, permissionsStr]
+            `INSERT INTO admin_users (name, username, email, number, domain, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name.trim(), genUsername, email.toLowerCase().trim(), number || null, clientDomain || null, hashedPassword, password, userRole, permissionsStr]
         );
 
         const newUserId = result.insertId;
+
+        // Assign plan subscription
+        const selectedPlanCode = (plan || plan_code || 'standard').toLowerCase().trim();
+        const [pRows] = await db.query(`SELECT * FROM plans WHERE plan_code = ?`, [selectedPlanCode]);
+        const matchedPlan = pRows[0] || { id: 1, plan_code: 'standard', name: 'Standard Plan', trial_days: 14, seats_limit: 5, contacts_limit: 100000, emails_limit: 6000 };
+
+        const trialDays = matchedPlan.trial_days || 14;
+        const startDate = new Date();
+        const endDate = new Date(startDate.getTime() + (trialDays * 24 * 60 * 60 * 1000));
+
+        await db.query(`
+            INSERT INTO user_subscriptions (user_id, plan_id, plan_code, trial_days, trial_start, trial_end, status, seats_limit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [newUserId, matchedPlan.id, matchedPlan.plan_code, trialDays, startDate, endDate, isTrial ? 'trialing' : 'active', matchedPlan.seats_limit || 1]);
 
         const token = jwt.sign(
             { id: newUserId, email: email.toLowerCase().trim(), role: userRole },
@@ -111,7 +143,7 @@ exports.register = async (req, res) => {
         );
 
         res.status(201).json({
-            message: isTrial ? '14-Day Free Trial account created successfully!' : 'Account registered successfully!',
+            message: isTrial ? `14-Day Free Trial registered for ${matchedPlan.name}!` : 'Account registered successfully!',
             token,
             user: {
                 id: newUserId,
@@ -119,8 +151,17 @@ exports.register = async (req, res) => {
                 username: genUsername,
                 email: email.toLowerCase().trim(),
                 number: number || null,
+                domain: clientDomain,
                 role: userRole,
-                permissions: defaultPerms
+                permissions: defaultPerms,
+                subscription: {
+                    plan_code: matchedPlan.plan_code,
+                    plan_name: matchedPlan.name,
+                    seats_limit: matchedPlan.seats_limit || 1,
+                    contacts_limit: matchedPlan.contacts_limit || 250,
+                    emails_limit: matchedPlan.emails_limit || 1000,
+                    status: isTrial ? 'trialing' : 'active'
+                }
             }
         });
     } catch (error) {
@@ -133,7 +174,7 @@ exports.register = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const userId = req.user.id;
-        const [users] = await db.query(`SELECT id, name, username, email, number, role, permissions, plain_password, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const [users] = await db.query(`SELECT id, name, username, email, number, domain, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -144,10 +185,25 @@ exports.getMe = async (req, res) => {
         if (typeof perms === 'string') {
             try { perms = JSON.parse(perms); } catch (e) {}
         }
-        if (typeof perms === 'string') {
-            try { perms = JSON.parse(perms); } catch (e) {}
-        }
         user.permissions = perms || {};
+
+        const [subs] = await db.query(`
+            SELECT us.*, p.name as plan_name, p.seats_limit as plan_seats_limit, p.contacts_limit as plan_contacts_limit, p.emails_limit as plan_emails_limit
+            FROM user_subscriptions us
+            LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+            WHERE us.user_id = ?
+            ORDER BY us.id DESC LIMIT 1
+        `, [user.id]);
+
+        const sub = subs[0] || null;
+        user.subscription = sub ? {
+            plan_code: sub.plan_code,
+            plan_name: sub.plan_name,
+            seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
+            contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
+            emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+            status: sub.status
+        } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' };
 
         res.status(200).json(user);
     } catch (error) {
@@ -159,18 +215,139 @@ exports.getMe = async (req, res) => {
 // PUT /api/auth/profile
 exports.updateProfile = async (req, res) => {
     try {
-        const userId = req.user.id;
-        const { name, email, number, phone } = req.body;
+        const userId = req.user?.id || req.headers['x-user-id'] || 1;
+        const { name, email, number, phone, domain, plan_code, plan } = req.body;
         
         await db.query(
-            `UPDATE admin_users SET name = COALESCE(?, name), email = COALESCE(?, email), number = COALESCE(?, number) WHERE id = ?`,
-            [name || null, email || null, number || phone || null, userId]
+            `UPDATE admin_users SET name = COALESCE(?, name), email = COALESCE(?, email), number = COALESCE(?, number), domain = COALESCE(?, domain) WHERE id = ?`,
+            [name || null, email || null, number || phone || null, domain || null, userId]
         );
+
+        const targetPlanCode = (plan_code || plan || '').toLowerCase().trim();
+        if (targetPlanCode) {
+            const [pRows] = await db.query(`SELECT * FROM plans WHERE plan_code = ?`, [targetPlanCode]);
+            if (pRows.length > 0) {
+                const matchedPlan = pRows[0];
+                const [existingSub] = await db.query(`SELECT id FROM user_subscriptions WHERE user_id = ?`, [userId]);
+                if (existingSub.length === 0) {
+                    await db.query(`
+                        INSERT INTO user_subscriptions (user_id, plan_id, plan_code, trial_days, status, seats_limit)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `, [userId, matchedPlan.id, matchedPlan.plan_code, matchedPlan.trial_days || 14, 'active', matchedPlan.seats_limit || 1]);
+                } else {
+                    await db.query(`
+                        UPDATE user_subscriptions SET
+                            plan_id = ?,
+                            plan_code = ?,
+                            trial_days = ?,
+                            seats_limit = ?,
+                            status = 'active'
+                        WHERE user_id = ?
+                    `, [matchedPlan.id, matchedPlan.plan_code, matchedPlan.trial_days || 14, matchedPlan.seats_limit || 1, userId]);
+                }
+            }
+        }
         
-        res.status(200).json({ message: 'Profile updated successfully' });
+        // Fetch updated user object
+        const [users] = await db.query(`SELECT id, name, username, email, number, domain, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const user = users[0] || {};
+        let perms = user.permissions;
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
+        }
+        user.permissions = perms || {};
+
+        const [subs] = await db.query(`
+            SELECT us.*, p.name as plan_name, p.seats_limit as plan_seats_limit, p.contacts_limit as plan_contacts_limit, p.emails_limit as plan_emails_limit
+            FROM user_subscriptions us
+            LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+            WHERE us.user_id = ?
+            ORDER BY us.id DESC LIMIT 1
+        `, [userId]);
+
+        const sub = subs[0] || null;
+        user.subscription = sub ? {
+            plan_code: sub.plan_code,
+            plan_name: sub.plan_name,
+            seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
+            contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
+            emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+            status: sub.status
+        } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' };
+
+        res.status(200).json({ message: 'Profile updated successfully', user });
     } catch (error) {
         console.error('updateProfile error:', error);
-        res.status(500).json({ error: 'Failed to update profile' });
+        res.status(500).json({ error: 'Failed to update profile: ' + error.message });
+    }
+};
+
+// POST /api/auth/my-subscription
+exports.updateMySubscription = async (req, res) => {
+    try {
+        const userId = req.user?.id || req.headers['x-user-id'] || 1;
+        const { plan_code, plan } = req.body;
+        const targetPlanCode = (plan_code || plan || 'standard').toLowerCase().trim();
+
+        const [pRows] = await db.query(`SELECT * FROM plans WHERE plan_code = ?`, [targetPlanCode]);
+        if (pRows.length === 0) {
+            return res.status(400).json({ error: `Invalid plan code '${targetPlanCode}'` });
+        }
+
+        const matchedPlan = pRows[0];
+        const [existingSub] = await db.query(`SELECT id FROM user_subscriptions WHERE user_id = ?`, [userId]);
+        
+        if (existingSub.length === 0) {
+            await db.query(`
+                INSERT INTO user_subscriptions (user_id, plan_id, plan_code, trial_days, status, seats_limit)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [userId, matchedPlan.id, matchedPlan.plan_code, matchedPlan.trial_days || 14, 'active', matchedPlan.seats_limit || 1]);
+        } else {
+            await db.query(`
+                UPDATE user_subscriptions SET
+                    plan_id = ?,
+                    plan_code = ?,
+                    trial_days = ?,
+                    seats_limit = ?,
+                    status = 'active'
+                WHERE user_id = ?
+            `, [matchedPlan.id, matchedPlan.plan_code, matchedPlan.trial_days || 14, matchedPlan.seats_limit || 1, userId]);
+        }
+
+        // Fetch updated user profile
+        const [users] = await db.query(`SELECT id, name, username, email, number, domain, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const user = users[0] || {};
+        let perms = user.permissions;
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) {}
+        }
+        user.permissions = perms || {};
+
+        const [subs] = await db.query(`
+            SELECT us.*, p.name as plan_name, p.seats_limit as plan_seats_limit, p.contacts_limit as plan_contacts_limit, p.emails_limit as plan_emails_limit
+            FROM user_subscriptions us
+            LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+            WHERE us.user_id = ?
+            ORDER BY us.id DESC LIMIT 1
+        `, [userId]);
+
+        const sub = subs[0] || null;
+        user.subscription = sub ? {
+            plan_code: sub.plan_code,
+            plan_name: sub.plan_name,
+            seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
+            contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
+            emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+            status: sub.status
+        } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' };
+
+        res.status(200).json({
+            message: `Subscription successfully updated to ${matchedPlan.name}!`,
+            user
+        });
+    } catch (error) {
+        console.error('updateMySubscription error:', error);
+        res.status(500).json({ error: 'Failed to update subscription: ' + error.message });
     }
 };
 

@@ -55,11 +55,23 @@ const Profiles = () => {
   const isAdmin = !isSubscriber;
   const currentUserRole = currentUser.role || (isAdmin ? 'Super Admin' : 'User');
 
+  const activeSub = currentUser.subscription || {};
+  const activePlanCode = (activeSub.plan_code || currentUser.plan || 'free').toLowerCase();
+  const maxSeats = activeSub.custom_seats_limit || activeSub.seats_limit || (activePlanCode === 'free' ? 1 : activePlanCode === 'essentials' ? 3 : activePlanCode === 'standard' ? 5 : 10);
+
   // States
   const [users, setUsers] = useState([]);
   const [senders, setSenders] = useState([]);
   const [loading, setLoading] = useState(!isSubscriber);
   const [error, setError] = useState(null);
+
+  const displayUsers = (Array.isArray(users) ? users : []).filter(u => {
+    if (activePlanCode === 'free' || maxSeats <= 1) {
+      return u.id === currentUser.id || u.email === currentUser.email;
+    }
+    return true;
+  });
+  const isSeatLimitReached = displayUsers.length >= maxSeats;
 
   // Subscriber requested SMTP sender form state
   const [requestedSmtpEmail, setRequestedSmtpEmail] = useState(currentUser.email || '');
@@ -633,46 +645,81 @@ const Profiles = () => {
 
       {/* Section 1: User Profiles Management */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white">
-          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Users className="text-primary-500" size={20} />
-            <span>User Accounts & Permissions</span>
-          </h3>
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => navigate('/permissions')}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold transition border border-purple-200 shadow-xs"
-              >
-                <ShieldCheck size={15} /> Module Access Permissions
-              </button>
-              <button 
-                onClick={() => {
-                  setUserForm({ id: null, name: '', username: '', email: '', number: '', password: '', role: 'User', permissions: {} });
-                  setShowUserModal(true);
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-xl text-xs font-bold transition shadow-sm"
-              >
-                <UserPlus size={15} /> Add User Profile
-              </button>
+            <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center bg-white gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Users className="text-primary-500" size={20} />
+                  <span>User Accounts & Permissions</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} Plan</strong> ({displayUsers.length} / {maxSeats} Seats Used)
+                </p>
+              </div>
+
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => navigate('/permissions')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold transition border border-purple-200 shadow-xs"
+                  >
+                    <ShieldCheck size={15} /> Module Access Permissions
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (isSeatLimitReached) {
+                        customAlert({
+                          title: 'Seat Capacity Limit Reached',
+                          message: activePlanCode === 'free'
+                            ? 'Free Plan is limited to 1 Admin seat only. Upgrade to Essentials (3 seats), Standard (5 seats), or Premium (10 seats) to add more team members.'
+                            : `Seat capacity limit reached (${displayUsers.length}/${maxSeats} seats used for ${activePlanCode.toUpperCase()} Plan). Please upgrade your subscription plan to add more team members.`,
+                          type: 'warning'
+                        });
+                        return;
+                      }
+                      setUserForm({ id: null, name: '', username: '', email: '', number: '', password: '', role: 'User', permissions: {} });
+                      setShowUserModal(true);
+                    }}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                      isSeatLimitReached
+                        ? 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed'
+                        : 'bg-primary-600 text-white hover:bg-primary-700'
+                    }`}
+                  >
+                    <UserPlus size={15} /> Add User Profile ({displayUsers.length}/{maxSeats})
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm text-gray-600">
-            <thead className="bg-gray-50/50 text-gray-500 font-semibold border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4">Name & Username</th>
-                <th className="px-6 py-4">Email</th>
-                <th className="px-6 py-4">Mobile Number</th>
-                <th className="px-6 py-4">Role</th>
-                <th className="px-6 py-4">Module Permissions</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(Array.isArray(users) ? users : []).map(u => {
+
+            {activePlanCode === 'free' && (
+              <div className="mx-6 mt-4 p-3.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-amber-600 flex-shrink-0" />
+                  <span>Free Plan Active: Restricted to 1 Admin Seat Only. No additional admins or associates can be created on the Free Plan.</span>
+                </div>
+                <button 
+                  onClick={() => navigate('/profile')} 
+                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black transition flex-shrink-0 shadow-xs"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            )}
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm text-gray-600">
+                <thead className="bg-gray-50/50 text-gray-500 font-semibold border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4">Name & Username</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Mobile Number</th>
+                    <th className="px-6 py-4">Role</th>
+                    <th className="px-6 py-4">Module Permissions</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {displayUsers.map(u => {
                 let perms = {};
                 if (u && u.permissions) {
                   if (typeof u.permissions === 'object') perms = u.permissions;

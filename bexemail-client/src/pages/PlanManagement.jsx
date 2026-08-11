@@ -462,12 +462,12 @@ const PlanManagement = () => {
               {selectedPlanObj && (
                 <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-2 text-xs">
                   <div className="font-extrabold text-slate-900 flex items-center justify-between">
-                    <span>Plan Details Preview: {selectedPlanObj.name}</span>
-                    <span className="text-amber-700 font-black">50% Discount Applied</span>
+                    <span>Plan Specifications: {selectedPlanObj.name}</span>
+                    <span className="text-amber-700 font-black">{selectedPlanObj.price_detail || 'Standard Rate'}</span>
                   </div>
-                  <div className="text-slate-700">Monthly Price: <strong>₹{Number(selectedPlanObj.monthly_price).toLocaleString()}</strong></div>
-                  <div className="text-slate-700">Contact Limit: <strong>{selectedPlanObj.contacts_limit?.toLocaleString()}</strong></div>
-                  <div className="text-slate-700">Email Send Limit: <strong>{selectedPlanObj.emails_limit?.toLocaleString()}</strong></div>
+                  <div className="text-slate-700">Role-based Seat Limit: <strong>{selectedPlanObj.seats_limit || 1} Seats (Admin / Associates)</strong></div>
+                  <div className="text-slate-700">Contact Limit: <strong>{selectedPlanObj.contacts_limit_info || selectedPlanObj.contacts_limit?.toLocaleString()}</strong></div>
+                  <div className="text-slate-700">Email Send Limit: <strong>{selectedPlanObj.emails_limit?.toLocaleString()} sends</strong></div>
                 </div>
               )}
 

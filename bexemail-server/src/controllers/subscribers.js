@@ -35,6 +35,32 @@ exports.createSubscriber = async (req, res) => {
   }
 
   try {
+    // Check contact limit quota against user subscription
+    const reqUserId = (user && user.id) ? user.id : (targetAdminId || 1);
+    const [subRows] = await pool.query(`
+      SELECT us.custom_contacts_limit, us.plan_code, p.contacts_limit as plan_contacts, au.custom_contacts_limit as user_custom_contacts
+      FROM admin_users au
+      LEFT JOIN user_subscriptions us ON au.id = us.user_id
+      LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
+      WHERE au.id = ?
+      ORDER BY us.id DESC LIMIT 1
+    `, [reqUserId]);
+
+    const subMeta = subRows[0] || {};
+    const planCode = (subMeta.plan_code || 'free').toLowerCase();
+    const maxContacts = subMeta.user_custom_contacts || subMeta.custom_contacts_limit || subMeta.plan_contacts || (planCode === 'free' ? 250 : planCode === 'essentials' ? 50000 : planCode === 'standard' ? 100000 : 1000000);
+
+    const [countRows] = await pool.query('SELECT COUNT(*) as total FROM subscribers');
+    const currentTotal = countRows[0]?.total || 0;
+
+    // Check existing email to allow update
+    const [existingCheck] = await pool.query('SELECT id FROM subscribers WHERE email = ?', [email]);
+    if (existingCheck.length === 0 && currentTotal >= maxContacts) {
+      return res.status(400).json({
+        error: `Contact limit reached (${currentTotal}/${maxContacts.toLocaleString()} contacts used for ${planCode.toUpperCase()} Plan). Please upgrade your subscription plan to add more contacts.`
+      });
+    }
+
     const tagsJson = tags ? JSON.stringify(tags) : null;
     const [result] = await pool.query(
       `INSERT INTO subscribers (email, first_name, status, tags, admin_id)
