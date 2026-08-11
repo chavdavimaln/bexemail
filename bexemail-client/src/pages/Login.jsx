@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
 
 import axios from 'axios';
@@ -34,9 +34,9 @@ const Login = () => {
         </h2>
         <p className="mt-2 text-sm text-gray-600">
           Or{' '}
-          <a href="#" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
+          <Link to="/register?trial=14-days" className="font-semibold text-primary-600 hover:text-primary-700 hover:underline transition-colors">
             start your 14-day free trial
-          </a>
+          </Link>
         </p>
       </div>
 
@@ -127,6 +127,15 @@ const Login = () => {
                 <LogIn className="mr-2 h-5 w-5" />
                 Sign in
               </button>
+            </div>
+
+            <div className="text-center pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-600 font-medium">
+                Don't have an account?{' '}
+                <Link to="/register?trial=14-days" className="font-extrabold text-primary-600 hover:text-primary-700 hover:underline transition">
+                  Register for 14-Day Free Trial
+                </Link>
+              </p>
             </div>
           </form>
         </div>

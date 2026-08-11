@@ -22,6 +22,9 @@ import Profiles from './pages/Profiles';
 import PermissionsManager from './pages/PermissionsManager';
 import ResetPassword from './pages/ResetPassword';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import Pricing from './pages/Pricing';
+import ComparePlans from './pages/ComparePlans';
 import { AutomationProvider, AutomationRoutes } from './modules/automations';
 import AutomationErrorBoundary from './modules/automations/components/AutomationErrorBoundary';
 import { NotificationProvider } from './components/NotificationContext';
@@ -117,6 +120,10 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
           {/* Public Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/compare-plans" element={<ComparePlans />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/preferences/:id" element={<PreferenceCenter />} />
         </Routes>

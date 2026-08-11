@@ -4,6 +4,7 @@ const authController = require('../controllers/authController');
 const { checkRole } = require('../middleware/rbac'); // We will use this to verify JWT
 
 router.post('/login', authController.login);
+router.post('/register', authController.register);
 // Since checkRole requires JWT, we can just pass an empty array to mean "any logged in user"
 router.get('/me', checkRole([]), authController.getMe);
 router.put('/profile', checkRole([]), authController.updateProfile);

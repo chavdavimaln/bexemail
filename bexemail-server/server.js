@@ -96,8 +96,12 @@ app.use('/api/forms', require('./src/routes/formRoutes'));
 app.use('/api/preferences', require('./src/routes/preferenceRoutes'));
 app.use('/api/ai', require('./src/routes/aiRoutes'));
 app.use('/api/bulk-import', require('./src/routes/bulkImportRoutes'));
+app.use('/api/plans', require('./src/routes/planRoutes'));
 
 const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
 // Initialize non-Redis cron workers immediately
 require('./src/workers/cron');

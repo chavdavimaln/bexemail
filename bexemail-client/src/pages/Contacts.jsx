@@ -17,7 +17,7 @@ const Contacts = () => {
 
   // Main Page View Mode: 'directory' or 'list_manager'
   const [viewMode, setViewMode] = useState('directory');
-  
+
   // Add Contact Modal state
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [addMode, setAddMode] = useState('single'); // 'single' or 'bulk_file'
@@ -33,7 +33,7 @@ const Contacts = () => {
   const [selectedProfileIds, setSelectedProfileIds] = useState([]);
   const [selectedListIds, setSelectedListIds] = useState([]);
   const [adding, setAdding] = useState(false);
-  
+
   // Inline Edit State
   const [editingId, setEditingId] = useState(null);
   const [editEmail, setEditEmail] = useState('');
@@ -94,7 +94,7 @@ const Contacts = () => {
       const fetchedSubs = rawBulk.length > 0 ? rawBulk : rawDirect;
       const fetchedLists = Array.isArray(listsRes.data) ? listsRes.data : [];
       const fetchedAdmins = Array.isArray(adminsRes.data) ? adminsRes.data : [];
-      
+
       setSubscribers(fetchedSubs);
       setLists(fetchedLists);
       setAdminUsers(fetchedAdmins);
@@ -193,7 +193,7 @@ const Contacts = () => {
       setSelectedProfileIds([]);
       setNewContactAdminId('');
       setShowAddContactModal(false);
-      await fetchData(); 
+      await fetchData();
       customAlert({
         title: 'Success',
         message: `Successfully added ${contactsToAdd.length} contact(s) and assigned target list(s)!`,
@@ -511,17 +511,17 @@ const Contacts = () => {
 
   const filteredSubscribers = subscribers.filter(sub => {
     const matchesSearch = (sub.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (sub.first_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
+      (sub.first_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchingAdmin = adminUsers.find(
       u => u.email && u.email.trim().toLowerCase() === (sub.email || '').trim().toLowerCase()
     );
     const effectiveStatus = (matchingAdmin && matchingAdmin.role) ? matchingAdmin.role : sub.status;
 
-    const matchesStatus = statusFilter === 'all' || 
-                          sub.status === statusFilter || 
-                          (effectiveStatus && effectiveStatus.toLowerCase() === statusFilter.toLowerCase());
-    
+    const matchesStatus = statusFilter === 'all' ||
+      sub.status === statusFilter ||
+      (effectiveStatus && effectiveStatus.toLowerCase() === statusFilter.toLowerCase());
+
     let matchesList = true;
     if (listFilter !== 'all') {
       const targetListId = Number(listFilter);
@@ -625,14 +625,14 @@ const Contacts = () => {
   // Filtered subscribers for Target List Membership Manager
   const managerFilteredSubscribers = subscribers.filter(sub => {
     return (sub.email || '').toLowerCase().includes(managerSearchTerm.toLowerCase()) ||
-           (sub.first_name || '').toLowerCase().includes(managerSearchTerm.toLowerCase());
+      (sub.first_name || '').toLowerCase().includes(managerSearchTerm.toLowerCase());
   });
 
-  const selectedTargetListObj = selectedTargetListId === 'all_lists' 
+  const selectedTargetListObj = selectedTargetListId === 'all_lists'
     ? { id: 'all_lists', name: 'All Target Lists', description: `Global view of all ${lists.length} target audience lists in the system.` }
     : lists.find(l => Number(l.id) === Number(selectedTargetListId));
 
-  const isAllManagerSelected = managerFilteredSubscribers.length > 0 && 
+  const isAllManagerSelected = managerFilteredSubscribers.length > 0 &&
     managerFilteredSubscribers.every(sub => selectedSubIds.includes(sub.id));
 
   const toggleSelectAllManager = () => {
@@ -645,19 +645,18 @@ const Contacts = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      
+
       {/* Top Header Control Bar */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-wrap items-center justify-between gap-4">
-        
+
         {/* Module View Tabs */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('directory')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
-              viewMode === 'directory' 
-                ? 'bg-primary-600 text-white shadow-md shadow-primary-200' 
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${viewMode === 'directory'
+                ? 'bg-primary-600 text-white shadow-md shadow-primary-200'
                 : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-            }`}
+              }`}
           >
             <Users size={16} />
             Subscribers Directory ({subscribers.length})
@@ -665,11 +664,10 @@ const Contacts = () => {
 
           <button
             onClick={() => setViewMode('list_manager')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
-              viewMode === 'list_manager' 
-                ? 'bg-primary-600 text-white shadow-md shadow-primary-200' 
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${viewMode === 'list_manager'
+                ? 'bg-primary-600 text-white shadow-md shadow-primary-200'
                 : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-            }`}
+              }`}
           >
             <Layers size={16} />
             Target List Assignment Manager
@@ -707,14 +705,14 @@ const Contacts = () => {
       {/* VIEW MODE 1: FULL-WIDTH SINGLE COLUMN DIRECTORY TABLE */}
       {viewMode === 'directory' && (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col w-full min-h-[520px]">
-          
+
           {/* Table Control & Filter Header */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            
+
             {/* Live Search Input */}
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input 
+              <input
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -760,7 +758,7 @@ const Contacts = () => {
             </div>
 
           </div>
-          
+
           {/* Spacious Full-Width Table */}
           <div className="overflow-x-auto flex-1 min-h-[420px]">
             <table className="w-full text-left text-sm text-gray-600">
@@ -795,14 +793,14 @@ const Contacts = () => {
 
                     return (
                       <tr key={sub.id} className={`hover:bg-gray-50/80 transition-colors ${editingId === sub.id ? 'bg-primary-50/20' : ''}`}>
-                        
+
                         {/* Email Address + Origin Tags */}
                         <td className="px-6 py-4">
                           {editingId === sub.id ? (
-                            <input 
-                              type="email" 
-                              value={editEmail} 
-                              onChange={(e)=>setEditEmail(e.target.value)}
+                            <input
+                              type="email"
+                              value={editEmail}
+                              onChange={(e) => setEditEmail(e.target.value)}
                               className="w-full px-3 py-1.5 border border-primary-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-primary-500"
                             />
                           ) : (
@@ -824,10 +822,10 @@ const Contacts = () => {
                         {/* Name */}
                         <td className="px-6 py-4 text-xs font-medium">
                           {editingId === sub.id ? (
-                            <input 
-                              type="text" 
-                              value={editName} 
-                              onChange={(e)=>setEditName(e.target.value)}
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
                               className="w-full px-3 py-1.5 border border-primary-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-primary-500"
                             />
                           ) : sub.origins && sub.origins.length > 1 ? (
@@ -846,9 +844,9 @@ const Contacts = () => {
                         {/* Status */}
                         <td className="px-6 py-4">
                           {editingId === sub.id ? (
-                            <select 
-                              value={editStatus} 
-                              onChange={(e)=>setEditStatus(e.target.value)}
+                            <select
+                              value={editStatus}
+                              onChange={(e) => setEditStatus(e.target.value)}
                               className="w-full px-2 py-1.5 border border-primary-300 rounded-lg text-xs outline-none bg-white font-semibold"
                             >
                               <option value="subscribed">Subscribed</option>
@@ -908,11 +906,11 @@ const Contacts = () => {
                             <div className="space-y-1 max-h-24 overflow-y-auto p-1.5 border border-primary-300 rounded-lg bg-white">
                               {lists.map(list => (
                                 <label key={list.id} className="flex items-center space-x-2 text-xs text-gray-700 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                  <input 
-                                    type="checkbox" 
+                                  <input
+                                    type="checkbox"
                                     checked={editListIds.includes(list.id)}
                                     onChange={() => {
-                                      setEditListIds(prev => 
+                                      setEditListIds(prev =>
                                         prev.includes(list.id) ? prev.filter(id => id !== list.id) : [...prev, list.id]
                                       );
                                     }}
@@ -926,8 +924,8 @@ const Contacts = () => {
                             <div className="flex flex-col gap-1.5 items-start">
                               {(() => {
                                 const assignedCount = isAll ? lists.length : (sub.all_lists ? sub.all_lists.length : getSubListIds(sub).length);
-                                const firstListName = sub.all_lists && sub.all_lists.length > 0 
-                                  ? sub.all_lists[0].name 
+                                const firstListName = sub.all_lists && sub.all_lists.length > 0
+                                  ? sub.all_lists[0].name
                                   : (lists.find(l => getSubListIds(sub).includes(Number(l.id)))?.name || 'Assigned List');
 
                                 if (assignedCount === 0) {
@@ -961,7 +959,7 @@ const Contacts = () => {
                                   </div>
                                 );
                               })()}
-                              
+
                               <button
                                 type="button"
                                 onClick={() => openTargetListModal(sub)}
@@ -977,8 +975,8 @@ const Contacts = () => {
                         <td className="px-6 py-4 text-right">
                           {editingId === sub.id ? (
                             <div className="flex justify-end space-x-2">
-                              <button onClick={() => saveEdit(sub.id)} className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors" title="Save"><Check size={14}/></button>
-                              <button onClick={cancelEdit} className="p-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors" title="Cancel"><X size={14}/></button>
+                              <button onClick={() => saveEdit(sub.id)} className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors" title="Save"><Check size={14} /></button>
+                              <button onClick={cancelEdit} className="p-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors" title="Cancel"><X size={14} /></button>
                             </div>
                           ) : (
                             <div className="flex justify-end space-x-1">
@@ -1090,11 +1088,10 @@ const Contacts = () => {
                     <button
                       key={pageNum}
                       onClick={() => setCurrentPage(pageNum)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                        currentPage === pageNum
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${currentPage === pageNum
                           ? 'bg-primary-600 text-white shadow-sm'
                           : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       {pageNum}
                     </button>
@@ -1143,7 +1140,7 @@ const Contacts = () => {
       {/* VIEW MODE 2: ENHANCED TARGET LIST MEMBERSHIP MANAGER WITH ALL TARGET LISTS OPTION */}
       {viewMode === 'list_manager' && (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden p-6 space-y-6">
-          
+
           {/* Header Controls */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
             <div>
@@ -1186,7 +1183,7 @@ const Contacts = () => {
 
           {selectedTargetListObj ? (
             <div className="space-y-4">
-              
+
               {/* Target List Info Card */}
               <div className="bg-primary-50/50 border border-primary-100 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -1195,13 +1192,13 @@ const Contacts = () => {
                       <Globe size={18} className="text-primary-600" />
                     ) : (
                       <Tag size={16} className="text-primary-600" />
-                    )} 
+                    )}
                     {selectedTargetListObj.name}
                   </h4>
                   <p className="text-xs text-primary-700 mt-0.5">{selectedTargetListObj.description}</p>
                 </div>
                 <span className="px-3.5 py-1.5 bg-primary-600 text-white font-extrabold text-xs rounded-full shadow-sm">
-                  {selectedTargetListId === 'all_lists' 
+                  {selectedTargetListId === 'all_lists'
                     ? `${subscribers.filter(s => getSubListIds(s).length > 0).length} / ${subscribers.length} Contacts Assigned to Target Lists`
                     : `${subscribers.filter(s => getSubListIds(s).includes(Number(selectedTargetListId))).length} Assigned Contacts`
                   }
@@ -1210,7 +1207,7 @@ const Contacts = () => {
 
               {/* Toolbar: Search & Select All Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/60 p-3 rounded-xl border border-gray-200">
-                
+
                 {/* Checkbox Select All + Search */}
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-700 bg-white px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition shadow-sm">
@@ -1248,7 +1245,7 @@ const Contacts = () => {
                       onClick={bulkAssignToCurrentList}
                       className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition disabled:opacity-50 flex items-center gap-1 shadow-sm"
                     >
-                      <Check size={13} /> 
+                      <Check size={13} />
                       {selectedTargetListId === 'all_lists' ? 'Assign Selected to ALL Lists' : `Assign to "${selectedTargetListObj.name}"`}
                     </button>
 
@@ -1292,19 +1289,18 @@ const Contacts = () => {
                     const isChecked = selectedSubIds.includes(sub.id);
 
                     return (
-                      <div 
-                        key={sub.id} 
-                        className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-                          isChecked ? 'bg-primary-50/30' : isAll ? 'bg-emerald-50/20' : isAssigned ? 'bg-blue-50/20' : 'hover:bg-gray-50/60'
-                        }`}
+                      <div
+                        key={sub.id}
+                        className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${isChecked ? 'bg-primary-50/30' : isAll ? 'bg-emerald-50/20' : isAssigned ? 'bg-blue-50/20' : 'hover:bg-gray-50/60'
+                          }`}
                       >
                         {/* Checkbox + Email Details */}
                         <div className="flex items-center gap-3">
-                          <input 
+                          <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
-                              setSelectedSubIds(prev => 
+                              setSelectedSubIds(prev =>
                                 prev.includes(sub.id) ? prev.filter(id => id !== sub.id) : [...prev, sub.id]
                               );
                             }}
@@ -1318,7 +1314,7 @@ const Contacts = () => {
 
                         {/* Action Buttons for Individual Contact */}
                         <div className="flex flex-wrap items-center gap-2">
-                          
+
                           {/* Assigned Tag Badge */}
                           {isAll ? (
                             <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-full border border-emerald-300 flex items-center gap-1.5 shadow-sm">
@@ -1340,11 +1336,10 @@ const Contacts = () => {
                             <button
                               type="button"
                               onClick={() => toggleSubscriberInTargetList(sub, Number(selectedTargetListId))}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
-                                isAssigned 
-                                  ? 'border-red-200 text-red-600 hover:bg-red-50' 
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${isAssigned
+                                  ? 'border-red-200 text-red-600 hover:bg-red-50'
                                   : 'border-primary-200 text-primary-600 hover:bg-primary-50'
-                              }`}
+                                }`}
                             >
                               {isAssigned ? 'Remove' : 'Assign Contact'}
                             </button>
@@ -1354,14 +1349,13 @@ const Contacts = () => {
                           <button
                             type="button"
                             onClick={() => toggleAssignSubToAllLists(sub)}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition flex items-center gap-1 ${
-                              isAll 
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' 
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition flex items-center gap-1 ${isAll
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
                                 : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
-                            }`}
+                              }`}
                             title="Toggle assignment across all target lists"
                           >
-                            <Sparkles size={12} className={isAll ? 'text-emerald-600' : 'text-gray-400'} /> 
+                            <Sparkles size={12} className={isAll ? 'text-emerald-600' : 'text-gray-400'} />
                             {isAll ? 'Assigned to ALL Lists ✓' : 'Assign to ALL Lists'}
                           </button>
 
@@ -1395,17 +1389,15 @@ const Contacts = () => {
             <div className="flex bg-gray-100 p-1 rounded-xl">
               <button
                 onClick={() => setAddMode('single')}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                  addMode === 'single' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${addMode === 'single' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                  }`}
               >
                 <User size={14} /> Single / Profile Add Form
               </button>
               <button
                 onClick={() => setAddMode('bulk_file')}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                  addMode === 'bulk_file' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${addMode === 'bulk_file' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                  }`}
               >
                 <Upload size={14} /> Bulk Import File (CSV/TXT)
               </button>
@@ -1413,7 +1405,7 @@ const Contacts = () => {
 
             {addMode === 'single' ? (
               <form onSubmit={handleAddContact} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-                
+
                 {/* MANUAL EMAIL ENTRY */}
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
                   <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
@@ -1421,8 +1413,8 @@ const Contacts = () => {
                   </span>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Email Address</label>
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       value={newEmail}
                       onChange={e => setNewEmail(e.target.value)}
                       placeholder="name@example.com"
@@ -1432,8 +1424,8 @@ const Contacts = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">First Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={newName}
                       onChange={e => setNewName(e.target.value)}
                       placeholder="Enter contact name"
@@ -1449,16 +1441,16 @@ const Contacts = () => {
                       Option 2: Select Registered User Profiles (Multi Selection)
                     </span>
                     <div className="flex gap-2 text-[11px]">
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setSelectedProfileIds(adminUsers.map(u => u.id))}
                         className="text-primary-600 hover:underline font-bold"
                       >
                         All
                       </button>
                       <span className="text-gray-300">|</span>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setSelectedProfileIds([])}
                         className="text-gray-500 hover:underline font-medium"
                       >
@@ -1478,11 +1470,11 @@ const Contacts = () => {
                       adminUsers.map(user => (
                         <label key={user.id} className="flex items-center justify-between p-1.5 text-xs text-gray-700 cursor-pointer hover:bg-blue-50/60 rounded-lg transition-colors">
                           <div className="flex items-center space-x-2.5">
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               checked={selectedProfileIds.includes(user.id)}
                               onChange={() => {
-                                setSelectedProfileIds(prev => 
+                                setSelectedProfileIds(prev =>
                                   prev.includes(user.id) ? prev.filter(id => id !== user.id) : [...prev, user.id]
                                 );
                               }}
@@ -1524,16 +1516,16 @@ const Contacts = () => {
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-bold text-gray-700">Assign Target Lists *</label>
                     <div className="flex gap-2 text-[11px]">
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setSelectedListIds(lists.map(l => l.id))}
                         className="text-primary-600 hover:underline font-bold"
                       >
                         All
                       </button>
                       <span className="text-gray-300">|</span>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setSelectedListIds([])}
                         className="text-gray-500 hover:underline font-medium"
                       >
@@ -1544,11 +1536,11 @@ const Contacts = () => {
                   <div className="space-y-1.5 max-h-36 overflow-y-auto p-2.5 border border-gray-300 rounded-xl bg-gray-50/50">
                     {lists.map(list => (
                       <label key={list.id} className="flex items-center space-x-2 text-xs text-gray-700 cursor-pointer hover:bg-gray-100 p-1.5 rounded-lg transition-colors">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedListIds.includes(list.id)}
                           onChange={() => {
-                            setSelectedListIds(prev => 
+                            setSelectedListIds(prev =>
                               prev.includes(list.id) ? prev.filter(id => id !== list.id) : [...prev, list.id]
                             );
                           }}
@@ -1616,7 +1608,7 @@ const Contacts = () => {
             <form onSubmit={handleCreateList} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">List Name *</label>
-                <input 
+                <input
                   type="text"
                   required
                   value={newListName}
@@ -1628,7 +1620,7 @@ const Contacts = () => {
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Description</label>
-                <textarea 
+                <textarea
                   rows={3}
                   value={newListDesc}
                   onChange={e => setNewListDesc(e.target.value)}
@@ -1679,7 +1671,7 @@ const Contacts = () => {
       {targetListModal.show && targetListModal.subscriber && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 border border-gray-200">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-gray-50/80">
               <div>
@@ -1691,8 +1683,8 @@ const Contacts = () => {
                   Contact: <span className="font-bold text-gray-800">{targetListModal.subscriber.email}</span>
                 </p>
               </div>
-              <button 
-                onClick={() => setTargetListModal({ show: false, subscriber: null, isEditing: false, selectedListIds: [] })} 
+              <button
+                onClick={() => setTargetListModal({ show: false, subscriber: null, isEditing: false, selectedListIds: [] })}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
               >
                 <X size={18} />
@@ -1701,7 +1693,7 @@ const Contacts = () => {
 
             {/* Modal Body */}
             <div className="p-5 space-y-4 max-h-[420px] overflow-y-auto">
-              
+
               {!targetListModal.isEditing ? (
                 /* VIEW MODE INSIDE MODAL */
                 <div className="space-y-3">
@@ -1749,11 +1741,10 @@ const Contacts = () => {
                     {lists.map(list => {
                       const isChecked = targetListModal.selectedListIds.includes(Number(list.id));
                       return (
-                        <label 
-                          key={list.id} 
-                          className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer ${
-                            isChecked ? 'bg-indigo-50/70 border-indigo-200 text-indigo-900' : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                          }`}
+                        <label
+                          key={list.id}
+                          className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer ${isChecked ? 'bg-indigo-50/70 border-indigo-200 text-indigo-900' : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                            }`}
                         >
                           <div className="flex items-center gap-3">
                             <input
@@ -1763,7 +1754,7 @@ const Contacts = () => {
                                 const listIdNum = Number(list.id);
                                 setTargetListModal(prev => ({
                                   ...prev,
-                                  selectedListIds: isChecked 
+                                  selectedListIds: isChecked
                                     ? prev.selectedListIds.filter(id => id !== listIdNum)
                                     : [...prev.selectedListIds, listIdNum]
                                 }));

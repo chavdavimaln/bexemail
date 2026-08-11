@@ -59,6 +59,76 @@ exports.login = async (req, res) => {
     }
 };
 
+// POST /api/auth/register
+exports.register = async (req, res) => {
+    const { name, username, email, number, password, role, isTrial } = req.body;
+
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: 'Full name, email address, and password are required.' });
+    }
+
+    try {
+        const [existing] = await db.query(`SELECT id FROM admin_users WHERE email = ?`, [email.toLowerCase().trim()]);
+        if (existing.length > 0) {
+            return res.status(400).json({ error: 'This email address is already registered. Please sign in or use another email.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const userRole = role || 'Developer';
+
+        // Default permissions for new self-registered trial users
+        const defaultPerms = {
+            reports: true,
+            backup_history_all: true,
+            backup_history_management: true,
+            backup_history_auto_backup: true,
+            backup_history_logs: true,
+            profiles_all: true,
+            profiles_database_backup: true,
+            profiles_user_accounts: true,
+            profiles_smtp_config: true,
+            settings_all: true,
+            settings_system: true,
+            settings_api_access: true
+        };
+        const permissionsStr = JSON.stringify(defaultPerms);
+
+        const genUsername = username && username.trim() !== '' 
+            ? username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
+            : name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(100 + Math.random() * 900);
+
+        const [result] = await db.query(
+            `INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name.trim(), genUsername, email.toLowerCase().trim(), number || null, hashedPassword, password, userRole, permissionsStr]
+        );
+
+        const newUserId = result.insertId;
+
+        const token = jwt.sign(
+            { id: newUserId, email: email.toLowerCase().trim(), role: userRole },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.status(201).json({
+            message: isTrial ? '14-Day Free Trial account created successfully!' : 'Account registered successfully!',
+            token,
+            user: {
+                id: newUserId,
+                name: name.trim(),
+                username: genUsername,
+                email: email.toLowerCase().trim(),
+                number: number || null,
+                role: userRole,
+                permissions: defaultPerms
+            }
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'Server error during registration: ' + error.message });
+    }
+};
+
 // GET /api/auth/me
 exports.getMe = async (req, res) => {
     try {
