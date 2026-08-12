@@ -315,8 +315,24 @@ const Header = () => {
   const dropdownRef = React.useRef(null);
   const navigate = useNavigate();
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [user, setUser] = React.useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
+
+  React.useEffect(() => {
+    const handleSyncUser = () => {
+      const freshUser = JSON.parse(localStorage.getItem('user') || '{}');
+      setUser(freshUser);
+    };
+
+    window.addEventListener('userProfileUpdated', handleSyncUser);
+    window.addEventListener('storage', handleSyncUser);
+    return () => {
+      window.removeEventListener('userProfileUpdated', handleSyncUser);
+      window.removeEventListener('storage', handleSyncUser);
+    };
+  }, []);
+
   const avatarLetter = user.name ? user.name.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'A');
+  const userAvatar = user.avatar || user.profile_picture || null;
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -342,16 +358,21 @@ const Header = () => {
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold focus:outline-none ring-2 ring-transparent hover:ring-primary-300 transition-all text-sm uppercase"
+            className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold focus:outline-none ring-2 ring-transparent hover:ring-primary-300 transition-all text-sm uppercase overflow-hidden border border-gray-200 shadow-xs"
+            title={user.name || user.email || 'My Profile'}
           >
-            {avatarLetter}
+            {userAvatar ? (
+              <img src={userAvatar} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              avatarLetter
+            )}
           </button>
           
           {isProfileOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
               <Link
                 to="/profile"
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
                 onClick={() => setIsProfileOpen(false)}
               >
                 View Profile

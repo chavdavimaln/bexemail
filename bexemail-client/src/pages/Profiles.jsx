@@ -3,7 +3,8 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserPlus, Key, Mail, Phone, Shield, ShieldCheck, 
-  Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw, Database, Send
+  Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw, Database, Send,
+  User, UserCheck
 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
@@ -622,7 +623,16 @@ const Profiles = () => {
         </div>
         
         <div className="flex items-center gap-3">
-          <button onClick={fetchData} className="p-2.5 text-gray-500 hover:text-primary-600 hover:bg-gray-50 rounded-xl border border-gray-200 transition">
+          <button 
+            onClick={() => navigate('/profile')} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm transition"
+            title="View My Profile Details Page"
+          >
+            <User size={16} />
+            <span>My Profile Details</span>
+          </button>
+
+          <button onClick={fetchData} className="p-2.5 text-gray-500 hover:text-primary-600 hover:bg-gray-50 rounded-xl border border-gray-200 transition" title="Refresh Data">
             <RefreshCw size={18} />
           </button>
           
@@ -658,6 +668,13 @@ const Profiles = () => {
 
               {isAdmin && (
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => navigate('/profile')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition border border-indigo-200 shadow-xs"
+                    title="View My Profile Details Page"
+                  >
+                    <User size={15} /> My Profile Details
+                  </button>
                   <button 
                     onClick={() => navigate('/permissions')}
                     className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold transition border border-purple-200 shadow-xs"
@@ -731,8 +748,9 @@ const Profiles = () => {
                 return (
                   <tr key={u.id} className="hover:bg-gray-50/50 transition">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900">{u.name}</div>
-                      <div className="text-xs text-gray-400">@{u.username || 'no-username'}</div>
+                      <span className="font-normal text-gray-800 text-sm">
+                        {u.name} {u.username ? <span className="text-gray-500 font-normal">(@{u.username})</span> : null}
+                      </span>
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-800">{u.email}</td>
                     <td className="px-6 py-4 font-mono text-xs">{u.number || '—'}</td>
@@ -769,9 +787,18 @@ const Profiles = () => {
                           setShowViewProfileModal(true);
                         }}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-                        title="View Profile Details"
+                        title="View Profile Quick Summary"
                       >
                         <Eye size={16} />
+                      </button>
+
+                      {/* Go to My Profile Details Page */}
+                      <button 
+                        onClick={() => navigate('/profile')}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                        title="Go to My Profile Details Page"
+                      >
+                        <User size={16} />
                       </button>
 
                       {/* Password Actions */}
@@ -1519,17 +1546,29 @@ const Profiles = () => {
                 Close
               </button>
               
-              <button 
-                onClick={() => {
-                  setShowViewProfileModal(false);
-                  setUserForm({ ...viewProfileData.user, permissions: viewProfileData.perms, password: '' });
-                  setShowUserModal(true);
-                }} 
-                className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
-              >
-                <Edit size={14} />
-                <span>Edit Profile</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    setShowViewProfileModal(false);
+                    navigate('/profile');
+                  }}
+                  className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <User size={14} />
+                  <span>My Profile Details Page</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowViewProfileModal(false);
+                    setUserForm({ ...viewProfileData.user, permissions: viewProfileData.perms, password: '' });
+                    setShowUserModal(true);
+                  }} 
+                  className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+                >
+                  <Edit size={14} />
+                  <span>Edit Profile</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

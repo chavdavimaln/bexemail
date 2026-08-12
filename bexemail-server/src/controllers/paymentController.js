@@ -14,7 +14,7 @@ exports.processCheckout = async (req, res) => {
             free: { id: 1, plan_code: 'free', name: 'Free Plan', monthly_price: 0, seats_limit: 1, contacts_limit: 250, emails_limit: 1000 },
             essentials: { id: 2, plan_code: 'essentials', name: 'Essentials Plan', monthly_price: 300, seats_limit: 3, contacts_limit: 50000, emails_limit: 5000 },
             standard: { id: 3, plan_code: 'standard', name: 'Standard Plan', monthly_price: 525, seats_limit: 5, contacts_limit: 100000, emails_limit: 6000 },
-            premium: { id: 4, plan_code: 'premium', name: 'Premium Plan', monthly_price: 10000, seats_limit: 10, contacts_limit: 1000000, emails_limit: 150000 }
+            premium: { id: 4, plan_code: 'premium', name: 'Premium Plan', monthly_price: 10000, seats_limit: 10, contacts_limit: 150000, emails_limit: 150000 }
         };
 
         let matchedPlan = (pRows && pRows.length > 0) ? pRows[0] : (planFallbacks[targetPlanCode] || planFallbacks.standard);

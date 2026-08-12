@@ -63,9 +63,9 @@ exports.login = async (req, res) => {
                 subscription: sub ? {
                     plan_code: sub.plan_code,
                     plan_name: sub.plan_name,
-                    seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
-                    contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
-                    emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+                    seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.plan_seats_limit || (sub.plan_code === 'free' ? 1 : sub.plan_code === 'essentials' ? 3 : sub.plan_code === 'standard' ? 5 : sub.plan_code === 'premium' ? 10 : sub.seats_limit) || 1,
+                    contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || (sub.plan_code === 'free' ? 250 : sub.plan_code === 'essentials' ? 50000 : sub.plan_code === 'standard' ? 100000 : sub.plan_code === 'premium' ? 150000 : 250),
+                    emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || (sub.plan_code === 'free' ? 1000 : sub.plan_code === 'essentials' ? 5000 : sub.plan_code === 'standard' ? 6000 : sub.plan_code === 'premium' ? 150000 : 1000),
                     status: sub.status
                 } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' }
             }
@@ -173,8 +173,8 @@ exports.register = async (req, res) => {
 // GET /api/auth/me
 exports.getMe = async (req, res) => {
     try {
-        const userId = req.user.id;
-        const [users] = await db.query(`SELECT id, name, username, email, number, domain, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const userId = req.user?.id || req.headers['x-user-id'] || req.headers['X-User-Id'] || 1;
+        const [users] = await db.query(`SELECT id, name, username, email, number, domain, avatar, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -199,9 +199,9 @@ exports.getMe = async (req, res) => {
         user.subscription = sub ? {
             plan_code: sub.plan_code,
             plan_name: sub.plan_name,
-            seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.seats_limit || sub.plan_seats_limit || 1,
-            contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || 250,
-            emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || 1000,
+            seats_limit: user.custom_seats_limit || sub.custom_seats_limit || sub.plan_seats_limit || (sub.plan_code === 'free' ? 1 : sub.plan_code === 'essentials' ? 3 : sub.plan_code === 'standard' ? 5 : sub.plan_code === 'premium' ? 10 : sub.seats_limit) || 1,
+            contacts_limit: user.custom_contacts_limit || sub.custom_contacts_limit || sub.plan_contacts_limit || (sub.plan_code === 'free' ? 250 : sub.plan_code === 'essentials' ? 50000 : sub.plan_code === 'standard' ? 100000 : sub.plan_code === 'premium' ? 150000 : 250),
+            emails_limit: user.custom_emails_limit || sub.custom_emails_limit || sub.plan_emails_limit || (sub.plan_code === 'free' ? 1000 : sub.plan_code === 'essentials' ? 5000 : sub.plan_code === 'standard' ? 6000 : sub.plan_code === 'premium' ? 150000 : 1000),
             status: sub.status
         } : { plan_code: 'free', plan_name: 'Free Plan', seats_limit: 1, contacts_limit: 250, emails_limit: 1000, status: 'active' };
 
@@ -215,9 +215,18 @@ exports.getMe = async (req, res) => {
 // PUT /api/auth/profile
 exports.updateProfile = async (req, res) => {
     try {
-        const userId = req.user?.id || req.headers['x-user-id'] || 1;
-        const { name, email, number, phone, domain, plan_code, plan } = req.body;
+        const userId = req.user?.id || req.headers['x-user-id'] || req.headers['X-User-Id'] || 1;
+        const { name, email, number, phone, domain, avatar, plan_code, plan } = req.body;
         
+        // Ensure avatar column exists in database
+        try {
+            await db.query(`ALTER TABLE admin_users ADD COLUMN avatar LONGTEXT NULL`);
+        } catch (e) {}
+
+        if (avatar !== undefined && avatar !== null && avatar !== '') {
+            await db.query(`UPDATE admin_users SET avatar = ? WHERE id = ?`, [avatar, userId]);
+        }
+
         await db.query(
             `UPDATE admin_users SET name = COALESCE(?, name), email = COALESCE(?, email), number = COALESCE(?, number), domain = COALESCE(?, domain) WHERE id = ?`,
             [name || null, email || null, number || phone || null, domain || null, userId]
@@ -249,7 +258,7 @@ exports.updateProfile = async (req, res) => {
         }
         
         // Fetch updated user object
-        const [users] = await db.query(`SELECT id, name, username, email, number, domain, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const [users] = await db.query(`SELECT id, name, username, email, number, domain, avatar, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
         const user = users[0] || {};
         let perms = user.permissions;
         if (typeof perms === 'string') {

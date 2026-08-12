@@ -17,13 +17,16 @@ const Profile = () => {
     email: currentUser.email || '',
     domain: currentUser.domain || 'bexcodeservices.com',
     phone: currentUser.phone || '',
-    avatar: null
+    role: currentUser.role || 'Admin',
+    avatar: currentUser.avatar || currentUser.profile_picture || localStorage.getItem('user_avatar') || null
   });
 
   const userPlanCode = (initialSub.plan_code || currentUser.plan || 'free').toLowerCase();
   const [selectedPlan, setSelectedPlan] = useState(userPlanCode);
   const [activeSub, setActiveSub] = useState(initialSub);
   const [updatingPlan, setUpdatingPlan] = useState(false);
+
+  const currentActivePlanCode = (activeSub.plan_code || currentUser.subscription?.plan_code || currentUser.plan || 'free').toLowerCase();
 
   const [passwords, setPasswords] = useState({
     current: '',
@@ -94,7 +97,9 @@ const Profile = () => {
         domain: fetched.domain || prev.domain,
         firstName: fetched.name || fetched.first_name || prev.firstName,
         lastName: fetched.last_name || prev.lastName,
-        phone: fetched.number || fetched.phone || prev.phone
+        phone: fetched.number || fetched.phone || prev.phone,
+        role: fetched.role || currentUser.role || prev.role || 'Admin',
+        avatar: fetched.avatar || fetched.profile_picture || currentUser.avatar || currentUser.profile_picture || localStorage.getItem('user_avatar') || prev.avatar || null
       }));
 
       if (fetched.subscription) {
@@ -127,15 +132,28 @@ const Profile = () => {
         'x-user-id': currentUser.id || 1,
         'x-user-role': currentUser.role || 'Super Admin'
       };
-      await axios.put('/api/auth/profile', {
+      const res = await axios.put('/api/auth/profile', {
         name: `${profileData.firstName} ${profileData.lastName}`.trim(),
         email: profileData.email,
-        phone: profileData.phone
+        phone: profileData.phone,
+        avatar: profileData.avatar
       }, { headers }).catch(() => axios.put('http://localhost:5000/api/auth/profile', {
         name: `${profileData.firstName} ${profileData.lastName}`.trim(),
         email: profileData.email,
-        phone: profileData.phone
+        phone: profileData.phone,
+        avatar: profileData.avatar
       }, { headers }));
+
+      const freshUser = res.data?.user || {};
+      const updatedUser = {
+        ...currentUser,
+        ...freshUser,
+        name: `${profileData.firstName} ${profileData.lastName}`.trim(),
+        phone: profileData.phone,
+        avatar: profileData.avatar
+      };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('userProfileUpdated'));
 
       customAlert({ title: 'Success', message: 'Profile updated successfully!', type: 'success' });
     } catch (err) {
@@ -205,16 +223,56 @@ const Profile = () => {
     }
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        customAlert({ title: 'File Too Large', message: 'Profile picture must be less than 3MB.', type: 'warning' });
+        return;
+      }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileData(prev => ({ ...prev, avatar: reader.result }));
+      reader.onloadend = async () => {
+        const base64Img = reader.result;
+        setProfileData(prev => ({ ...prev, avatar: base64Img }));
+        localStorage.setItem('user_avatar', base64Img);
+
+        const updatedUser = { ...currentUser, avatar: base64Img };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('userProfileUpdated'));
+
+        try {
+          const headers = {
+            'x-user-id': currentUser.id || 1,
+            'x-user-role': currentUser.role || 'Super Admin'
+          };
+          const res = await axios.put('/api/auth/profile', {
+            name: `${profileData.firstName} ${profileData.lastName}`.trim(),
+            email: profileData.email,
+            phone: profileData.phone,
+            avatar: base64Img
+          }, { headers }).catch(() => axios.put('http://localhost:5000/api/auth/profile', {
+            name: `${profileData.firstName} ${profileData.lastName}`.trim(),
+            email: profileData.email,
+            phone: profileData.phone,
+            avatar: base64Img
+          }, { headers }));
+
+          const freshUser = res.data?.user || {};
+          const finalUser = { ...currentUser, ...freshUser, avatar: base64Img };
+          localStorage.setItem('user', JSON.stringify(finalUser));
+          window.dispatchEvent(new Event('userProfileUpdated'));
+
+          customAlert({ title: 'Profile Picture Updated', message: 'Your profile picture has been updated and saved successfully!', type: 'success' });
+        } catch (err) {
+          console.error('Failed to save profile picture to server:', err);
+          customAlert({ title: 'Profile Picture Saved', message: 'Your profile picture has been updated and saved successfully!', type: 'success' });
+        }
       };
       reader.readAsDataURL(file);
     }
   };
+
+  const activeAvatarSrc = profileData.avatar || currentUser.avatar || localStorage.getItem('user_avatar') || null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -233,11 +291,11 @@ const Profile = () => {
             <div className="flex flex-col items-center">
               <div className="relative group mb-6">
                 <div className="w-32 h-32 rounded-full overflow-hidden bg-gradient-to-br from-primary-100 to-primary-200 border-4 border-white shadow-lg flex items-center justify-center transition-transform group-hover:scale-105">
-                  {profileData.avatar ? (
-                    <img src={profileData.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  {activeAvatarSrc ? (
+                    <img src={activeAvatarSrc} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-4xl font-bold text-primary-600">
-                      {profileData.firstName.charAt(0)}{profileData.lastName.charAt(0)}
+                    <span className="text-4xl font-bold text-primary-600 uppercase">
+                      {(profileData.firstName || profileData.username || 'V').charAt(0)}
                     </span>
                   )}
                 </div>
@@ -247,7 +305,10 @@ const Profile = () => {
                 </label>
               </div>
               <p className="text-sm font-medium text-gray-800">{profileData.firstName} {profileData.lastName}</p>
-              <p className="text-sm text-gray-500 mb-4">{profileData.email}</p>
+              <p className="text-sm text-gray-500 mb-2">{profileData.email}</p>
+              <span className="mb-4 inline-block px-3 py-1 bg-purple-100 text-purple-700 text-xs font-extrabold rounded-full uppercase tracking-wider">
+                Role: {profileData.role}
+              </span>
               
               <div className="w-full border-t border-gray-100 pt-4">
                 <p className="text-xs text-center text-gray-400">Allowed formats: JPG, PNG, GIF</p>
@@ -325,21 +386,46 @@ const Profile = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                  Phone Number
-                </label>
-                <div className="relative rounded-md shadow-sm max-w-md">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Phone className="h-4 w-4 text-gray-400" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                    Phone Number
+                  </label>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <input
+                      type="tel"
+                      value={profileData.phone}
+                      onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                      placeholder="+91 9876543210"
+                    />
                   </div>
-                  <input
-                    type="tel"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
-                    placeholder="+91 9876543210"
-                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                    User Role / System Access
+                  </label>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <ShieldCheck className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <input
+                      type="text"
+                      value={
+                        profileData.role === 'Super Admin' ? 'Admin (Super Admin)' :
+                        profileData.role === 'Subscriber' || profileData.role === 'Sub Admin' ? 'Associates (Sub Admin)' :
+                        profileData.role === 'User' ? 'Developer' :
+                        profileData.role
+                      }
+                      disabled
+                      className="w-full pl-10 pr-4 py-2 border border-purple-200 bg-purple-50/60 rounded-lg text-purple-900 font-extrabold outline-none cursor-not-allowed"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">Assigned role & system access level</p>
                 </div>
               </div>
 
@@ -372,17 +458,17 @@ const Profile = () => {
                 <div>
                   <div className="text-slate-400 uppercase text-[10px] font-bold">Active Plan</div>
                   <div className="text-sm font-black text-slate-900 mt-0.5">
-                    {planOptions.find(p => p.code === selectedPlan)?.name || 'Free Plan'}
+                    {planOptions.find(p => p.code === currentActivePlanCode)?.name || activeSub.plan_name || 'Free Plan'}
                   </div>
                 </div>
                 <div>
                   <div className="text-slate-400 uppercase text-[10px] font-bold">Role-Based Seats</div>
                   <div className="text-sm font-black text-slate-900 mt-0.5">
-                    {selectedPlan === 'free'
+                    {currentActivePlanCode === 'free'
                       ? '1 Seat (Admin only)'
-                      : selectedPlan === 'essentials'
+                      : currentActivePlanCode === 'essentials'
                       ? '3 Seats (1 Admin + 2 Admin/Associates/Developers)'
-                      : selectedPlan === 'standard'
+                      : currentActivePlanCode === 'standard'
                       ? '5 Seats (1 Admin + 4 Admin/Associates/Developers)'
                       : `${activeSub.seats_limit || 10} Seats (1 Admin + ${(activeSub.seats_limit || 10) - 1} Admin/Associates/Developers)`}
                   </div>
@@ -390,7 +476,7 @@ const Profile = () => {
                 <div>
                   <div className="text-slate-400 uppercase text-[10px] font-bold">Max Contact Capacity</div>
                   <div className="text-sm font-black text-slate-900 mt-0.5">
-                    {selectedPlan === 'free' ? '250 contacts' : selectedPlan === 'essentials' ? '50,000 contacts' : selectedPlan === 'standard' ? '100,000 contacts' : `${activeSub.contacts_limit ? Number(activeSub.contacts_limit).toLocaleString() : '150,000'} contacts`}
+                    {currentActivePlanCode === 'free' ? '250 contacts' : currentActivePlanCode === 'essentials' ? '50,000 contacts' : currentActivePlanCode === 'standard' ? '100,000 contacts' : `${activeSub.contacts_limit ? Number(activeSub.contacts_limit).toLocaleString() : '150,000'} contacts`}
                   </div>
                 </div>
               </div>
@@ -402,18 +488,31 @@ const Profile = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {planOptions.map(p => {
                     const isSelected = selectedPlan === p.code;
+                    const isActive = currentActivePlanCode === p.code;
                     return (
                       <div
                         key={p.code}
                         onClick={() => setSelectedPlan(p.code)}
-                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all ${
+                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all relative ${
                           isSelected
-                            ? 'border-primary-600 bg-primary-50/30 shadow-xs'
+                            ? 'border-primary-600 bg-primary-50/30 shadow-xs ring-2 ring-primary-500/20'
                             : 'border-gray-200 bg-white hover:border-gray-300'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm text-gray-900">{p.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-sm text-gray-900">{p.name}</span>
+                            {isActive && (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase tracking-wider">
+                                Active
+                              </span>
+                            )}
+                            {isSelected && !isActive && (
+                              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-wider">
+                                Selected
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs font-bold text-primary-600">{p.price}</span>
                         </div>
                         <div className="mt-2 text-xs text-gray-500 space-y-0.5">

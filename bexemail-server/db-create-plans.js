@@ -62,7 +62,8 @@ async function initPlansDb() {
       "ALTER TABLE admin_users ADD COLUMN custom_campaigns_limit INT NULL",
       "ALTER TABLE admin_users ADD COLUMN custom_admins_limit INT NULL",
       "ALTER TABLE admin_users ADD COLUMN custom_associates_limit INT NULL",
-      "ALTER TABLE admin_users ADD COLUMN configured_modules JSON NULL"
+      "ALTER TABLE admin_users ADD COLUMN configured_modules JSON NULL",
+      "ALTER TABLE admin_users ADD COLUMN avatar LONGTEXT NULL"
     ];
     for (const q of alterQueries) {
       try { await pool.query(q); } catch (e) {}
