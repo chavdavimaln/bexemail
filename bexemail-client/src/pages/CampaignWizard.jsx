@@ -63,6 +63,22 @@ export default function CampaignWizard() {
   });
   const [subscriberSearch, setSubscriberSearch] = useState('');
   const [previewMode, setPreviewMode] = useState('desktop'); // 'desktop' or 'mobile'
+  const [highlightedField, setHighlightedField] = useState(null);
+
+  useEffect(() => {
+    if (highlightedField) {
+      const timer = setTimeout(() => {
+        const el = document.querySelector(`[data-field="${highlightedField}"]`) || document.getElementsByName(highlightedField)[0];
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (typeof el.focus === 'function') {
+            el.focus();
+          }
+        }
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [step, highlightedField]);
 
   // Full Add SMTP & Test Connection Modal States in Wizard
   const [showAddSmtpModal, setShowAddSmtpModal] = useState(false);
@@ -77,6 +93,10 @@ export default function CampaignWizard() {
   const [testSmtpLoading, setTestSmtpLoading] = useState(false);
   const [testSmtpResult, setTestSmtpResult] = useState(null);
 
+  const footerEditorRef = useRef(null);
+  const [mainEditorReady, setMainEditorReady] = useState(false);
+  const [footerEditorReady, setFooterEditorReady] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '', 
     subject: '', 
@@ -89,6 +109,11 @@ export default function CampaignWizard() {
     variant_b_html: '',
     template_id: '',
     html_content: '',
+    design_json: null,
+    include_footer: true,
+    footer_editor_type: 'html', // 'html' or 'builder'
+    footer_html: DEFAULT_FOOTER_HTML,
+    footer_design_json: null,
     scheduled_at: '',
     dispatch_option: 'review',
     sender_mode: 'broadcast',
@@ -171,6 +196,16 @@ export default function CampaignWizard() {
             } catch (e) {}
           }
 
+          let dJson = null;
+          try {
+            dJson = c.design_json ? (typeof c.design_json === 'string' ? JSON.parse(c.design_json) : c.design_json) : null;
+          } catch(e){}
+
+          let fDesignJson = null;
+          try {
+            fDesignJson = c.footer_design_json ? (typeof c.footer_design_json === 'string' ? JSON.parse(c.footer_design_json) : c.footer_design_json) : null;
+          } catch(e){}
+
           setFormData(prev => ({
             ...prev,
             name: c.name || '',
@@ -184,6 +219,11 @@ export default function CampaignWizard() {
             variant_b_html: c.variant_b_html || '',
             template_id: c.template_id ? String(c.template_id) : '',
             html_content: c.html_content || '',
+            design_json: dJson,
+            include_footer: c.include_footer !== undefined && c.include_footer !== null ? Boolean(c.include_footer) : true,
+            footer_editor_type: c.footer_editor_type || 'html',
+            footer_html: c.footer_html || DEFAULT_FOOTER_HTML,
+            footer_design_json: fDesignJson,
             scheduled_at: formattedScheduledAt
           }));
         } catch (error) {
@@ -365,12 +405,329 @@ export default function CampaignWizard() {
     }));
   };
 
-  const autoSaveDraft = async (dataToSave = formData) => {
+  const formDataRef = useRef(formData);
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
+  // Convert raw HTML strings into native Unlayer design JSON blocks for full drag-and-drop editing
+  const htmlToUnlayerDesign = (htmlContent) => {
+    if (!htmlContent || typeof htmlContent !== 'string' || htmlContent.trim() === '') {
+      return {
+        body: {
+          rows: [],
+          values: { backgroundColor: '#ffffff' }
+        }
+      };
+    }
+
     try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+
+      const contents = [];
+      const processedNodes = new Set();
+
+      const elements = doc.body.querySelectorAll('h1, h2, h3, h4, h5, h6, p, img, a, hr, blockquote, ul, ol');
+
+      if (elements.length > 0) {
+        elements.forEach(el => {
+          if (processedNodes.has(el)) return;
+          if (el.closest('script, style, svg, head')) return;
+
+          const tag = el.tagName.toLowerCase();
+
+          // Headings -> Native Unlayer Heading block
+          if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+            contents.push({
+              type: 'heading',
+              values: {
+                text: el.innerHTML || el.textContent || '',
+                headingType: tag,
+                fontSize: tag === 'h1' ? '28px' : (tag === 'h2' ? '24px' : '20px'),
+                textAlign: el.style.textAlign || 'left',
+                color: el.style.color || '#111827'
+              }
+            });
+            processedNodes.add(el);
+            return;
+          }
+
+          // Images -> Native Unlayer Image block
+          if (tag === 'img') {
+            const src = el.getAttribute('src');
+            if (src) {
+              contents.push({
+                type: 'image',
+                values: {
+                  src: {
+                    url: src
+                  },
+                  altText: el.getAttribute('alt') || '',
+                  width: el.getAttribute('width') ? `${el.getAttribute('width')}px` : '100%'
+                }
+              });
+              processedNodes.add(el);
+            }
+            return;
+          }
+
+          // Buttons -> Native Unlayer Button block
+          if (tag === 'a' && (el.classList.contains('button') || el.style.backgroundColor || el.getAttribute('role') === 'button' || el.style.display === 'inline-block')) {
+            contents.push({
+              type: 'button',
+              values: {
+                text: el.innerText || el.textContent || 'Button',
+                href: {
+                  url: el.getAttribute('href') || '#'
+                },
+                buttonColors: {
+                  color: el.style.color || '#ffffff',
+                  backgroundColor: el.style.backgroundColor || '#2563eb'
+                }
+              }
+            });
+            processedNodes.add(el);
+            return;
+          }
+
+          // Divider -> Native Unlayer Divider block
+          if (tag === 'hr') {
+            contents.push({
+              type: 'divider',
+              values: {}
+            });
+            processedNodes.add(el);
+            return;
+          }
+
+          // Text / Paragraphs / Lists -> Native Unlayer Text block
+          if (['p', 'blockquote', 'ul', 'ol'].includes(tag)) {
+            const childHeadingsOrImgs = el.querySelectorAll('h1, h2, h3, h4, h5, h6, img, hr');
+            if (childHeadingsOrImgs.length === 0) {
+              const htmlText = el.outerHTML || el.innerHTML || '';
+              if (htmlText.trim()) {
+                contents.push({
+                  type: 'text',
+                  values: {
+                    text: htmlText,
+                    color: el.style.color || '#374151',
+                    fontSize: el.style.fontSize || '14px',
+                    textAlign: el.style.textAlign || 'left'
+                  }
+                });
+                processedNodes.add(el);
+              }
+            }
+            return;
+          }
+        });
+      }
+
+      // Fallback if no elements extracted
+      if (contents.length === 0) {
+        const bodyHtml = doc.body.innerHTML || htmlContent;
+        contents.push({
+          type: 'text',
+          values: {
+            text: bodyHtml
+          }
+        });
+      }
+
+      const rows = contents.map(item => ({
+        cells: [1],
+        columns: [
+          {
+            contents: [item],
+            values: {}
+          }
+        ],
+        values: {}
+      }));
+
+      return {
+        body: {
+          rows: rows,
+          values: {
+            backgroundColor: '#ffffff'
+          }
+        }
+      };
+    } catch (err) {
+      console.error('Failed to parse HTML into Unlayer design:', err);
+      return {
+        body: {
+          rows: [
+            {
+              cells: [1],
+              columns: [
+                {
+                  contents: [
+                    {
+                      type: 'text',
+                      values: { text: htmlContent }
+                    }
+                  ],
+                  values: {}
+                }
+              ],
+              values: {}
+            }
+          ],
+          values: { backgroundColor: '#ffffff' }
+        }
+      };
+    }
+  };
+
+  const loadDataIntoMainEditor = (dataToLoad) => {
+    const data = dataToLoad || formDataRef.current || formData;
+    if (!emailEditorRef.current?.editor || !data) return;
+
+    try {
+      let designToLoad = null;
+      if (data.design_json) {
+        try {
+          designToLoad = typeof data.design_json === 'string'
+            ? JSON.parse(data.design_json)
+            : data.design_json;
+        } catch (e) {}
+      }
+
+      if (!designToLoad || !designToLoad.body || !Array.isArray(designToLoad.body.rows) || designToLoad.body.rows.length === 0) {
+        if (data.html_content && data.html_content.trim() !== '') {
+          designToLoad = htmlToUnlayerDesign(data.html_content);
+        }
+      }
+
+      if (designToLoad) {
+        emailEditorRef.current.editor.loadDesign(designToLoad);
+      }
+    } catch (err) {
+      console.error('Failed to load design into Unlayer main editor:', err);
+    }
+  };
+
+  const onMainEditorLoad = () => {
+    setMainEditorReady(true);
+    setTimeout(() => {
+      loadDataIntoMainEditor(formDataRef.current);
+    }, 100);
+  };
+
+  useEffect(() => {
+    if (step === 5 && mainEditorReady) {
+      const timer = setTimeout(() => {
+        loadDataIntoMainEditor(formDataRef.current);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [step, formData.template_id, mainEditorReady]);
+
+  const loadDataIntoFooterEditor = (dataToLoad) => {
+    const data = dataToLoad || formDataRef.current || formData;
+    if (!footerEditorRef.current?.editor || !data) return;
+    try {
+      let designToLoad = null;
+      if (data.footer_design_json) {
+        try {
+          designToLoad = typeof data.footer_design_json === 'string'
+            ? JSON.parse(data.footer_design_json)
+            : data.footer_design_json;
+        } catch (e) {}
+      }
+
+      if (!designToLoad || !designToLoad.body || !Array.isArray(designToLoad.body.rows) || designToLoad.body.rows.length === 0) {
+        if (data.footer_html && data.footer_html.trim() !== '') {
+          designToLoad = htmlToUnlayerDesign(data.footer_html);
+        }
+      }
+
+      if (designToLoad) {
+        footerEditorRef.current.editor.loadDesign(designToLoad);
+      }
+    } catch (err) {
+      console.error('Failed to load design into Unlayer footer editor:', err);
+    }
+  };
+
+  const onFooterEditorLoad = () => {
+    setFooterEditorReady(true);
+    setTimeout(() => {
+      loadDataIntoFooterEditor(formDataRef.current);
+    }, 100);
+  };
+
+  const exportAllEditors = async () => {
+    const current = formDataRef.current;
+    let mainHtml = current.html_content;
+    let mainDesign = current.design_json;
+    let footHtml = current.footer_html;
+    let footDesign = current.footer_design_json;
+
+    if (step === 5 && editorMode === 'visual' && emailEditorRef.current?.editor) {
+      await new Promise((resolve) => {
+        emailEditorRef.current.editor.exportHtml((data) => {
+          if (data) {
+            mainHtml = data.html || mainHtml;
+            mainDesign = data.design || mainDesign;
+          }
+          resolve();
+        });
+      });
+    }
+
+    if (step === 5 && current.include_footer && current.footer_editor_type === 'builder' && footerEditorRef.current?.editor) {
+      await new Promise((resolve) => {
+        footerEditorRef.current.editor.exportHtml((data) => {
+          if (data) {
+            footHtml = data.html || footHtml;
+            footDesign = data.design || footDesign;
+          }
+          resolve();
+        });
+      });
+    }
+
+    let finalHtml = mainHtml || '';
+    if (current.include_footer && footHtml && footHtml.trim() !== '') {
+      if (!finalHtml.includes(footHtml)) {
+        if (finalHtml.includes('</body>')) {
+          finalHtml = finalHtml.replace('</body>', `${footHtml}</body>`);
+        } else {
+          finalHtml = `${finalHtml}\n${footHtml}`;
+        }
+      }
+    }
+
+    const updatedFormData = {
+      ...current,
+      html_content: mainHtml,
+      design_json: mainDesign,
+      footer_html: footHtml,
+      footer_design_json: footDesign
+    };
+
+    formDataRef.current = updatedFormData;
+    setFormData(updatedFormData);
+    return { updatedFormData, finalHtml };
+  };
+
+  const autoSaveDraft = async (overrideData = null) => {
+    try {
+      const dataToSave = overrideData || formDataRef.current;
       const isSingleEmail = dataToSave.target_type === 'individual_subscriber' || dataToSave.target_type === 'custom_email';
       let contentToSave = dataToSave.html_content || '';
-      if (contentToSave && !contentToSave.includes('BexEmail')) {
-        contentToSave = contentToSave + DEFAULT_FOOTER_HTML;
+      
+      if (dataToSave.include_footer && dataToSave.footer_html && dataToSave.footer_html.trim() !== '') {
+        if (!contentToSave.includes(dataToSave.footer_html)) {
+          if (contentToSave.includes('</body>')) {
+            contentToSave = contentToSave.replace('</body>', `${dataToSave.footer_html}</body>`);
+          } else {
+            contentToSave = `${contentToSave}\n${dataToSave.footer_html}`;
+          }
+        }
       }
 
       const payload = {
@@ -385,6 +742,11 @@ export default function CampaignWizard() {
         variant_b_html: dataToSave.variant_b_html || null,
         template_id: dataToSave.template_id && !isNaN(Number(dataToSave.template_id)) ? Number(dataToSave.template_id) : null,
         html_content: contentToSave,
+        design_json: dataToSave.design_json ? JSON.stringify(dataToSave.design_json) : null,
+        include_footer: dataToSave.include_footer ? 1 : 0,
+        footer_editor_type: dataToSave.footer_editor_type || 'html',
+        footer_html: dataToSave.footer_html || null,
+        footer_design_json: dataToSave.footer_design_json ? JSON.stringify(dataToSave.footer_design_json) : null,
         status: 'draft'
       };
 
@@ -407,7 +769,8 @@ export default function CampaignWizard() {
   };
 
   const handleSaveDraftManual = async () => {
-    await autoSaveDraft();
+    const { updatedFormData, finalHtml } = await exportAllEditors();
+    await autoSaveDraft({ ...updatedFormData, html_content: finalHtml });
     customAlert({
       title: 'Draft Saved',
       message: 'Your campaign progress has been saved as a draft successfully!',
@@ -416,120 +779,171 @@ export default function CampaignWizard() {
   };
 
   const goToStep = async (targetStep) => {
-    if (step === 6 && editorMode === 'visual' && emailEditorRef.current?.editor) {
-      emailEditorRef.current.editor.exportHtml(async (data) => {
-        let { html } = data || {};
-        if (html && !html.includes('BexEmail')) {
-          html = html + DEFAULT_FOOTER_HTML;
-        }
-        const updated = { ...formData, html_content: html || formData.html_content };
-        setFormData(updated);
-        await autoSaveDraft(updated);
-        setStep(targetStep);
-      });
-      return;
-    }
-    await autoSaveDraft();
+    const { updatedFormData, finalHtml } = await exportAllEditors();
+    await autoSaveDraft({ ...updatedFormData, html_content: finalHtml });
     setStep(targetStep);
   };
 
-  const handleNext = () => {
-    goToStep(Math.min(step + 1, 9));
+  const validateAndHighlight = async (targetCheckStep = null, dataToCheck = formDataRef.current) => {
+    if (!targetCheckStep || targetCheckStep === 1) {
+      if (!dataToCheck.name || !dataToCheck.name.trim()) {
+        await customAlert({ title: 'Validation Required', message: 'Campaign Name is required. Please fill it out in Step 1.', type: 'warning' });
+        setStep(1);
+        setHighlightedField('name');
+        return false;
+      }
+      if (!dataToCheck.subject || !dataToCheck.subject.trim()) {
+        await customAlert({ title: 'Validation Required', message: 'Subject Line is required. Please fill it out in Step 1.', type: 'warning' });
+        setStep(1);
+        setHighlightedField('subject');
+        return false;
+      }
+    }
+
+    if (!targetCheckStep || targetCheckStep === 2) {
+      if (!dataToCheck.sender_id) {
+        await customAlert({ title: 'Validation Required', message: 'Sender is required. Please select a sender in Step 2.', type: 'warning' });
+        setStep(2);
+        setHighlightedField('sender_id');
+        return false;
+      }
+    }
+
+    if (!targetCheckStep || targetCheckStep === 3) {
+      if (dataToCheck.target_type === 'list' && !dataToCheck.list_id) {
+        await customAlert({ title: 'Validation Required', message: 'Target contact list is required. Please select a list in Step 3.', type: 'warning' });
+        setStep(3);
+        setHighlightedField('list_id');
+        return false;
+      }
+      if ((dataToCheck.target_type === 'individual_subscriber' || dataToCheck.target_type === 'custom_email') && (!dataToCheck.target_email || !dataToCheck.target_email.trim())) {
+        await customAlert({ title: 'Validation Required', message: 'Target Email Address is required. Please select or enter an email in Step 3.', type: 'warning' });
+        setStep(3);
+        setHighlightedField('target_email');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleNext = async () => {
+    const { updatedFormData } = await exportAllEditors();
+    const isValid = await validateAndHighlight(step, updatedFormData);
+    if (!isValid) return;
+    goToStep(Math.min(step + 1, 7));
   };
 
   const handlePrev = () => {
     goToStep(Math.max(step - 1, 1));
   };
 
-  const handleTemplateSelect = (template) => {
-    let content = template.html_content || '';
-    if (content && !content.includes('BexEmail')) {
-      content = content + DEFAULT_FOOTER_HTML;
+  const handleTemplateSelect = async (template) => {
+    const content = template?.html_content || '';
+    let dJson = null;
+    try {
+      dJson = template?.design_json ? (typeof template.design_json === 'string' ? JSON.parse(template.design_json) : template.design_json) : null;
+    } catch(e){}
+
+    let fDesignJson = null;
+    try {
+      fDesignJson = template?.footer_design_json ? (typeof template.footer_design_json === 'string' ? JSON.parse(template.footer_design_json) : template.footer_design_json) : null;
+    } catch(e){}
+
+    const updated = {
+      ...formDataRef.current,
+      template_id: template?.id ? String(template.id) : '',
+      html_content: content,
+      design_json: dJson,
+      include_footer: template?.include_footer !== undefined && template?.include_footer !== null ? Boolean(template.include_footer) : true,
+      footer_editor_type: template?.footer_editor_type || 'html',
+      footer_html: template?.footer_html || DEFAULT_FOOTER_HTML,
+      footer_design_json: fDesignJson
+    };
+
+    formDataRef.current = updated;
+    setFormData(updated);
+
+    if (emailEditorRef.current?.editor) {
+      setTimeout(() => {
+        loadDataIntoMainEditor(updated);
+      }, 100);
     }
-    setFormData(prev => ({
-      ...prev,
-      template_id: template.id || '',
-      html_content: content
-    }));
-    handleNext();
+    if (footerEditorRef.current?.editor && updated.include_footer) {
+      setTimeout(() => {
+        loadDataIntoFooterEditor(updated);
+      }, 100);
+    }
+
+    await autoSaveDraft(updated);
+    setStep(5);
+  };
+
+  const handleUpdateSelectedTemplate = async () => {
+    if (!formData.template_id) return;
+    try {
+      const { updatedFormData } = await exportAllEditors();
+      await axios.put(`http://localhost:5000/api/templates/${formData.template_id}`, {
+        html_content: updatedFormData.html_content,
+        design_json: JSON.stringify(updatedFormData.design_json),
+        include_footer: updatedFormData.include_footer ? 1 : 0,
+        footer_editor_type: updatedFormData.footer_editor_type,
+        footer_html: updatedFormData.footer_html,
+        footer_design_json: JSON.stringify(updatedFormData.footer_design_json)
+      }, {
+        headers: { 'x-user-role': 'Admin' }
+      });
+      customAlert({ title: 'Success', message: 'Template updated successfully in database!', type: 'success' });
+    } catch (err) {
+      console.error('Failed to update template:', err);
+      customAlert({ title: 'Error', message: 'Failed to update template in database.', type: 'danger' });
+    }
   };
 
   const handleDispatch = async () => {
-    if (step === 6 && editorMode === 'visual' && emailEditorRef.current?.editor) {
-      await new Promise((resolve) => {
-        emailEditorRef.current.editor.exportHtml((data) => {
-          let { html } = data || {};
-          if (html && !html.includes('BexEmail')) {
-            html = html + DEFAULT_FOOTER_HTML;
-          }
-          setFormData(prev => ({ ...prev, html_content: html || prev.html_content }));
-          resolve();
-        });
-      });
-    }
+    const { updatedFormData, finalHtml } = await exportAllEditors();
 
-    if (!formData.name.trim()) {
-      customAlert({ title: 'Validation Required', message: 'Campaign Name is required. Please fill it out in Step 1.', type: 'warning' });
-      setStep(1);
-      return;
-    }
-    if (!formData.subject.trim()) {
-      customAlert({ title: 'Validation Required', message: 'Subject Line is required. Please fill it out in Step 4.', type: 'warning' });
-      setStep(4);
-      return;
-    }
-    if (!formData.sender_id) {
-      customAlert({ title: 'Validation Required', message: 'Sender is required. Please select a sender in Step 2.', type: 'warning' });
-      setStep(2);
-      return;
-    }
-    if (formData.target_type === 'list' && !formData.list_id) {
-      customAlert({ title: 'Validation Required', message: 'Target contact list is required. Please select a list in Step 3.', type: 'warning' });
-      setStep(3);
-      return;
-    }
-    if ((formData.target_type === 'individual_subscriber' || formData.target_type === 'custom_email') && !formData.target_email.trim()) {
-      customAlert({ title: 'Validation Required', message: 'Target Email Address is required. Please select or enter an email in Step 3.', type: 'warning' });
-      setStep(3);
-      return;
-    }
+    const isValid = await validateAndHighlight(null, updatedFormData);
+    if (!isValid) return;
 
     setLoading(true);
     try {
-      const isSingleEmail = formData.target_type === 'individual_subscriber' || formData.target_type === 'custom_email';
-      let finalHtml = formData.html_content || '<h1>Default Campaign</h1>';
-      if (!finalHtml.includes('BexEmail')) {
-        finalHtml = finalHtml + DEFAULT_FOOTER_HTML;
-      }
+      const isSingleEmail = updatedFormData.target_type === 'individual_subscriber' || updatedFormData.target_type === 'custom_email';
+      let dispatchHtml = finalHtml || updatedFormData.html_content || '<h1>Default Campaign</h1>';
 
-      const targetStatus = (formData.dispatch_option === 'schedule' || formData.scheduled_at)
+      const targetStatus = (updatedFormData.dispatch_option === 'schedule' || updatedFormData.scheduled_at)
         ? 'scheduled'
-        : (formData.dispatch_option === 'direct_send' ? 'sending' : 'submitted_for_review');
+        : (updatedFormData.dispatch_option === 'direct_send' ? 'sending' : 'submitted_for_review');
 
       const payload = {
-        name: formData.name,
-        campaignName: formData.name,
-        subject: formData.subject,
-        sender_id: formData.sender_id,
-        senderId: formData.sender_id,
-        sender_mode: formData.sender_mode || 'broadcast',
-        senderMode: formData.sender_mode || 'broadcast',
-        sender_mapping: formData.sender_mapping || null,
-        senderMapping: formData.sender_mapping || null,
-        list_id: isSingleEmail ? null : formData.list_id,
-        listId: isSingleEmail ? null : formData.list_id,
-        target_email: isSingleEmail ? formData.target_email.trim() : null,
-        targetEmail: isSingleEmail ? formData.target_email.trim() : null,
-        is_ab_test: formData.is_ab_test,
-        isAbTest: formData.is_ab_test,
-        variant_b_subject: formData.variant_b_subject,
-        variantBSubject: formData.variant_b_subject,
-        variant_b_html: formData.variant_b_html,
-        variantBHtml: formData.variant_b_html,
-        template_id: formData.template_id,
-        html_content: finalHtml,
-        htmlContent: finalHtml,
-        scheduled_at: formData.scheduled_at || null,
+        name: updatedFormData.name,
+        campaignName: updatedFormData.name,
+        subject: updatedFormData.subject,
+        sender_id: updatedFormData.sender_id,
+        senderId: updatedFormData.sender_id,
+        sender_mode: updatedFormData.sender_mode || 'broadcast',
+        senderMode: updatedFormData.sender_mode || 'broadcast',
+        sender_mapping: updatedFormData.sender_mapping || null,
+        senderMapping: updatedFormData.sender_mapping || null,
+        list_id: isSingleEmail ? null : updatedFormData.list_id,
+        listId: isSingleEmail ? null : updatedFormData.list_id,
+        target_email: isSingleEmail ? updatedFormData.target_email.trim() : null,
+        targetEmail: isSingleEmail ? updatedFormData.target_email.trim() : null,
+        is_ab_test: updatedFormData.is_ab_test,
+        isAbTest: updatedFormData.is_ab_test,
+        variant_b_subject: updatedFormData.variant_b_subject,
+        variantBSubject: updatedFormData.variant_b_subject,
+        variant_b_html: updatedFormData.variant_b_html,
+        variantBHtml: updatedFormData.variant_b_html,
+        template_id: updatedFormData.template_id,
+        html_content: dispatchHtml,
+        htmlContent: dispatchHtml,
+        design_json: updatedFormData.design_json ? JSON.stringify(updatedFormData.design_json) : null,
+        include_footer: updatedFormData.include_footer ? 1 : 0,
+        footer_editor_type: updatedFormData.footer_editor_type || 'html',
+        footer_html: updatedFormData.footer_html || null,
+        footer_design_json: updatedFormData.footer_design_json ? JSON.stringify(updatedFormData.footer_design_json) : null,
+        scheduled_at: updatedFormData.scheduled_at || null,
         status: targetStatus
       };
 
@@ -579,12 +993,10 @@ export default function CampaignWizard() {
     { id: 1, title: 'Setup', icon: <Settings size={18} /> },
     { id: 2, title: 'Sender', icon: <User size={18} /> },
     { id: 3, title: 'Audience', icon: <Users size={18} /> },
-    { id: 4, title: 'Subject Line', icon: <Mail size={18} /> },
-    { id: 5, title: 'Template', icon: <FileText size={18} /> },
-    { id: 6, title: 'Editor', icon: <Monitor size={18} /> },
-    { id: 7, title: 'Preview', icon: <Sparkles size={18} /> },
-    { id: 8, title: 'Schedule', icon: <Calendar size={18} /> },
-    { id: 9, title: 'Review', icon: <Check size={18} /> },
+    { id: 4, title: 'Template', icon: <FileText size={18} /> },
+    { id: 5, title: 'Editor', icon: <Monitor size={18} /> },
+    { id: 6, title: 'Preview & Review', icon: <Sparkles size={18} /> },
+    { id: 7, title: 'Schedule', icon: <Calendar size={18} /> },
   ];
 
   if (dispatchedSuccess) {
@@ -638,7 +1050,7 @@ export default function CampaignWizard() {
             type="button"
             onClick={() => {
               setDispatchedSuccess(false);
-              setStep(9);
+              setStep(6);
             }}
             className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-all border border-gray-300 flex items-center justify-center gap-2"
           >
@@ -675,7 +1087,7 @@ export default function CampaignWizard() {
             defaultValue="review"
             onChange={(e) => {
               const val = e.target.value;
-              if (val === 'review') goToStep(9);
+              if (val === 'review') goToStep(6);
               if (val === 'direct_send') handleDispatch();
             }}
             className="px-4 py-2.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-800 text-xs font-bold rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-primary-500 outline-none cursor-pointer"
@@ -734,12 +1146,38 @@ export default function CampaignWizard() {
             <h2 className="text-xl font-bold text-gray-900 mb-4">Basic Setup</h2>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Internal Campaign Name <span className="text-red-500">*</span></label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500" placeholder="e.g. Summer Sale 2026" />
+              <input 
+                type="text" 
+                name="name" 
+                data-field="name"
+                value={formData.name} 
+                onChange={(e) => { setHighlightedField(null); handleChange(e); }} 
+                onFocus={() => setHighlightedField(null)}
+                className={`w-full border rounded-lg p-3 transition-all duration-300 ${
+                  highlightedField === 'name' 
+                    ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/40 animate-pulse shadow-md font-bold text-gray-900' 
+                    : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                }`} 
+                placeholder="e.g. Summer Sale 2026" 
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Email Subject Line <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
-                <input type="text" name="subject" value={formData.subject} onChange={handleChange} className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500" placeholder="Check out our latest deals!" />
+                <input 
+                  type="text" 
+                  name="subject" 
+                  data-field="subject"
+                  value={formData.subject} 
+                  onChange={(e) => { setHighlightedField(null); handleChange(e); }} 
+                  onFocus={() => setHighlightedField(null)}
+                  className={`flex-1 border rounded-lg p-3 transition-all duration-300 ${
+                    highlightedField === 'subject' 
+                      ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/40 animate-pulse shadow-md font-bold text-gray-900' 
+                      : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                  }`} 
+                  placeholder="Check out our latest deals!" 
+                />
                 <button
                   type="button"
                   onClick={() => setShowAiModal(true)}
@@ -750,6 +1188,17 @@ export default function CampaignWizard() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">Click "AI Generate" to get AI-powered subject line suggestions.</p>
+
+              {/* Highlighted Notice Message Line */}
+              <div className="mt-3 p-3 bg-amber-50/80 border-l-4 border-amber-500 rounded-r-xl flex items-center gap-2.5 text-xs text-amber-900 shadow-xs">
+                <Mail size={16} className="text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-amber-800 mr-1.5">Note:</span>
+                  <span className="bg-amber-200/90 text-amber-950 font-bold px-2 py-0.5 rounded border border-amber-300/70 inline-block shadow-2xs">
+                    This subject is used as the official subject line for your email campaign.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -777,9 +1226,15 @@ export default function CampaignWizard() {
                 </label>
                 <select
                   name="sender_id"
+                  data-field="sender_id"
                   value={formData.sender_id}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-primary-500 focus:border-primary-500 bg-white font-medium shadow-xs"
+                  onChange={(e) => { setHighlightedField(null); handleChange(e); }}
+                  onFocus={() => setHighlightedField(null)}
+                  className={`w-full border rounded-xl p-3 text-sm font-medium shadow-xs transition-all duration-300 ${
+                    highlightedField === 'sender_id' 
+                      ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/40 animate-pulse shadow-md font-bold text-gray-900' 
+                      : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500 bg-white'
+                  }`}
                 >
                   {senders.map(s => (
                     <option key={s.id} value={s.id.toString()}>
@@ -1089,10 +1544,17 @@ export default function CampaignWizard() {
                     </div>
 
                     {/* Multi-Select List Options */}
-                    <div className="border border-gray-300 rounded-xl p-2 bg-white max-h-56 overflow-y-auto space-y-1.5 shadow-2xs">
+                    <div 
+                      data-field="list_id"
+                      className={`border rounded-xl p-2 bg-white max-h-56 overflow-y-auto space-y-1.5 shadow-2xs transition-all duration-300 ${
+                        highlightedField === 'list_id' 
+                          ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/20 animate-pulse shadow-md' 
+                          : 'border-gray-300'
+                      }`}
+                    >
                       {/* All Target Lists Option */}
                       <div
-                        onClick={() => toggleList('all')}
+                        onClick={() => { setHighlightedField(null); toggleList('all'); }}
                         className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
                           isAllSelected 
                             ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-400/30' 
@@ -1134,7 +1596,7 @@ export default function CampaignWizard() {
                         return (
                           <div
                             key={l.id}
-                            onClick={() => toggleList(l.id.toString())}
+                            onClick={() => { setHighlightedField(null); toggleList(l.id.toString()); }}
                             className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
                               isSelected 
                                 ? 'bg-primary-50/80 border-primary-300 ring-1 ring-primary-400/30' 
@@ -1234,7 +1696,14 @@ export default function CampaignWizard() {
                 </div>
 
                 {/* Scrollable list of subscribers */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
+                <div 
+                  data-field="target_email"
+                  className={`border rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto transition-all duration-300 ${
+                    highlightedField === 'target_email'
+                      ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/20 animate-pulse shadow-md'
+                      : 'border-gray-200'
+                  }`}
+                >
                   {subscribers.filter(sub => {
                     if (!sub || !sub.email) return false;
                     const search = String(subscriberSearch || '').toLowerCase();
@@ -1261,7 +1730,7 @@ export default function CampaignWizard() {
                               <input 
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => handleToggleSubscriber(sub.email)}
+                                onChange={() => { setHighlightedField(null); handleToggleSubscriber(sub.email); }}
                                 className="text-primary-600 focus:ring-primary-500 rounded border-gray-300 cursor-pointer"
                               />
                               <span className="font-medium text-gray-900">{sub.email}</span>
@@ -1285,9 +1754,15 @@ export default function CampaignWizard() {
                 <input 
                   type="email" 
                   name="target_email" 
+                  data-field="target_email"
                   value={formData.target_email} 
-                  onChange={handleChange} 
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white" 
+                  onChange={(e) => { setHighlightedField(null); handleChange(e); }} 
+                  onFocus={() => setHighlightedField(null)}
+                  className={`w-full border rounded-lg p-3 text-sm bg-white transition-all duration-300 ${
+                    highlightedField === 'target_email' 
+                      ? 'border-red-500 ring-4 ring-red-200/90 bg-red-50/40 animate-pulse shadow-md font-bold text-gray-900' 
+                      : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                  }`} 
                   placeholder="e.g. recipient@example.com or vimal@bexcodeservices.com" 
                 />
                 <p className="text-xs text-gray-500 mt-2">Type the target email address for this individual campaign send.</p>
@@ -1297,53 +1772,11 @@ export default function CampaignWizard() {
         )}
 
         {step === 4 && (
-          <div className="space-y-6 max-w-2xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <div className="border-b border-gray-100 pb-3 mb-2">
-              <h2 className="text-xl font-bold text-gray-900">Email Subject Line</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Enter a compelling email subject line for your subscribers or generate one using AI.</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Subject Line <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    name="subject" 
-                    value={formData.subject} 
-                    onChange={handleChange} 
-                    className="flex-1 px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-primary-500 outline-none bg-white shadow-xs" 
-                    placeholder="e.g. Special Offer: 20% Off Your Next Order!" 
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAiModal(true)}
-                    className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all whitespace-nowrap"
-                  >
-                    <Sparkles size={15} /> AI Generate
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-4 bg-violet-50/60 border border-violet-100 rounded-2xl space-y-2">
-                <div className="flex items-center gap-2 text-violet-900 text-xs font-bold">
-                  <Sparkles size={14} className="text-violet-600" />
-                  <span>AI Subject Line Generator</span>
-                </div>
-                <p className="text-[11px] text-violet-700 leading-relaxed">
-                  Need inspiration? Click <strong>AI Generate</strong> to automatically create high-converting subject lines tailored to your campaign topic and tone.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 5 && (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Select Template</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Start with a blank canvas or pick a pre-designed email template.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Start with a blank canvas or pick a pre-designed email template to customize.</p>
               </div>
             </div>
 
@@ -1387,12 +1820,11 @@ export default function CampaignWizard() {
                 <div 
                   key={t.id} 
                   className={`border-2 rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between ${
-                    formData.template_id === t.id 
+                    formData.template_id === String(t.id) 
                       ? 'border-primary-500 bg-primary-50/50 ring-2 ring-primary-200 shadow-md' 
                       : 'border-gray-200 hover:border-primary-300 hover:shadow-sm bg-white'
                   }`}
                   onClick={() => {
-                    setEditorMode('html');
                     handleTemplateSelect(t);
                   }}
                 >
@@ -1404,9 +1836,13 @@ export default function CampaignWizard() {
                   </div>
                   <button 
                     type="button" 
-                    className="mt-3 w-full py-2 bg-gray-100 hover:bg-primary-600 hover:text-white text-gray-700 text-xs font-bold rounded-lg transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTemplateSelect(t);
+                    }}
+                    className="mt-3 w-full py-2.5 bg-primary-50 hover:bg-primary-600 text-primary-700 hover:text-white border border-primary-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-xs"
                   >
-                    Use This Template
+                    🎨 Select & Edit Template
                   </button>
                 </div>
               ))}
@@ -1414,38 +1850,56 @@ export default function CampaignWizard() {
           </div>
         )}
 
-        {step === 6 && (
-          <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300 h-full flex flex-col">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3">
+        {step === 5 && (
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Email Content Editor</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Customize your email template content before sending.</p>
               </div>
 
-              {/* Editor Mode Tabs */}
-              <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setEditorMode('visual')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    editorMode === 'visual' 
-                      ? 'bg-white text-primary-700 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  🎨 Drag & Drop Builder
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditorMode('html')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    editorMode === 'html' 
-                      ? 'bg-white text-primary-700 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  💻 HTML Code
-                </button>
+              <div className="flex items-center gap-2">
+                {formData.template_id && (
+                  <button
+                    type="button"
+                    onClick={handleUpdateSelectedTemplate}
+                    className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-xs"
+                    title="Update selected template in database"
+                  >
+                    💾 Save Changes to Template
+                  </button>
+                )}
+
+                {/* Editor Mode Tabs */}
+                <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorMode('visual');
+                      if (emailEditorRef.current?.editor) {
+                        loadDataIntoMainEditor(formData);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      editorMode === 'visual' 
+                        ? 'bg-white text-primary-700 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    🎨 Drag & Drop Builder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode('html')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      editorMode === 'html' 
+                        ? 'bg-white text-primary-700 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    💻 HTML Code
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1453,6 +1907,7 @@ export default function CampaignWizard() {
               <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm min-h-[650px] bg-white">
                 <EmailEditor 
                   ref={emailEditorRef} 
+                  onLoad={onMainEditorLoad}
                   minHeight="650px" 
                 />
               </div>
@@ -1467,235 +1922,78 @@ export default function CampaignWizard() {
                 />
               </div>
             )}
-          </div>
-        )}
 
-        {step === 7 && (
-          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Campaign Preview</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Preview how your email campaign will look to your recipients and review target settings.</p>
-            </div>
+            {/* Footer Settings Section - Matching Image 4 */}
+            <div className="border-t border-gray-200 pt-6 mt-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-gray-700">
+                  <input 
+                    type="checkbox"
+                    checked={formData.include_footer}
+                    onChange={e => setFormData({ ...formData, include_footer: e.target.checked })}
+                    className="rounded text-primary-600 focus:ring-primary-500 w-4 h-4 cursor-pointer"
+                  />
+                  Include Custom Email Footer at the bottom
+                </label>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Configuration panel */}
-              <div className="lg:col-span-1 space-y-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4 shadow-xs">
-                  <h3 className="font-bold text-gray-900 text-sm border-b border-gray-200 pb-2">Campaign Details</h3>
-                  
-                  <div className="space-y-3.5">
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Campaign Name</span>
-                        <button type="button" onClick={() => setStep(1)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.name || '—'}</p>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Subject Line</span>
-                        <button type="button" onClick={() => setStep(1)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.subject || '—'}</p>
-                    </div>
-
-                    {formData.is_ab_test && (
-                      <div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Subject Line B (A/B Test)</span>
-                          <button type="button" onClick={() => setStep(4)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
-                        </div>
-                        <p className="text-sm font-semibold text-gray-800 break-words mt-0.5">{formData.variant_b_subject || '—'}</p>
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Sender Profile</span>
-                        <button type="button" onClick={() => setStep(2)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800 mt-0.5">
-                        {senders.find(s => s.id === parseInt(formData.sender_id))?.name || '—'} 
-                        {senders.find(s => s.id === parseInt(formData.sender_id)) ? ` <${senders.find(s => s.id === parseInt(formData.sender_id))?.email}>` : ''}
-                      </p>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Target Audience</span>
-                        <button type="button" onClick={() => setStep(3)} className="text-[11px] text-primary-600 hover:text-primary-700 font-bold hover:underline cursor-pointer">Change</button>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800 mt-0.5">
-                        {formData.target_type === 'list' && (lists.find(l => l.id === parseInt(formData.list_id))?.name || '—')}
-                        {formData.target_type === 'individual_subscriber' && 'Selected Contacts'}
-                        {formData.target_type === 'custom_email' && 'Custom Email Address'}
-                      </p>
-                      {formData.target_type !== 'list' && formData.target_email && (
-                        <p className="text-xs text-gray-500 font-mono break-all mt-1 bg-white border border-gray-200 rounded p-1.5 max-h-24 overflow-y-auto">
-                          {formData.target_email}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-200 flex flex-col gap-2">
-                    <button 
-                      type="button" 
-                      onClick={() => setStep(6)}
-                      className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-bold text-gray-700 transition-all cursor-pointer"
+                {formData.include_footer && (
+                  <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, footer_editor_type: 'html' })}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${formData.footer_editor_type === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
                     >
-                      ✏️ Edit Design in Editor
+                      ✏️ Footer HTML Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, footer_editor_type: 'builder' })}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${formData.footer_editor_type === 'builder' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      🧱 Footer Drag & Drop
                     </button>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* Live Preview panel */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Live Preview</span>
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMode('desktop')}
-                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${previewMode === 'desktop' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                      🖥️ Desktop
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMode('mobile')}
-                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${previewMode === 'mobile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                      📱 Mobile
-                    </button>
+              {formData.include_footer && (
+                <div className="p-5 bg-gray-50 rounded-2xl border border-gray-200 space-y-4 shadow-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                    <h4 className="text-xs font-bold text-gray-700">Footer Editor</h4>
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Editing Footer Block</span>
                   </div>
-                </div>
 
-                <div className="flex justify-center bg-gray-50/50 border border-dashed border-gray-200 rounded-2xl p-6 min-h-[550px]">
-                  {previewMode === 'desktop' ? (
-                    <iframe 
-                      title="Campaign Desktop Preview"
-                      srcDoc={formData.html_content || '<div style="padding: 20px; font-family: sans-serif; text-align: center; color: #888;">No content designed yet. Proceed to Step 6 to edit the layout.</div>'} 
-                      className="w-full min-h-[500px] border border-gray-200 rounded-xl bg-white shadow-sm"
-                    />
-                  ) : (
-                    <div className="w-[360px] border-8 border-gray-800 rounded-[32px] overflow-hidden bg-white shadow-2xl relative flex flex-col" style={{ height: '550px' }}>
-                      <div className="h-6 bg-gray-800 flex justify-center items-center shrink-0">
-                        <div className="w-16 h-3 bg-black rounded-full" />
-                      </div>
-                      <iframe 
-                        title="Campaign Mobile Preview"
-                        srcDoc={formData.html_content || '<div style="padding: 20px; font-family: sans-serif; text-align: center; color: #888;">No content designed yet. Proceed to Step 6 to edit the layout.</div>'} 
-                        className="flex-1 w-full border-0"
+                  {formData.footer_editor_type === 'html' ? (
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-bold text-gray-600">HTML Code for Footer</label>
+                      <textarea
+                        value={formData.footer_html}
+                        onChange={e => setFormData({ ...formData, footer_html: e.target.value })}
+                        className="w-full h-36 p-3 font-mono text-xs text-emerald-600 bg-slate-900 rounded-xl outline-none border border-slate-700 resize-y shadow-inner"
+                        placeholder="<!-- Write your footer HTML here -->"
                       />
+                      <p className="text-[10px] text-gray-500 mt-1">This HTML will be automatically injected at the bottom of the main template HTML.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-bold text-gray-600">Visual Footer Builder</label>
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-[420px] shadow-sm">
+                        <EmailEditor 
+                          ref={footerEditorRef} 
+                          onLoad={onFooterEditorLoad} 
+                          minHeight="420px"
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1">Design the footer visually. It will be saved and merged at the bottom of the template.</p>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
 
-        {step === 8 && (
-          <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Dispatch & Scheduling Options</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Select how and when you want to send this email campaign before final review.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 1. Send to Review (Card 1 - Default) */}
-              <div 
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'review' }));
-                }}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  (formData.dispatch_option === 'review' || !formData.dispatch_option) 
-                    ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-200 shadow-md' 
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
-                    <Check size={20} />
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-sm">Send to Review</h3>
-                  <p className="text-xs text-gray-500 mt-1">Submit campaign for admin review & approval before sending.</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-amber-700">
-                  <span>Needs Approval</span>
-                  <span>{(formData.dispatch_option === 'review' || !formData.dispatch_option) ? '✓ Active' : ''}</span>
-                </div>
-              </div>
-
-              {/* 2. Direct Send (Card 2) */}
-              <div 
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'direct_send' }));
-                }}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  formData.dispatch_option === 'direct_send'
-                    ? 'border-green-500 bg-green-50/50 ring-2 ring-green-200 shadow-md' 
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-3">
-                    <Send size={20} />
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-sm">Direct Send</h3>
-                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final review in Step 9.</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-green-700">
-                  <span>Immediate Send</span>
-                  <span>{formData.dispatch_option === 'direct_send' ? '✓ Active' : ''}</span>
-                </div>
-              </div>
-
-              {/* 3. Schedule Campaign (Card 3) */}
-              <div 
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, dispatch_option: 'schedule' }));
-                }}
-                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  (formData.dispatch_option === 'schedule' || formData.scheduled_at)
-                    ? 'border-purple-500 bg-purple-50/50 ring-2 ring-purple-200 shadow-md' 
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center mb-3">
-                    <Calendar size={20} />
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-sm">Schedule Campaign</h3>
-                  <p className="text-xs text-gray-500 mt-1">Set a specific future date & time to deliver emails automatically.</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-purple-700">
-                  <span>Future Date & Time</span>
-                  <span>{(formData.dispatch_option === 'schedule' || formData.scheduled_at) ? '✓ Active' : ''}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Date/Time Picker input if Schedule selected */}
-            {(formData.dispatch_option === 'schedule' || formData.scheduled_at) && (
-              <div className="p-5 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-2 animate-in fade-in duration-200">
-                <label className="block text-xs font-bold text-purple-900">Select Date & Time to Send:</label>
-                <input 
-                  type="datetime-local" 
-                  name="scheduled_at" 
-                  value={formData.scheduled_at} 
-                  onChange={handleChange} 
-                  className="w-full border border-purple-300 rounded-xl p-3 text-xs focus:ring-purple-500 focus:border-purple-500 bg-white font-medium shadow-xs" 
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 9 && (() => {
+        {step === 6 && (() => {
           // Resolve Sender(s)
           const senderIds = String(formData.sender_id || '').split(',').map(id => id.trim()).filter(Boolean);
           const selectedSenders = senders.filter(s => senderIds.includes(s.id.toString()));
@@ -1777,14 +2075,26 @@ export default function CampaignWizard() {
             dispatchBadgeClass = 'bg-purple-100 text-purple-800 border-purple-300';
           }
 
+          // Combine Email HTML and Footer HTML for Live Preview
+          let mergedPreviewHtml = formData.html_content || '<div style="padding: 20px; font-family: sans-serif; text-align: center; color: #888;">No content designed yet. Proceed to Step 5 to edit the layout.</div>';
+          if (formData.include_footer && formData.footer_html && formData.footer_html.trim() !== '') {
+            if (!mergedPreviewHtml.includes(formData.footer_html)) {
+              if (mergedPreviewHtml.includes('</body>')) {
+                mergedPreviewHtml = mergedPreviewHtml.replace('</body>', `${formData.footer_html}</body>`);
+              } else {
+                mergedPreviewHtml = `${mergedPreviewHtml}\n${formData.footer_html}`;
+              }
+            }
+          }
+
           return (
-            <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+            <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
               <div className="text-center space-y-1">
-                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Review Your Campaign</h2>
-                <p className="text-xs text-gray-500">Double check all configurations, sender details, audience, and email content before sending.</p>
+                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Review & Live Preview</h2>
+                <p className="text-xs text-gray-500">Double check all configurations, sender details, audience, and preview live email content before scheduling.</p>
               </div>
 
-              {/* Main Review Summary Banner */}
+              {/* Main Review Summary Banner (Step 8 UI) */}
               <div className="bg-gradient-to-r from-primary-900 via-primary-800 to-indigo-900 text-white rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <div>
@@ -1828,9 +2138,8 @@ export default function CampaignWizard() {
                 </div>
               </div>
 
-              {/* 4 Detail Grid Cards */}
+              {/* 4 Detail Grid Cards (Step 8 UI) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                
                 {/* 1. Setup & Subject Lines Card */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3.5 hover:border-primary-300 transition-all">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
@@ -1930,8 +2239,8 @@ export default function CampaignWizard() {
                     <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
                       <FileText size={15} className="text-purple-600" /> Template & Email Content
                     </h4>
-                    <button type="button" onClick={() => setStep(6)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
-                      Edit Step 6
+                    <button type="button" onClick={() => setStep(5)} className="text-[11px] font-bold text-primary-600 hover:text-primary-800">
+                      Edit Step 5
                     </button>
                   </div>
 
@@ -1945,20 +2254,159 @@ export default function CampaignWizard() {
                       <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Design Mode</span>
                       <p className="font-medium text-gray-800 mt-0.5">{designMode}</p>
                     </div>
+                  </div>
+                </div>
+              </div>
 
-                    <div>
-                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Content Snippet Preview</span>
-                      <p className="font-mono text-[11px] text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-200 mt-0.5 line-clamp-2">
-                        {textSnippet || 'No text snippet available.'}
-                      </p>
-                    </div>
+              {/* Merged Live Email Preview (Template + Footer) */}
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                      <Monitor size={18} className="text-primary-600" /> Live Email & Footer Preview
+                    </h3>
+                    <p className="text-xs text-gray-500">Live rendered preview of email template with custom footer included.</p>
+                  </div>
+
+                  <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('desktop')}
+                      className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${previewMode === 'desktop' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      🖥️ Desktop
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('mobile')}
+                      className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${previewMode === 'mobile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >
+                      📱 Mobile
+                    </button>
                   </div>
                 </div>
 
+                <div className="flex justify-center bg-gray-50/70 border border-dashed border-gray-200 rounded-2xl p-6 min-h-[550px]">
+                  {previewMode === 'desktop' ? (
+                    <iframe 
+                      title="Campaign Desktop Live Preview"
+                      srcDoc={mergedPreviewHtml} 
+                      className="w-full min-h-[550px] border border-gray-200 rounded-xl bg-white shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-[360px] border-8 border-gray-800 rounded-[32px] overflow-hidden bg-white shadow-2xl relative flex flex-col" style={{ height: '550px' }}>
+                      <div className="h-6 bg-gray-800 flex justify-center items-center shrink-0">
+                        <div className="w-16 h-3 bg-black rounded-full" />
+                      </div>
+                      <iframe 
+                        title="Campaign Mobile Live Preview"
+                        srcDoc={mergedPreviewHtml} 
+                        className="flex-1 w-full border-0"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
         })()}
+
+        {step === 7 && (
+          <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Dispatch & Scheduling Options</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Select how and when you want to send this email campaign before final review.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. Send to Review (Card 1 - Default) */}
+              <div 
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'review' }));
+                }}
+                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                  (formData.dispatch_option === 'review' || !formData.dispatch_option) 
+                    ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-200 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                    <Check size={20} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-sm">Send to Review</h3>
+                  <p className="text-xs text-gray-500 mt-1">Submit campaign for admin review & approval before sending.</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-amber-700">
+                  <span>Needs Approval</span>
+                  <span>{(formData.dispatch_option === 'review' || !formData.dispatch_option) ? '✓ Active' : ''}</span>
+                </div>
+              </div>
+
+              {/* 2. Direct Send (Card 2) */}
+              <div 
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, scheduled_at: '', dispatch_option: 'direct_send' }));
+                }}
+                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                  formData.dispatch_option === 'direct_send'
+                    ? 'border-green-500 bg-green-50/50 ring-2 ring-green-200 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-green-100 text-green-600 flex items-center justify-center mb-3">
+                    <Send size={20} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-sm">Direct Send</h3>
+                  <p className="text-xs text-gray-500 mt-1">Send emails immediately upon completing final dispatch in Step 7.</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-green-700">
+                  <span>Immediate Send</span>
+                  <span>{formData.dispatch_option === 'direct_send' ? '✓ Active' : ''}</span>
+                </div>
+              </div>
+
+              {/* 3. Schedule Campaign (Card 3) */}
+              <div 
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, dispatch_option: 'schedule' }));
+                }}
+                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                  (formData.dispatch_option === 'schedule' || formData.scheduled_at)
+                    ? 'border-purple-500 bg-purple-50/50 ring-2 ring-purple-200 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center mb-3">
+                    <Calendar size={20} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-sm">Schedule Campaign</h3>
+                  <p className="text-xs text-gray-500 mt-1">Set a specific future date & time to deliver emails automatically.</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-purple-700">
+                  <span>Future Date & Time</span>
+                  <span>{(formData.dispatch_option === 'schedule' || formData.scheduled_at) ? '✓ Active' : ''}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Date/Time Picker input if Schedule selected */}
+            {(formData.dispatch_option === 'schedule' || formData.scheduled_at) && (
+              <div className="p-5 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                <label className="block text-xs font-bold text-purple-900">Select Date & Time to Send:</label>
+                <input 
+                  type="datetime-local" 
+                  name="scheduled_at" 
+                  value={formData.scheduled_at} 
+                  onChange={handleChange} 
+                  className="w-full border border-purple-300 rounded-xl p-3 text-xs focus:ring-purple-500 focus:border-purple-500 bg-white font-medium shadow-xs" 
+                />
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
 
@@ -1972,7 +2420,7 @@ export default function CampaignWizard() {
           <ChevronLeft size={16} className="mr-1" /> Back
         </button>
         
-        {step < 9 ? (
+        {step < 7 ? (
           <button 
             onClick={handleNext} 
             className="flex items-center px-6 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm shadow-primary-600/30"

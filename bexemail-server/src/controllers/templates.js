@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const nodemailer = require('nodemailer');
 const { logHistory } = require('../utils/historyLogger');
 // Create Template
 exports.createTemplate = async (req, res) => {
@@ -178,3 +179,101 @@ exports.deleteTemplate = async (req, res) => {
     res.status(500).json({ error: 'Database error' });
   }
 };
+
+// Send Test Template Email
+exports.sendTestTemplate = async (req, res) => {
+  const { 
+    test_email, 
+    sender_id, 
+    subject, 
+    template_name, 
+    html_content, 
+    include_footer, 
+    footer_html 
+  } = req.body;
+
+  const targetEmail = (test_email || '').trim();
+  if (!targetEmail) {
+    return res.status(400).json({ error: 'Recipient test email address is required.' });
+  }
+
+  try {
+    // Resolve Sender SMTP configuration
+    let sender = null;
+    if (sender_id) {
+      const [senderRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [sender_id]);
+      if (senderRows.length > 0) sender = senderRows[0];
+    }
+    if (!sender) {
+      const [defaultSenderRows] = await pool.query('SELECT * FROM senders WHERE is_default = 1 LIMIT 1');
+      if (defaultSenderRows.length > 0) {
+        sender = defaultSenderRows[0];
+      } else {
+        const [anySenderRows] = await pool.query('SELECT * FROM senders LIMIT 1');
+        if (anySenderRows.length > 0) sender = anySenderRows[0];
+      }
+    }
+
+    const host = (sender?.smtp_host || 'smtp.gmail.com').trim();
+    let port = Number(sender?.smtp_port || 465);
+    if (!port || isNaN(port)) port = 465;
+
+    const user = (sender?.smtp_user || sender?.email || 'info@bexcodeservices.com').trim();
+
+    let pass = (sender?.smtp_pass !== undefined && sender?.smtp_pass !== null && sender?.smtp_pass !== '********') ? sender?.smtp_pass : null;
+    if (!pass || pass.trim() === '' || pass === '********') {
+      const [settingsRows] = await pool.query('SELECT setting_key, setting_value FROM settings');
+      const sysSettings = (settingsRows || []).reduce((acc, curr) => {
+        acc[curr.setting_key] = curr.setting_value;
+        return acc;
+      }, {});
+      pass = sysSettings.smtp_pass || sysSettings.smtp_password || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || 'tbwffkmwugtbaiuw';
+    }
+
+    const isSecure = (sender?.smtp_secure === 'ssl' || sender?.smtp_secure === 'true' || port === 465);
+    const fromEmail = sender?.email || user;
+    const fromName = sender?.name || 'BexEmail Templates';
+
+    let finalHtml = html_content || '<h1>BexEmail Test Template</h1>';
+    if (include_footer && footer_html && footer_html.trim() !== '') {
+      if (!finalHtml.includes(footer_html)) {
+        if (finalHtml.includes('</body>')) {
+          finalHtml = finalHtml.replace('</body>', `${footer_html}</body>`);
+        } else {
+          finalHtml = `${finalHtml}\n${footer_html}`;
+        }
+      }
+    }
+
+    const emailSubject = subject || `[Test Email] ${template_name || 'Email Template Preview'}`;
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: isSecure,
+      auth: user && pass ? { user: user.trim(), pass: pass.trim() } : undefined,
+      tls: { rejectUnauthorized: false }
+    });
+
+    await transporter.verify();
+
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: targetEmail,
+      subject: emailSubject,
+      html: finalHtml
+    });
+
+    res.json({
+      success: true,
+      message: `Test email sent successfully to ${targetEmail}!`,
+      messageId: info.messageId
+    });
+  } catch (error) {
+    console.error('Send test template error:', error);
+    res.status(400).json({
+      error: `Failed to send test email: ${error.message || 'SMTP Connection Error'}`
+    });
+  }
+};
+
