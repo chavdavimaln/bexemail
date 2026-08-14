@@ -149,7 +149,12 @@ const Profiles = () => {
     setLoading(true);
     setError(null);
     try {
-      const headers = { 'x-user-role': currentUserRole || 'Super Admin' };
+      const userToken = localStorage.getItem('token');
+      const headers = {
+        'x-user-id': currentUser?.id || 1,
+        'x-user-role': currentUserRole || 'Admin',
+        ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+      };
       const [usersRes, sendersRes] = await Promise.all([
         axios.get('/api/admins', { headers }).catch(() => axios.get('http://localhost:5000/api/admins', { headers })).catch(() => ({ data: [] })),
         axios.get('/api/senders', { headers }).catch(() => axios.get('http://localhost:5000/api/senders', { headers })).catch(() => ({ data: [] }))
@@ -1123,7 +1128,7 @@ const Profiles = () => {
                 </div>
               )}
 
-              {/* Roles: only Super Admin can set role of others, Admins can set role of admin/user but not Super Admin */}
+              {/* Roles: Subscription policy allows only 1 Admin account per subscription. Additional team seats are Associates or Developer */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Access Role *</label>
                 <select 
@@ -1134,12 +1139,21 @@ const Profiles = () => {
                   } 
                   disabled={userForm.id === currentUser.id} // Prevent lockouts
                   onChange={e => setUserForm({...userForm, role: e.target.value})} 
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20 font-medium"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20 font-medium text-sm"
                 >
-                  <option value="Admin">Admin</option>
+                  {(currentUserRole === 'Super Admin' || userForm.id) && (
+                    <option value="Admin" disabled={!userForm.id || userForm.id !== currentUser.id}>
+                      Admin (Subscription Owner - Max 1)
+                    </option>
+                  )}
                   <option value="Associates">Associates</option>
                   <option value="Developer">Developer</option>
                 </select>
+                {!userForm.id && currentUserRole !== 'Super Admin' && (
+                  <p className="text-[11px] text-amber-700 font-medium mt-1">
+                    * Subscription plans allow 1 Admin account. Additional seats are assigned as Associates or Developer.
+                  </p>
+                )}
               </div>
 
               {/* Module Access Permissions Link */}

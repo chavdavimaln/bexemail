@@ -38,11 +38,12 @@ const hasListsPermission = async (userId) => {
   }
 };
 
-// Create a new List
+// Create a new List (Auto-merges if same name exists)
 exports.createList = async (req, res) => {
   const { name, description, admin_id } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
 
+  const cleanName = name.trim();
   const user = getRequestUser(req);
   let targetAdminId = admin_id;
   if (user && user.role !== 'Super Admin') {
@@ -52,16 +53,104 @@ exports.createList = async (req, res) => {
   }
 
   try {
+    // Check if target list with same name already exists (case-insensitive)
+    const [existing] = await pool.query(
+      'SELECT * FROM lists WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND is_deleted = FALSE',
+      [cleanName]
+    );
+
+    if (existing.length > 0) {
+      const existingList = existing[0];
+      const newDesc = description ? description.trim() : existingList.description;
+      
+      // Update description if new one provided
+      if (description && description.trim() && description.trim() !== existingList.description) {
+        await pool.query('UPDATE lists SET description = ? WHERE id = ?', [newDesc, existingList.id]);
+      }
+
+      return res.status(200).json({
+        message: `Target list "${existingList.name}" already exists and has been merged.`,
+        id: existingList.id,
+        name: existingList.name,
+        description: newDesc || null,
+        is_deleted: 0,
+        admin_id: existingList.admin_id,
+        merged: true,
+        alreadyExisted: true
+      });
+    }
+
     const [result] = await pool.query(
       `INSERT INTO lists (name, description, admin_id) VALUES (?, ?, ?)`,
-      [name, description || null, targetAdminId]
+      [cleanName, description ? description.trim() : null, targetAdminId]
     );
-    const newList = { id: result.insertId, name, description: description || null, is_deleted: 0, admin_id: targetAdminId };
+    const newList = { id: result.insertId, name: cleanName, description: description ? description.trim() : null, is_deleted: 0, admin_id: targetAdminId, merged: false };
     await logHistory('lists', result.insertId, 'add', null, newList, req.headers['x-user-role']);
     res.status(201).json({ message: 'List created successfully', id: result.insertId, ...newList });
   } catch (error) {
-    console.error(error);
+    console.error('Create/Merge list error:', error);
     res.status(500).json({ error: 'Database error' });
+  }
+};
+
+// Merge pre-existing duplicate Lists with identical names
+exports.mergeDuplicateLists = async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query('SELECT * FROM lists WHERE is_deleted = FALSE ORDER BY id ASC');
+    
+    const nameMap = new Map();
+    const mergedNames = [];
+    let mergedCount = 0;
+
+    for (const list of rows) {
+      const key = list.name.trim().toLowerCase();
+      if (!nameMap.has(key)) {
+        nameMap.set(key, list);
+      } else {
+        const primaryList = nameMap.get(key);
+        const duplicateListId = list.id;
+
+        // Move subscriber_lists associations
+        await connection.query(
+          'UPDATE IGNORE subscriber_lists SET list_id = ? WHERE list_id = ?',
+          [primaryList.id, duplicateListId]
+        );
+        await connection.query('DELETE FROM subscriber_lists WHERE list_id = ?', [duplicateListId]);
+
+        // Move subscriber_list_origins associations
+        await connection.query(
+          'UPDATE IGNORE subscriber_list_origins SET list_id = ? WHERE list_id = ?',
+          [primaryList.id, duplicateListId]
+        );
+        await connection.query('DELETE FROM subscriber_list_origins WHERE list_id = ?', [duplicateListId]);
+
+        // Soft delete the duplicate list
+        await connection.query('UPDATE lists SET is_deleted = TRUE WHERE id = ?', [duplicateListId]);
+
+        if (!mergedNames.includes(primaryList.name)) {
+          mergedNames.push(primaryList.name);
+        }
+        mergedCount++;
+      }
+    }
+
+    await connection.commit();
+    res.json({
+      success: true,
+      message: mergedCount > 0 ? `Successfully merged ${mergedCount} duplicate list(s)` : 'No duplicate lists found',
+      mergedCount,
+      mergedNames
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Merge duplicate lists error:', error);
+    res.status(500).json({ error: 'Failed to merge duplicate lists' });
+  } finally {
+    if (connection) connection.release();
   }
 };
 

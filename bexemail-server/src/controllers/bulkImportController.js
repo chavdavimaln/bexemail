@@ -3,9 +3,10 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
 
 const getRequestUser = (req) => {
-  let token = req.headers.authorization;
+  if (req && req.user) return req.user;
+  let token = req && req.headers ? (req.headers.authorization || req.headers.Authorization) : null;
   if (!token) return null;
-  if (token.startsWith('Bearer ')) {
+  if (typeof token === 'string' && token.startsWith('Bearer ')) {
     token = token.slice(7);
   }
   try {
@@ -104,6 +105,8 @@ exports.confirmImport = async (req, res) => {
     await connection.beginTransaction();
 
     const addedSubscriberIds = [];
+    const alreadyExistingEmails = [];
+    const newEmails = [];
     const beforeState = {
       subscribers: [],
       subscriber_origins: [],
@@ -112,7 +115,7 @@ exports.confirmImport = async (req, res) => {
     };
 
     // 1. Gather all emails to fetch their current state for backup
-    const emailsToFetch = contacts.map(c => c.email);
+    const emailsToFetch = contacts.map(c => c.email ? c.email.toLowerCase().trim() : '').filter(Boolean);
     if (emailsToFetch.length > 0) {
       const [existingSubs] = await connection.query('SELECT * FROM subscribers WHERE email IN (?)', [emailsToFetch]);
       beforeState.subscribers = existingSubs;
@@ -133,6 +136,7 @@ exports.confirmImport = async (req, res) => {
     // 2. Process each contact
     for (const contact of contacts) {
       const { email, name, conflictAction } = contact;
+      if (!email) continue;
       const cleanEmail = email.toLowerCase().trim();
 
       // Check if email already exists
@@ -146,6 +150,7 @@ exports.confirmImport = async (req, res) => {
         );
         const subId = subResult.insertId;
         addedSubscriberIds.push(subId);
+        newEmails.push(cleanEmail);
 
         // Insert into subscriber_origins
         await connection.query(
@@ -165,10 +170,15 @@ exports.confirmImport = async (req, res) => {
           );
         }
       } else {
-        // Conflicting subscriber
+        // Conflicting subscriber (Already exists)
+        if (!alreadyExistingEmails.includes(cleanEmail)) {
+          alreadyExistingEmails.push(cleanEmail);
+        }
         const subId = existing[0].id;
 
-        if (conflictAction === 'merge') {
+        const effectiveAction = conflictAction || 'merge';
+
+        if (effectiveAction === 'merge') {
           // Merge contact info
           // Update subscriber name if empty
           if (!existing[0].first_name && name) {
@@ -198,7 +208,7 @@ exports.confirmImport = async (req, res) => {
               [subId, listId]
             );
           }
-        } else if (conflictAction === 'separate') {
+        } else if (effectiveAction === 'separate') {
           // Differentiate site details
           const [origin] = await connection.query(
             'SELECT id FROM subscriber_origins WHERE subscriber_id = ? AND origin_site = ?',
@@ -250,7 +260,11 @@ exports.confirmImport = async (req, res) => {
     await connection.commit();
     res.json({
       success: true,
-      message: 'Contacts imported successfully'
+      message: 'Contacts imported successfully',
+      importedCount: addedSubscriberIds.length,
+      existingCount: alreadyExistingEmails.length,
+      alreadyExistingEmails,
+      newEmails
     });
   } catch (error) {
     if (connection) await connection.rollback();

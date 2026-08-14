@@ -3,6 +3,9 @@ const { logHistory } = require('../utils/historyLogger');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
+
 // Helper to hash password
 const hashPassword = async (password) => {
   const salt = await bcrypt.genSalt(10);
@@ -11,13 +14,29 @@ const hashPassword = async (password) => {
 
 const getCurrentUser = (req) => {
   try {
-    if (req && req.user && typeof req.user === 'object') return req.user;
-    const roleHeader = req && req.headers ? (req.headers['x-user-role'] || req.headers['X-User-Role']) : null;
+    if (req && req.user && typeof req.user === 'object' && req.user.id) return req.user;
+
+    let token = req && req.headers ? (req.headers.authorization || req.headers.Authorization) : null;
+    if (token && typeof token === 'string') {
+      if (token.startsWith('Bearer ')) token = token.slice(7);
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded && decoded.id) {
+          return { id: Number(decoded.id), role: decoded.role || 'Admin' };
+        }
+      } catch (e) {}
+    }
+
     const idHeader = req && req.headers ? (req.headers['x-user-id'] || req.headers['X-User-Id']) : null;
-    return {
-      id: idHeader ? Number(idHeader) : 1,
-      role: roleHeader || 'Admin'
-    };
+    const roleHeader = req && req.headers ? (req.headers['x-user-role'] || req.headers['X-User-Role']) : null;
+    if (idHeader) {
+      return {
+        id: Number(idHeader),
+        role: roleHeader || 'Admin'
+      };
+    }
+
+    return { id: 1, role: roleHeader || 'Admin' };
   } catch (e) {
     return { id: 1, role: 'Admin' };
   }
@@ -40,18 +59,19 @@ exports.getAdmins = async (req, res) => {
     const userMeta = subRows[0] || {};
     const planCode = (userMeta.plan_code || 'free').toLowerCase();
     const maxSeats = userMeta.custom_seats_limit || userMeta.sub_seats || userMeta.plan_seats || (planCode === 'free' ? 1 : planCode === 'essentials' ? 3 : planCode === 'standard' ? 5 : 10);
-    const userDomain = userMeta.domain || null;
 
-    let query = 'SELECT id, name, username, email, number, domain, role, permissions, plain_password, created_at FROM admin_users';
+    let query = 'SELECT id, name, username, email, number, domain, role, permissions, plain_password, created_at, admin_id FROM admin_users';
     let params = [];
 
-    // Free plan users or 1-seat users can ONLY access their own 1 Admin profile
-    if (planCode === 'free' || maxSeats <= 1) {
-      query += ' WHERE id = ?';
-      params.push(currentUser.id);
-    } else if (userDomain) {
-      query += ' WHERE domain = ? OR id = ?';
-      params.push(userDomain, currentUser.id);
+    // Admin Isolation Policy: No Admin can view or display any other independent Admin account
+    if (currentUser.role !== 'Super Admin') {
+      if (planCode === 'free' || maxSeats <= 1) {
+        query += ' WHERE id = ?';
+        params.push(currentUser.id);
+      } else {
+        query += ' WHERE (id = ? OR (admin_id = ? AND LOWER(TRIM(role)) NOT IN ("admin", "super admin", "super_admin")))';
+        params.push(currentUser.id, currentUser.id);
+      }
     }
 
     query += ' ORDER BY created_at DESC';
@@ -82,7 +102,13 @@ exports.createAdmin = async (req, res) => {
     return res.status(400).json({ error: 'Name, email, password, and role are required' });
   }
 
-  // Role validation
+  // Role validation: Non-Super-Admins CANNOT create another Admin
+  if ((role === 'Admin' || role === 'Super Admin') && currentUser.role !== 'Super Admin') {
+    return res.status(400).json({
+      error: 'Subscription plans allow only 1 Admin account per subscription. Additional team seats must be added as Associates or Developer roles.'
+    });
+  }
+
   const allowedAdminRoles = ['Super Admin', 'Admin', 'Sub Admin', 'Campaign Manager', 'Developer', 'Associates'];
   if (!allowedAdminRoles.includes(currentUser.role)) {
     return res.status(403).json({ error: 'Forbidden: You do not have permission to create users' });
@@ -100,7 +126,7 @@ exports.createAdmin = async (req, res) => {
 
     // Get current user's subscription or default plan seat limits
     const [subs] = await pool.query(`
-      SELECT us.custom_seats_limit, us.custom_admins_limit, us.custom_associates_limit, us.seats_limit as sub_seats_limit, p.seats_limit as plan_seats_limit, p.name as plan_name, au.custom_seats_limit as user_custom_seats
+      SELECT au.domain, us.custom_seats_limit, us.custom_admins_limit, us.custom_associates_limit, us.seats_limit as sub_seats_limit, p.seats_limit as plan_seats_limit, p.name as plan_name, au.custom_seats_limit as user_custom_seats
       FROM admin_users au
       LEFT JOIN user_subscriptions us ON au.id = us.user_id
       LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
@@ -110,14 +136,7 @@ exports.createAdmin = async (req, res) => {
 
     const activeSub = subs[0] || {};
     const maxSeats = activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
-
-    // If role is Admin, check admin limit
-    if (role === 'Admin' && activeSub.custom_admins_limit) {
-      const [adminsCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Admin"');
-      if ((adminsCountRows[0]?.count || 0) >= activeSub.custom_admins_limit) {
-        return res.status(400).json({ error: `Admin limit reached. Maximum allowed Admins configured in database is ${activeSub.custom_admins_limit}.` });
-      }
-    }
+    const targetDomain = activeSub.domain || (currentUser.email ? currentUser.email.split('@')[1] : null);
 
     // If role is Associates, check associate limit
     if (role === 'Associates' && activeSub.custom_associates_limit) {
@@ -130,17 +149,18 @@ exports.createAdmin = async (req, res) => {
     // Enforce overall seat limit
     if (userCount >= maxSeats && currentUser.role !== 'Super Admin') {
       return res.status(400).json({
-        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active plan tier allows up to ${maxSeats} seats (admin/associates). Upgrade your plan to add more team members.`
+        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active plan tier allows up to ${maxSeats} seats (1 Admin + ${maxSeats - 1} Associates/Developers). Upgrade your plan to add more team members.`
       });
     }
 
     const hashedPassword = await hashPassword(password);
     const defaultPerms = permissions || {};
     const permissionsStr = JSON.stringify(defaultPerms);
+    const parentAdminId = currentUser.id || 1;
 
     const [result] = await pool.query(
-      'INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, username || null, email, number || null, hashedPassword, password, role, permissionsStr]
+      'INSERT INTO admin_users (name, username, email, number, password, plain_password, role, permissions, domain, admin_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, username || null, email, number || null, hashedPassword, password, role, permissionsStr, targetDomain, parentAdminId]
     );
 
     const newAdmin = { id: result.insertId, name, username, email, number, role, permissions, plain_password: password };

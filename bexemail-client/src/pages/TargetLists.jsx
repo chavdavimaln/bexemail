@@ -41,7 +41,9 @@ const TargetLists = () => {
       setLoading(true);
       const [listsRes, adminsRes] = await Promise.all([
         axios.get('http://localhost:5000/api/lists'),
-        axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }))
+        axios.get('http://localhost:5000/api/admins', {
+          headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
+        }).catch(() => ({ data: [] }))
       ]);
       
       let fetchedLists = listsRes.data || [];
@@ -68,8 +70,26 @@ const TargetLists = () => {
 
       if (listForm.id) {
         await axios.put(`http://localhost:5000/api/lists/${listForm.id}`, payload, { headers: { 'x-user-role': currentUserRole } });
+        customAlert({
+          title: 'Target List Updated',
+          message: `Target list "${listForm.name.trim()}" has been updated successfully.`,
+          type: 'success'
+        });
       } else {
-        await axios.post('http://localhost:5000/api/lists', payload, { headers: { 'x-user-role': currentUserRole } });
+        const res = await axios.post('http://localhost:5000/api/lists', payload, { headers: { 'x-user-role': currentUserRole } });
+        if (res.data && res.data.merged) {
+          customAlert({
+            title: 'Target List Merged',
+            message: `Target list "${res.data.name}" already exists.\n\nIt has been automatically merged with the existing list so no duplicate list was created.`,
+            type: 'info'
+          });
+        } else {
+          customAlert({
+            title: 'Target List Created',
+            message: `Target list "${listForm.name.trim()}" has been created successfully.`,
+            type: 'success'
+          });
+        }
       }
       setListForm({ id: null, name: '', description: '', admin_id: !hasListsPermission ? String(currentUser.id || '') : '' });
       fetchLists();
@@ -79,6 +99,36 @@ const TargetLists = () => {
         message: 'Failed to save list: ' + (error.response?.data?.error || error.message),
         type: 'danger'
       });
+    }
+  };
+
+  const handleMergeDuplicates = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.post('http://localhost:5000/api/lists/merge-duplicates');
+      await fetchLists();
+      if (res.data.mergedCount > 0) {
+        customAlert({
+          title: 'Duplicate Target Lists Merged',
+          message: `Successfully merged ${res.data.mergedCount} duplicate target list(s):\n\n• ${res.data.mergedNames.join('\n• ')}`,
+          type: 'success'
+        });
+      } else {
+        customAlert({
+          title: 'No Duplicates Found',
+          message: 'All target lists are unique! No duplicate lists were found.',
+          type: 'info'
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      customAlert({
+        title: 'Error',
+        message: 'Failed to merge duplicate target lists.',
+        type: 'danger'
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,11 +154,17 @@ const TargetLists = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Target Lists Management</h2>
           <p className="text-gray-500 mt-1">Create and manage lists to organize your subscribers.</p>
         </div>
+        <button
+          onClick={handleMergeDuplicates}
+          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition shadow-sm flex items-center gap-2"
+        >
+          <ListIcon size={14} /> Merge Existing Duplicate Lists
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -7,7 +7,7 @@ import ConflictResolverModal from '../components/ConflictResolverModal';
 
 export default function BulkImportPage() {
   const { success, error, warning } = useNotification();
-  const { confirm } = useModal();
+  const { confirm, alert: customAlert } = useModal();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserRole = currentUser.role;
 
@@ -46,7 +46,9 @@ export default function BulkImportPage() {
 
   const fetchAdmins = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }));
+      const res = await axios.get('http://localhost:5000/api/admins', {
+        headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
+      }).catch(() => ({ data: [] }));
       setAdminUsers(res.data || []);
     } catch (err) {
       console.error(err);
@@ -152,22 +154,40 @@ export default function BulkImportPage() {
 
     try {
       setImportingLists(true);
+      const mergedNames = [];
+      const createdNames = [];
+
       for (const item of selectedLists) {
         const targetAdminId = currentUserRole === 'Super Admin' ? item.admin_id : currentUser.id;
 
-        await axios.post('http://localhost:5000/api/lists', {
+        const res = await axios.post('http://localhost:5000/api/lists', {
           name: item.name,
           description: item.description,
           admin_id: targetAdminId
         }, { headers: { 'x-user-role': currentUserRole } });
+
+        if (res.data && res.data.merged) {
+          mergedNames.push(res.data.name);
+        } else {
+          createdNames.push(item.name);
+        }
       }
 
-      success(`Successfully imported ${selectedLists.length} target lists!`);
       setParsedListsToImport([]);
       setSelectedListImportIndices([]);
       setListConfigFile('');
       setListConfigRaw('');
-      fetchLists();
+      await fetchLists();
+
+      if (mergedNames.length > 0) {
+        customAlert({
+          title: 'Target Lists Processed',
+          message: `Processed ${selectedLists.length} list configuration(s).\n\n${createdNames.length} list(s) created.\n\nThe following ${mergedNames.length} target list(s) already existed and were merged with existing lists:\n\n• ${mergedNames.join('\n• ')}`,
+          type: 'info'
+        });
+      } else {
+        success(`Successfully imported ${selectedLists.length} target lists!`);
+      }
     } catch (err) {
       console.error(err);
       error('Failed to import target lists configuration.');
@@ -359,7 +379,7 @@ export default function BulkImportPage() {
   const executeImport = async (contacts, importListIds = selectedListIds) => {
     try {
       setLoading(true);
-      await axios.post('http://localhost:5000/api/bulk-import/confirm', {
+      const res = await axios.post('http://localhost:5000/api/bulk-import/confirm', {
         originSite: originSite.trim(),
         importType: fileName ? (fileName.endsWith('.json') ? 'json' : 'csv') : 'manual',
         filename: fileName || 'Direct Text Input',
@@ -370,16 +390,28 @@ export default function BulkImportPage() {
         contacts
       });
 
-      success(`Successfully imported ${contacts.length} contacts!`);
+      const alreadyExisting = res.data?.alreadyExistingEmails || [];
+      const importedCount = res.data?.importedCount ?? contacts.length;
+
       setEmailsRaw('');
       setFileName('');
+
+      if (alreadyExisting.length > 0) {
+        customAlert({
+          title: 'Duplicate Email Addresses Found',
+          message: `Import Summary:\n\n• ${importedCount} new contact(s) imported.\n\nThe following ${alreadyExisting.length} Email ID(s) are already added in the database and were NOT re-added as duplicate contacts:\n\n• ${alreadyExisting.join('\n• ')}`,
+          type: 'warning'
+        });
+      } else {
+        success(`Successfully imported ${importedCount} contacts!`);
+      }
     } catch (err) {
       console.error(err);
       error('Failed to confirm and import contacts.');
     } finally {
       setLoading(false);
       setShowResolver(false);
-  setConflictData(null);
+      setConflictData(null);
     }
   };
 

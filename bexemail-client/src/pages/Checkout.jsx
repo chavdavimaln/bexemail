@@ -51,7 +51,7 @@ const Checkout = () => {
       name: 'Essentials Plan',
       price: '₹300',
       priceText: '₹300/mo for 12 months (then ₹550/mo)',
-      seats: '3 Seats (Admin/Associates)',
+      seats: '3 Seats (1 Admin + 2 Associates/Developers)',
       contacts: 'Up to 50,000 contacts',
       emails: '5,000 emails/mo',
       numericPrice: 300
@@ -61,7 +61,7 @@ const Checkout = () => {
       name: 'Standard Plan',
       price: '₹525',
       priceText: '₹525/mo for 12 months (then ₹800/mo)',
-      seats: '5 Seats (Admin/Associates)',
+      seats: '5 Seats (1 Admin + 4 Associates/Developers)',
       contacts: 'Up to 100,000 contacts',
       emails: '6,000 emails/mo',
       numericPrice: 525
@@ -71,7 +71,7 @@ const Checkout = () => {
       name: 'Premium Plan',
       price: '₹10,000',
       priceText: '₹10,000/mo for 12 months (then ₹15,000/mo)',
-      seats: '10 Seats (Admin/Associates)',
+      seats: '10 Seats (1 Admin + 9 Associates/Developers)',
       contacts: 'Contact us for custom plan',
       emails: '150,000 emails/mo',
       numericPrice: 10000

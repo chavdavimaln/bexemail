@@ -65,7 +65,7 @@ const Register = () => {
       name: 'Essentials',
       price: '₹300/mo for 12 mos',
       priceSub: 'Then ₹550/mo',
-      seats: '3 Seats (Admin/Associates)',
+      seats: '3 Seats (1 Admin + 2 Associates/Developers)',
       contacts: 'Up to 50,000 contacts ($300/mo tier)',
       desc: 'Core automations & support.'
     },
@@ -74,7 +74,7 @@ const Register = () => {
       name: 'Standard',
       price: '₹525/mo for 12 mos',
       priceSub: 'Then ₹800/mo',
-      seats: '5 Seats (Admin/Associates)',
+      seats: '5 Seats (1 Admin + 4 Associates/Developers)',
       contacts: 'Up to 100,000 contacts ($800/mo tier)',
       desc: 'Advanced AI & growth insights.',
       popular: true
@@ -84,7 +84,7 @@ const Register = () => {
       name: 'Premium',
       price: '₹10,000/mo for 12 mos',
       priceSub: 'Then ₹15,000/mo',
-      seats: '10 Seats (Admin/Associates)',
+      seats: '10 Seats (1 Admin + 9 Associates/Developers)',
       contacts: 'Contact us for custom plan',
       desc: 'Enterprise capabilities & dedicated IP.'
     }

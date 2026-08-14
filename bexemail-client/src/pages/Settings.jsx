@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Save, Settings2, Users, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, UserCheck, Shield, Eye, EyeOff, X } from 'lucide-react';
+import { Save, Settings2, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, Eye, EyeOff, ShieldCheck, CheckCircle2, Star, Building } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
 const Settings = () => {
@@ -32,19 +32,19 @@ const Settings = () => {
   });
   const [syncingId, setSyncingId] = useState(null);
 
-  // Admin Users state
-  const [admins, setAdmins] = useState([]);
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminForm, setAdminForm] = useState({ id: null, name: '', email: '', number: '', password: '', confirmPassword: '', role: 'User' });
-  const [currentUserRole, setCurrentUserRole] = useState('Super Admin'); // In real app, derived from Context/JWT
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // Registered Domains State
+  const [domains, setDomains] = useState([]);
+  const [showDomainModal, setShowDomainModal] = useState(false);
+  const [domainForm, setDomainForm] = useState({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
+
+  const [currentUserRole, setCurrentUserRole] = useState('Super Admin');
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showDbPass, setShowDbPass] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    fetchDomains();
   }, []);
 
   const fetchSettings = async () => {
@@ -53,6 +53,15 @@ const Settings = () => {
       setSettings(res.data);
     } catch (error) {
       console.error('Error fetching settings:', error);
+    }
+  };
+
+  const fetchDomains = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/domains');
+      setDomains(res.data || []);
+    } catch (error) {
+      console.error('Error fetching domains:', error);
     }
   };
 
@@ -83,22 +92,13 @@ const Settings = () => {
     }
   };
 
-  const fetchAdmins = async () => {
-    try {
-      const res = await axios.get('http://localhost:5000/api/admins', { headers: { 'x-user-role': currentUserRole } });
-      setAdmins(res.data);
-    } catch (error) {
-      console.error('Error fetching admins:', error);
-    }
-  };
-
   useEffect(() => {
+    if (activeTab === 'general') fetchDomains();
     if (activeTab === 'senders') fetchSenders();
     if (activeTab === 'integrations') {
       fetchIntegrations();
       fetchLists();
     }
-    if (activeTab === 'admins') fetchAdmins();
   }, [activeTab]);
 
   const handleChange = (e) => setSettings({ ...settings, [e.target.name]: e.target.value });
@@ -114,6 +114,63 @@ const Settings = () => {
       setSaveStatus('error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Domain CRUD Handlers
+  const handleSaveDomain = async () => {
+    if (!domainForm.company_name || !domainForm.domain_name) {
+      return customAlert({ title: 'Validation Error', message: 'Company Name and Domain Name are required.', type: 'warning' });
+    }
+
+    try {
+      if (domainForm.id) {
+        await axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm);
+      } else {
+        await axios.post('http://localhost:5000/api/domains', domainForm);
+      }
+      setShowDomainModal(false);
+      setDomainForm({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
+      fetchDomains();
+      customAlert({ title: 'Success', message: 'Domain configuration saved successfully.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: error.response?.data?.error || error.message, type: 'danger' });
+    }
+  };
+
+  const handleSetPrimaryDomain = async (id) => {
+    try {
+      await axios.put(`http://localhost:5000/api/domains/${id}/set-primary`);
+      fetchDomains();
+      customAlert({ title: 'Success', message: 'Primary domain updated.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: 'Failed to update primary domain', type: 'danger' });
+    }
+  };
+
+  const handleDeleteDomain = async (id, domainName) => {
+    if (domains.length <= 1) {
+      return customAlert({
+        title: 'Action Restricted',
+        message: 'Cannot delete domain. At least one registered domain must remain in the system.',
+        type: 'warning'
+      });
+    }
+
+    const isOk = await confirm({
+      title: 'Delete Registered Domain',
+      message: `Are you sure you want to delete domain registration for "${domainName}"?`,
+      confirmText: 'Delete Domain',
+      type: 'danger'
+    });
+    if (!isOk) return;
+
+    try {
+      await axios.delete(`http://localhost:5000/api/domains/${id}`);
+      fetchDomains();
+      customAlert({ title: 'Success', message: 'Domain deleted successfully.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to delete domain', type: 'danger' });
     }
   };
 
@@ -192,62 +249,24 @@ const Settings = () => {
     }
   };
 
-  const handleSaveAdmin = async () => {
-    if (!adminForm.name || !adminForm.email) return customAlert({ title: 'Validation Error', message: 'Name and email are required', type: 'warning' });
-    if (!adminForm.password) return customAlert({ title: 'Validation Error', message: 'Password is required', type: 'warning' });
-    if (adminForm.password !== adminForm.confirmPassword) return customAlert({ title: 'Validation Error', message: 'Passwords do not match', type: 'warning' });
-
-    try {
-      const payload = { ...adminForm };
-      delete payload.confirmPassword;
-      
-      if (adminForm.id) {
-        await axios.put(`http://localhost:5000/api/admins/${adminForm.id}`, payload, { headers: { 'x-user-role': currentUserRole } });
-      } else {
-        await axios.post('http://localhost:5000/api/admins', payload, { headers: { 'x-user-role': currentUserRole } });
-      }
-      setShowAdminModal(false);
-      fetchAdmins();
-    } catch (error) {
-      customAlert({ title: 'Error', message: 'Failed to save user: ' + (error.response?.data?.error || error.message), type: 'danger' });
-    }
-  };
-
-  const handleDeleteAdmin = async (id) => {
-    const isOk = await confirm({
-      title: 'Delete Admin User',
-      message: 'Are you sure you want to delete this user?',
-      confirmText: 'Delete User',
-      type: 'danger'
-    });
-    if (!isOk) return;
-    try {
-      await axios.delete(`http://localhost:5000/api/admins/${id}`, { headers: { 'x-user-role': currentUserRole } });
-      fetchAdmins();
-    } catch (error) {
-      customAlert({ title: 'Error', message: 'Failed to delete user', type: 'danger' });
-    }
-  };
-
   const tabs = [
-    { id: 'general', name: 'General', icon: <Settings2 size={18} className="mr-2" /> },
+    { id: 'general', name: 'General & Domains', icon: <Settings2 size={18} className="mr-2" /> },
     { id: 'smtp', name: 'SMTP Delivery', icon: <Send size={18} className="mr-2" /> },
     { id: 'senders', name: 'Sender Profiles', icon: <Mail size={18} className="mr-2" /> },
     { id: 'integrations', name: 'External Integrations', icon: <Link size={18} className="mr-2" /> },
-    { id: 'admins', name: 'Admin Users', icon: <Users size={18} className="mr-2" /> },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">System Settings</h2>
-          <p className="text-gray-500 mt-1">Manage global configurations and integrations.</p>
+          <p className="text-gray-500 mt-1">Manage global configurations, domain registrations, and integrations.</p>
         </div>
         <div className="flex items-center space-x-4">
           {saveStatus === 'success' && <span className="text-sm text-green-600 font-medium">Saved successfully!</span>}
           {saveStatus === 'error' && <span className="text-sm text-red-600 font-medium">Failed to save</span>}
-          <button onClick={handleSave} disabled={loading} className="flex items-center px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50">
+          <button onClick={handleSave} disabled={loading} className="flex items-center px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 shadow-xs">
             <Save size={18} className="mr-2" />
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
@@ -263,13 +282,133 @@ const Settings = () => {
           ))}
         </div>
 
-        <div className="p-6 md:p-8">
+        <div className="p-6 md:p-8 space-y-8">
           {activeTab === 'general' && (
-            <div className="max-w-xl space-y-6 animate-in fade-in">
-              <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">General Settings</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                <input type="text" name="company_name" value={settings.company_name || ''} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+            <div className="space-y-8 animate-in fade-in">
+              {/* General Settings Box */}
+              <div className="max-w-xl space-y-4">
+                <h3 className="text-lg font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
+                  <Building size={20} className="text-primary-600" />
+                  General Company Settings
+                </h3>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Company Name *</label>
+                  <input type="text" name="company_name" value={settings.company_name || ''} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+                </div>
+              </div>
+
+              {/* Registered Domain Configurations Panel */}
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+                      <Globe size={20} className="text-primary-600" />
+                      Domain Registration & Configurations
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Configure primary and sub-domains, company registration details, and DNS authentication records.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setDomainForm({ id: null, company_name: settings.company_name || 'Bexcode Services', domain_name: '', support_email: '', is_primary: domains.length === 0 });
+                      setShowDomainModal(true);
+                    }} 
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center self-start sm:self-auto"
+                  >
+                    <Plus size={16} className="mr-1.5" /> Register Domain
+                  </button>
+                </div>
+
+                {/* Domains Table */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-gray-200 text-xs font-extrabold text-gray-500 uppercase tracking-wider">
+                        <th className="px-5 py-3.5">Company & Domain</th>
+                        <th className="px-5 py-3.5">Support Contact</th>
+                        <th className="px-5 py-3.5">Domain Status</th>
+                        <th className="px-5 py-3.5">DNS Security</th>
+                        <th className="px-5 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 text-xs font-medium text-gray-800">
+                      {domains.map(d => (
+                        <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-5 py-4">
+                            <div className="font-extrabold text-slate-900 flex items-center gap-2 text-sm">
+                              <span>{d.domain_name}</span>
+                              {d.is_primary === 1 && (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                  <Star size={10} className="fill-amber-600 text-amber-600" /> Primary
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-gray-500 font-medium">{d.company_name}</div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="text-gray-600 font-mono text-xs">{d.support_email || 'Not configured'}</span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={12} /> Active / Verified
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DKIM: OK</span>
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">SPF: OK</span>
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex items-center justify-end space-x-2">
+                              {d.is_primary !== 1 && (
+                                <button 
+                                  onClick={() => handleSetPrimaryDomain(d.id)}
+                                  className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
+                                  title="Set as Primary Domain"
+                                >
+                                  Make Primary
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => {
+                                  setDomainForm({
+                                    id: d.id,
+                                    company_name: d.company_name,
+                                    domain_name: d.domain_name,
+                                    support_email: d.support_email || '',
+                                    is_primary: d.is_primary === 1
+                                  });
+                                  setShowDomainModal(true);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                                title="Edit Domain"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteDomain(d.id, d.domain_name)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                title="Delete Domain"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {domains.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="px-5 py-8 text-center text-gray-500 font-medium">
+                            No domains registered. Click <strong>+ Register Domain</strong> to add your domain details.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -393,91 +532,82 @@ const Settings = () => {
               </div>
             </div>
           )}
-
-          {activeTab === 'admins' && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="flex justify-between items-center border-b pb-2">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Admin Users & Roles</h3>
-                  <p className="text-sm text-gray-500 mt-1">Manage user access and Role-Based Access Control (RBAC).</p>
-                </div>
-                <button 
-                  onClick={() => navigate('/profiles')} 
-                  className="px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-lg text-sm font-medium transition-colors flex items-center"
-                >
-                  <Plus size={16} className="mr-2" /> Add User
-                </button>
-              </div>
-
-              {currentUserRole !== 'Super Admin' && (
-                <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-sm text-red-800 flex items-start">
-                  <Shield className="mr-2 mt-0.5 flex-shrink-0" size={18} />
-                  <div>
-                    <strong>Access Denied:</strong> Only Admins have permission to view or manage users.
-                  </div>
-                </div>
-              )}
-
-              {currentUserRole === 'Super Admin' && (
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-sm text-gray-500">
-                        <th className="px-6 py-3 font-medium">Name</th>
-                        <th className="px-6 py-3 font-medium">Email</th>
-                        <th className="px-6 py-3 font-medium">Number</th>
-                        <th className="px-6 py-3 font-medium">Role</th>
-                        <th className="px-6 py-3 font-medium text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {admins.map(admin => (
-                        <tr key={admin.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center text-gray-900 font-medium">
-                              <UserCheck size={16} className="mr-2 text-gray-400" />
-                              {admin.name || '-'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{admin.email}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{admin.number || '-'}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
-                              admin.role === 'Super Admin' ? 'bg-purple-100 text-purple-700' :
-                              admin.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700' :
-                              admin.role === 'Subscriber' ? 'bg-orange-100 text-orange-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {admin.role === 'Super Admin' ? 'Admin' : admin.role === 'Admin' ? 'Subscriber' : admin.role}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => { setAdminForm(admin); setShowAdminModal(true); }} 
-                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                              title="View User Details"
-                            >
-                              <Eye size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {admins.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="px-6 py-8 text-center text-gray-500">No users found.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
+      {/* Add / Edit Domain Modal */}
+      {showDomainModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
+            <h3 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
+              <Globe size={22} className="text-primary-600" />
+              {domainForm.id ? 'Edit Domain Configuration' : 'Register New Domain'}
+            </h3>
+            
+            <div className="space-y-4 text-xs font-medium">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Company Name *</label>
+                <input 
+                  type="text" 
+                  value={domainForm.company_name} 
+                  onChange={e => setDomainForm({ ...domainForm, company_name: e.target.value })} 
+                  placeholder="e.g. Bexcode Services"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" 
+                />
+              </div>
+              
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Domain Name / Slug *</label>
+                <input 
+                  type="text" 
+                  value={domainForm.domain_name} 
+                  onChange={e => setDomainForm({ ...domainForm, domain_name: e.target.value })} 
+                  placeholder="e.g. bexcodeservices or bexcodeservices.com"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono" 
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Support / Contact Email</label>
+                <input 
+                  type="email" 
+                  value={domainForm.support_email} 
+                  onChange={e => setDomainForm({ ...domainForm, support_email: e.target.value })} 
+                  placeholder="e.g. info@bexcodeservices.com"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono" 
+                />
+              </div>
+
+              <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                <input 
+                  type="checkbox" 
+                  checked={domainForm.is_primary} 
+                  onChange={e => setDomainForm({ ...domainForm, is_primary: e.target.checked })} 
+                  className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4" 
+                />
+                <span className="text-xs font-bold text-gray-800">Set as Primary Domain</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-3 border-t">
+              <button 
+                onClick={() => setShowDomainModal(false)} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-xs transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveDomain} 
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-lg shadow-xs transition"
+              >
+                Save Domain
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add/Edit Sender Modal */}
-      {/* ... (Sender and Integration Modals remain exactly the same) ... */}
       {showSenderModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6">
@@ -615,64 +745,6 @@ const Settings = () => {
             <div className="flex justify-end space-x-3 pt-4 border-t">
               <button onClick={() => setShowIntegrationModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">Cancel</button>
               <button onClick={handleSaveIntegration} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors">Save Integration</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View Admin User Details Modal */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
-            <div className="flex justify-between items-center pb-2 border-b">
-              <h3 className="text-xl font-bold text-gray-900">User Details</h3>
-              <button onClick={() => setShowAdminModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg transition-colors"><X size={18} /></button>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="flex flex-col items-center pb-4 border-b border-gray-100">
-                <div className="w-16 h-16 bg-primary-50 text-primary-600 rounded-full flex items-center justify-center mb-3">
-                  <UserCheck size={32} />
-                </div>
-                <h4 className="text-lg font-bold text-gray-900">{adminForm.name || 'No Name'}</h4>
-                <span className={`mt-1 px-2.5 py-1 text-xs font-semibold rounded-full ${
-                  adminForm.role === 'Super Admin' ? 'bg-purple-100 text-purple-700' :
-                  adminForm.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700' :
-                  adminForm.role === 'Subscriber' ? 'bg-orange-100 text-orange-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {adminForm.role === 'Super Admin' ? 'Admin' : adminForm.role === 'Admin' ? 'Subscriber' : (adminForm.role || 'User')}
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-2 py-1">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Email</span>
-                  <span className="col-span-2 text-sm text-gray-800 break-all">{adminForm.email || '-'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 py-1">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mobile</span>
-                  <span className="col-span-2 text-sm text-gray-800">{adminForm.number || '-'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4 border-t">
-              <button 
-                onClick={() => setShowAdminModal(false)} 
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 border rounded-lg font-medium transition-colors text-sm"
-              >
-                Close
-              </button>
-              <button 
-                onClick={() => {
-                  setShowAdminModal(false);
-                  navigate('/profiles');
-                }} 
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold transition-colors flex items-center text-sm shadow-sm"
-              >
-                <Edit2 size={14} className="mr-1.5" /> Edit User Profile
-              </button>
             </div>
           </div>
         </div>

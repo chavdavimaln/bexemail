@@ -85,7 +85,9 @@ const Contacts = () => {
         axios.get('http://localhost:5000/api/bulk-import/subscribers').catch(() => ({ data: { data: [] } })),
         axios.get('http://localhost:5000/api/subscribers?limit=500').catch(() => ({ data: { data: [] } })),
         axios.get('http://localhost:5000/api/lists').catch(() => ({ data: [] })),
-        axios.get('http://localhost:5000/api/admins').catch(() => ({ data: [] }))
+        axios.get('http://localhost:5000/api/admins', {
+          headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
+        }).catch(() => ({ data: [] }))
       ]);
 
       const rawBulk = subsRes.data?.data || (Array.isArray(subsRes.data) ? subsRes.data : []);
@@ -177,7 +179,7 @@ const Contacts = () => {
 
     try {
       setAdding(true);
-      await axios.post('http://localhost:5000/api/bulk-import/confirm', {
+      const res = await axios.post('http://localhost:5000/api/bulk-import/confirm', {
         originSite: window.location.hostname || 'localhost',
         importType: 'manual',
         filename: 'Manual & Profile Contact Add',
@@ -194,11 +196,23 @@ const Contacts = () => {
       setNewContactAdminId('');
       setShowAddContactModal(false);
       await fetchData();
-      customAlert({
-        title: 'Success',
-        message: `Successfully added ${contactsToAdd.length} contact(s) and assigned target list(s)!`,
-        type: 'success'
-      });
+
+      const alreadyExisting = res.data?.alreadyExistingEmails || [];
+      const importedCount = res.data?.importedCount ?? contactsToAdd.length;
+
+      if (alreadyExisting.length > 0) {
+        customAlert({
+          title: 'Duplicate Email Addresses Found',
+          message: `Add Contact Summary:\n\n• ${importedCount} new contact(s) added.\n\nThe following ${alreadyExisting.length} Email ID(s) are already added in the database and were NOT re-added as duplicate contacts:\n\n• ${alreadyExisting.join('\n• ')}`,
+          type: 'warning'
+        });
+      } else {
+        customAlert({
+          title: 'Success',
+          message: `Successfully added ${importedCount} contact(s) and assigned target list(s)!`,
+          type: 'success'
+        });
+      }
     } catch (error) {
       console.error(error);
       customAlert({
@@ -492,11 +506,20 @@ const Contacts = () => {
       if (res.data.id) {
         setSelectedTargetListId(res.data.id);
       }
-      customAlert({
-        title: 'Success',
-        message: 'Target list created successfully!',
-        type: 'success'
-      });
+
+      if (res.data && res.data.merged) {
+        customAlert({
+          title: 'Target List Merged',
+          message: `Target list "${res.data.name}" already exists.\n\nIt has been automatically merged with the existing target list so no duplicate list was created.`,
+          type: 'info'
+        });
+      } else {
+        customAlert({
+          title: 'Success',
+          message: 'Target list created successfully!',
+          type: 'success'
+        });
+      }
     } catch (error) {
       console.error(error);
       customAlert({

@@ -31,6 +31,7 @@ router.put('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]),
 router.delete('/lists/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.deleteList);
 router.post('/lists/assign', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.assignSubscribers);
 router.post('/lists/sync', listsController.syncSubscriberLists);  // no role guard - used by contacts edit
+router.post('/lists/merge-duplicates', listsController.mergeDuplicateLists);
 
 // Campaigns
 router.get('/campaigns', campaignsController.getCampaigns);
@@ -116,5 +117,13 @@ router.get('/backup/:id/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN
 // Auto Backup Schedules & Reminders
 router.get('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getBackupSchedules);
 router.post('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.saveBackupSchedule);
+
+// Registered Domains Configuration
+const domainsController = require('../controllers/domainsController');
+router.get('/domains', domainsController.getDomains);
+router.post('/domains', domainsController.createDomain);
+router.put('/domains/:id', domainsController.updateDomain);
+router.put('/domains/:id/set-primary', domainsController.setPrimaryDomain);
+router.delete('/domains/:id', domainsController.deleteDomain);
 
 module.exports = router;

@@ -202,6 +202,7 @@ async function setupDB() {
       "UPDATE admin_users SET role = 'Admin' WHERE role = 'Super Admin'",
       "UPDATE admin_users SET role = 'Associates' WHERE role IN ('Sub Admin', 'Subscriber')",
       "UPDATE admin_users SET role = 'Developer' WHERE role IN ('User', 'user')",
+      "ALTER TABLE admin_users ADD COLUMN admin_id INT NULL DEFAULT NULL",
       "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
       "ALTER TABLE lists ADD COLUMN admin_id INT NULL",
       "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL",
@@ -233,6 +234,11 @@ async function setupDB() {
         // Safe to ignore if column/enum value already exists
       }
     }
+
+    try {
+      await pool.query('UPDATE admin_users SET admin_id = id WHERE role IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
+      await pool.query('UPDATE admin_users SET admin_id = 1 WHERE role NOT IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
+    } catch (e) {}
 
     await setupAutomationDB();
 
@@ -269,6 +275,29 @@ async function setupDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
+    `);
+
+    // Dedicated Domain Configurations Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS registered_domains (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_name VARCHAR(255) NOT NULL,
+        domain_name VARCHAR(255) NOT NULL UNIQUE,
+        support_email VARCHAR(255) NULL,
+        is_primary TINYINT(1) DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'active',
+        dkim_status VARCHAR(50) DEFAULT 'valid',
+        spf_status VARCHAR(50) DEFAULT 'valid',
+        dmarc_status VARCHAR(50) DEFAULT 'valid',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // Seed default initial domain 'bexcodeservices'
+    await pool.query(`
+      INSERT IGNORE INTO registered_domains (id, company_name, domain_name, support_email, is_primary, status)
+      VALUES (1, 'Bexcode Services', 'bexcodeservices', 'info@bexcodeservices.com', 1, 'active')
     `);
 
     await pool.query(`
