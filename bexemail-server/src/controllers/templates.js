@@ -6,6 +6,9 @@ exports.createTemplate = async (req, res) => {
   const { 
     template_name, 
     category, 
+    industry,
+    is_predesigned,
+    thumbnail,
     html_content, 
     plain_text_content, 
     design_json, 
@@ -25,6 +28,9 @@ exports.createTemplate = async (req, res) => {
       `INSERT INTO templates (
         template_name, 
         category, 
+        industry,
+        is_predesigned,
+        thumbnail,
         html_content, 
         plain_text_content, 
         design_json, 
@@ -32,10 +38,13 @@ exports.createTemplate = async (req, res) => {
         footer_editor_type, 
         footer_html, 
         footer_design_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         template_name, 
         category || 'General', 
+        industry || 'General',
+        is_predesigned ? 1 : 0,
+        thumbnail || null,
         html_content || '', 
         plain_text_content || '', 
         designStr, 
@@ -50,6 +59,9 @@ exports.createTemplate = async (req, res) => {
       id: insertRes.insertId, 
       template_name, 
       category: category || 'General', 
+      industry: industry || 'General',
+      is_predesigned: is_predesigned ? 1 : 0,
+      thumbnail: thumbnail || null,
       html_content: html_content || '', 
       plain_text_content: plain_text_content || '', 
       design_json: designStr,
@@ -59,21 +71,45 @@ exports.createTemplate = async (req, res) => {
       footer_design_json: footerDesignStr
     };
     await logHistory('templates', insertRes.insertId, 'add', null, newTemplate, req.headers['x-user-role']).catch(() => {});
-    res.status(201).json({ message: 'Template created successfully', id: insertRes.insertId });
+    res.status(201).json({ message: 'Template created successfully', id: insertRes.insertId, template: newTemplate });
   } catch (error) {
     console.error('Create template error:', error);
     res.status(500).json({ error: 'Failed to create template: ' + error.message });
   }
 };
 
-// Get all Templates
+// Get all Templates (with optional filter query parameters)
 exports.getTemplates = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM templates ORDER BY created_at DESC');
+    const { category, industry, is_predesigned, search } = req.query;
+    let sql = 'SELECT * FROM templates WHERE 1=1';
+    let params = [];
+
+    if (category && category !== 'All') {
+      sql += ' AND category = ?';
+      params.push(category);
+    }
+    if (industry && industry !== 'All') {
+      sql += ' AND industry = ?';
+      params.push(industry);
+    }
+    if (is_predesigned !== undefined && is_predesigned !== '' && is_predesigned !== 'All') {
+      const isPre = (is_predesigned === 'true' || is_predesigned === '1' || is_predesigned === 1) ? 1 : 0;
+      sql += ' AND is_predesigned = ?';
+      params.push(isPre);
+    }
+    if (search && search.trim() !== '') {
+      sql += ' AND (template_name LIKE ? OR category LIKE ? OR industry LIKE ?)';
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
+
+    sql += ' ORDER BY is_predesigned DESC, created_at DESC, id DESC';
+    const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Database error' });
+    console.error('getTemplates error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 };
 
@@ -90,12 +126,73 @@ exports.getTemplateById = async (req, res) => {
   }
 };
 
+// Clone / Duplicate Template
+exports.cloneTemplate = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.query('SELECT * FROM templates WHERE id = ?', [id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Source template not found' });
+
+    const source = rows[0];
+    const newName = req.body.template_name || `${source.template_name} (Copy)`;
+
+    const [insertRes] = await pool.query(
+      `INSERT INTO templates (
+        template_name,
+        category,
+        industry,
+        is_predesigned,
+        thumbnail,
+        html_content,
+        plain_text_content,
+        design_json,
+        include_footer,
+        footer_editor_type,
+        footer_html,
+        footer_design_json
+      ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newName,
+        source.category || 'General',
+        source.industry || 'General',
+        source.thumbnail || null,
+        source.html_content || '',
+        source.plain_text_content || '',
+        source.design_json || null,
+        source.include_footer !== undefined ? source.include_footer : 1,
+        source.footer_editor_type || 'html',
+        source.footer_html || null,
+        source.footer_design_json || null
+      ]
+    );
+
+    const cloned = {
+      id: insertRes.insertId,
+      template_name: newName,
+      category: source.category,
+      industry: source.industry,
+      is_predesigned: 0,
+      thumbnail: source.thumbnail,
+      html_content: source.html_content
+    };
+
+    await logHistory('templates', insertRes.insertId, 'add', null, cloned, req.headers['x-user-role']).catch(() => {});
+    res.status(201).json({ message: 'Template cloned successfully', id: insertRes.insertId, template: cloned });
+  } catch (error) {
+    console.error('Clone template error:', error);
+    res.status(500).json({ error: 'Failed to clone template: ' + error.message });
+  }
+};
+
 // Update Template
 exports.updateTemplate = async (req, res) => {
   const { id } = req.params;
   const { 
     template_name, 
     category, 
+    industry,
+    is_predesigned,
+    thumbnail,
     html_content, 
     plain_text_content, 
     design_json, 
@@ -116,6 +213,9 @@ exports.updateTemplate = async (req, res) => {
       `UPDATE templates SET 
         template_name = ?, 
         category = ?, 
+        industry = ?,
+        is_predesigned = ?,
+        thumbnail = ?,
         html_content = ?, 
         plain_text_content = ?, 
         design_json = ?, 
@@ -125,14 +225,17 @@ exports.updateTemplate = async (req, res) => {
         footer_design_json = ? 
       WHERE id = ?`,
       [
-        template_name, 
-        category, 
-        html_content || '', 
-        plain_text_content || '', 
+        template_name || oldData.template_name, 
+        category || oldData.category || 'General', 
+        industry || oldData.industry || 'General',
+        is_predesigned !== undefined ? (is_predesigned ? 1 : 0) : oldData.is_predesigned,
+        thumbnail !== undefined ? thumbnail : oldData.thumbnail,
+        html_content !== undefined ? html_content : oldData.html_content, 
+        plain_text_content !== undefined ? plain_text_content : oldData.plain_text_content, 
         designStr, 
-        include_footer !== undefined ? include_footer : 1, 
-        footer_editor_type || 'html', 
-        footer_html || null, 
+        include_footer !== undefined ? include_footer : oldData.include_footer, 
+        footer_editor_type || oldData.footer_editor_type || 'html', 
+        footer_html !== undefined ? footer_html : oldData.footer_html, 
         footerDesignStr,
         id
       ]
@@ -144,6 +247,9 @@ exports.updateTemplate = async (req, res) => {
       ...oldData, 
       template_name, 
       category, 
+      industry,
+      is_predesigned,
+      thumbnail,
       html_content, 
       plain_text_content, 
       design_json: designStr, 

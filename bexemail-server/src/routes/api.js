@@ -49,6 +49,7 @@ router.put('/campaigns/:id/status', campaignsController.updateCampaignStatus);
 // Templates
 router.post('/templates/send-test', templatesController.sendTestTemplate);
 router.post('/templates/:id/send-test', templatesController.sendTestTemplate);
+router.post('/templates/:id/clone', templatesController.cloneTemplate);
 router.post('/templates', templatesController.createTemplate);
 router.get('/templates', templatesController.getTemplates);
 router.get('/templates/:id', templatesController.getTemplateById);

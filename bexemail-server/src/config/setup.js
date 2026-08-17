@@ -98,16 +98,22 @@ async function setupDB() {
       // Column might already exist, ignore error
     }
 
-    // Add footer columns to templates
+    // Add footer and industry/predesign columns to templates
     const footerCols = [
       "ALTER TABLE templates ADD COLUMN include_footer TINYINT DEFAULT 1",
       "ALTER TABLE templates ADD COLUMN footer_editor_type VARCHAR(50) DEFAULT 'html'",
       "ALTER TABLE templates ADD COLUMN footer_html LONGTEXT NULL",
-      "ALTER TABLE templates ADD COLUMN footer_design_json LONGTEXT NULL"
+      "ALTER TABLE templates ADD COLUMN footer_design_json LONGTEXT NULL",
+      "ALTER TABLE templates ADD COLUMN industry VARCHAR(100) DEFAULT 'General'",
+      "ALTER TABLE templates ADD COLUMN is_predesigned TINYINT(1) DEFAULT 0",
+      "ALTER TABLE templates ADD COLUMN thumbnail TEXT NULL"
     ];
     for (const colQuery of footerCols) {
       try { await pool.query(colQuery); } catch (err) { /* ignore existing column error */ }
     }
+
+    const seedPredesignedTemplates = require('./seedPredesignedTemplates');
+    await seedPredesignedTemplates();
 
     // Create campaign_opens table if not exists
     await pool.query(`
