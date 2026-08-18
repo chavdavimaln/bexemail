@@ -44,19 +44,14 @@ exports.createList = async (req, res) => {
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
 
   const cleanName = name.trim();
-  const user = getRequestUser(req);
-  let targetAdminId = admin_id;
-  if (user && user.role !== 'Super Admin') {
-    if (!targetAdminId || Number(targetAdminId) === 0) {
-      targetAdminId = user.id;
-    }
-  }
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
 
   try {
-    // Check if target list with same name already exists (case-insensitive)
+    // Check if target list with same name already exists for this admin (case-insensitive)
     const [existing] = await pool.query(
-      'SELECT * FROM lists WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND is_deleted = FALSE',
-      [cleanName]
+      'SELECT * FROM lists WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND admin_id = ? AND is_deleted = FALSE',
+      [cleanName, targetAdminId]
     );
 
     if (existing.length > 0) {
@@ -154,9 +149,12 @@ exports.mergeDuplicateLists = async (req, res) => {
   }
 };
 
-// Get all active Lists
+// Get all active Lists for the active admin context
 exports.getLists = async (req, res) => {
   try {
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
     const query = `
       SELECT l.*, 
              u.role AS admin_role, u.email AS admin_email, u.username AS admin_username,
@@ -173,10 +171,10 @@ exports.getLists = async (req, res) => {
         ) AS all_subs
         GROUP BY list_id
       ) sub_counts ON l.id = sub_counts.list_id
-      WHERE l.is_deleted = FALSE
+      WHERE l.is_deleted = FALSE AND l.admin_id = ?
       ORDER BY l.created_at DESC
     `;
-    const [rows] = await pool.query(query);
+    const [rows] = await pool.query(query, [adminId]);
     res.json(rows);
   } catch (error) {
     console.error(error);

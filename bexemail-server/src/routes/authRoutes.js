@@ -7,6 +7,7 @@ router.post('/login', authController.login);
 router.post('/register', authController.register);
 // Since checkRole requires JWT, we can just pass an empty array to mean "any logged in user"
 router.get('/me', checkRole([]), authController.getMe);
+router.get('/system-limits-status', authController.getSystemLimitsStatus);
 router.put('/profile', checkRole([]), authController.updateProfile);
 router.put('/password', checkRole([]), authController.updatePassword);
 router.post('/my-subscription', checkRole([]), authController.updateMySubscription);

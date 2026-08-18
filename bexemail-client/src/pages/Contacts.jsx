@@ -81,19 +81,25 @@ const Contacts = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const userToken = localStorage.getItem('token');
+      const headers = {
+        ...(user && user.id ? { 'x-user-id': String(user.id), 'x-user-role': user.role || 'Admin' } : {}),
+        ...(user && user.admin_id ? { 'x-admin-id': String(user.admin_id) } : {}),
+        ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+      };
+
       const [subsRes, directSubsRes, listsRes, adminsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/bulk-import/subscribers').catch(() => ({ data: { data: [] } })),
-        axios.get('http://localhost:5000/api/subscribers?limit=500').catch(() => ({ data: { data: [] } })),
-        axios.get('http://localhost:5000/api/lists').catch(() => ({ data: [] })),
-        axios.get('http://localhost:5000/api/admins', {
-          headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
-        }).catch(() => ({ data: [] }))
+        axios.get('/api/bulk-import/subscribers', { headers }).catch(() => ({ data: { data: [] } })),
+        axios.get('/api/subscribers?limit=500', { headers }).catch(() => ({ data: { data: [] } })),
+        axios.get('/api/lists', { headers }).catch(() => ({ data: [] })),
+        axios.get('/api/admins', { headers }).catch(() => ({ data: [] }))
       ]);
 
       const rawBulk = subsRes.data?.data || (Array.isArray(subsRes.data) ? subsRes.data : []);
       const rawDirect = directSubsRes.data?.data || (Array.isArray(directSubsRes.data) ? directSubsRes.data : []);
 
-      const fetchedSubs = rawBulk.length > 0 ? rawBulk : rawDirect;
+      const fetchedSubs = (Array.isArray(rawBulk) && rawBulk.length > 0) ? rawBulk : (Array.isArray(rawDirect) ? rawDirect : []);
       const fetchedLists = Array.isArray(listsRes.data) ? listsRes.data : [];
       const fetchedAdmins = Array.isArray(adminsRes.data) ? adminsRes.data : [];
 

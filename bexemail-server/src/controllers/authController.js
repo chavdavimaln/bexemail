@@ -1,19 +1,21 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { getSystemLimitsStatus, getUserPlanLimits } = require('../utils/planLimits');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
 
 // POST /api/auth/login
 exports.login = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
     
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
 
     try {
-        const [users] = await db.query(`SELECT * FROM admin_users WHERE email = ?`, [email]);
+        const cleanEmail = email.toLowerCase().trim();
+        const [users] = await db.query(`SELECT * FROM admin_users WHERE LOWER(email) = ?`, [cleanEmail]);
         
         if (users.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
@@ -26,10 +28,11 @@ exports.login = async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        const expiresIn = rememberMe ? '30d' : '24h';
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role },
             JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn }
         );
 
         let perms = user.permissions;
@@ -423,5 +426,17 @@ exports.resetPasswordPublic = async (req, res) => {
     } catch (error) {
         console.error('resetPasswordPublic error:', error);
         res.status(500).json({ error: 'Failed to reset password: ' + error.message });
+    }
+};
+
+// GET /api/auth/system-limits-status
+exports.getSystemLimitsStatus = async (req, res) => {
+    try {
+        const userId = req.user?.id || req.headers['x-user-id'] || req.headers['X-User-Id'] || null;
+        const status = await getSystemLimitsStatus(userId);
+        res.json(status);
+    } catch (error) {
+        console.error('getSystemLimitsStatus error:', error);
+        res.status(500).json({ error: 'Failed to fetch system limits status: ' + error.message });
     }
 };

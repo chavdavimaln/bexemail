@@ -18,46 +18,10 @@ const getCurrentUser = (req) => {
 
 exports.getSenders = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM senders ORDER BY is_default DESC, name ASC');
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
 
-    // If senders table is empty, auto-seed default system SMTP sender (info@bexcodeservices.com)
-    if (rows.length === 0) {
-      const [settingsRows] = await pool.query('SELECT setting_key, setting_value FROM settings');
-      const settings = (settingsRows || []).reduce((acc, curr) => {
-        acc[curr.setting_key] = curr.setting_value;
-        return acc;
-      }, {});
-
-      const defaultName = settings.from_name || 'Active System SMTP';
-      const defaultEmail = settings.from_email || settings.smtp_user || 'info@bexcodeservices.com';
-      const smtpHost = settings.smtp_host || 'smtp.gmail.com';
-      const smtpPort = settings.smtp_port ? Number(settings.smtp_port) : 465;
-      const smtpUser = settings.smtp_user || 'info@bexcodeservices.com';
-      const smtpPass = settings.smtp_pass || '********';
-      const smtpSecure = settings.smtp_secure || 'ssl';
-
-      const [insertResult] = await pool.query(
-        `INSERT INTO senders (name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id)
-         VALUES (?, ?, TRUE, ?, ?, ?, ?, ?, NULL)`,
-        [defaultName, defaultEmail, smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure]
-      );
-
-      const seededSender = {
-        id: insertResult.insertId,
-        name: defaultName,
-        email: defaultEmail,
-        is_default: 1,
-        smtp_host: smtpHost,
-        smtp_port: smtpPort,
-        smtp_user: smtpUser,
-        smtp_pass: smtpPass,
-        smtp_secure: smtpSecure,
-        admin_id: null
-      };
-
-      return res.json([seededSender]);
-    }
-
+    const [rows] = await pool.query('SELECT * FROM senders WHERE admin_id = ? ORDER BY is_default DESC, name ASC', [adminId]);
     res.json(rows);
   } catch (error) {
     console.error('Fetch senders error:', error);
@@ -66,17 +30,27 @@ exports.getSenders = async (req, res) => {
 };
 
 exports.createSender = async (req, res) => {
-  const currentUser = getCurrentUser(req);
-  const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id } = req.body;
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
+  const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure } = req.body;
   
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
   }
 
-  // Force Admin to own their senders
-  let targetAdminId = admin_id || null;
-  if (currentUser && currentUser.role !== 'Super Admin') {
-    targetAdminId = currentUser.id || 1;
+  // Plan Limit Check for SMTPs
+  try {
+    const { getUserPlanLimits } = require('../utils/planLimits');
+    const limits = await getUserPlanLimits(targetAdminId);
+    const [countRows] = await pool.query('SELECT COUNT(*) as count FROM senders WHERE admin_id = ?', [targetAdminId]);
+    const currentSmtpCount = countRows[0]?.count || 0;
+    if (currentSmtpCount >= limits.maxSmtps) {
+      return res.status(400).json({
+        error: `Your current ${limits.planName} allows a maximum of ${limits.maxSmtps} SMTP configuration(s). Please upgrade your CRM plan to add more SMTP senders.`
+      });
+    }
+  } catch (limitErr) {
+    console.error('SMTP limit check error:', limitErr);
   }
 
   let connection;

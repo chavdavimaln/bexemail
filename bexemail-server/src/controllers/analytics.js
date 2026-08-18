@@ -102,20 +102,27 @@ exports.getCampaignAnalytics = async (req, res) => {
 
 exports.getDashboardStats = async (req, res) => {
   try {
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
     // 1. Subscriber Stats
     const [subStats] = await pool.query(
       `SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN status = 'subscribed' THEN 1 ELSE 0 END) as active
-       FROM subscribers`
+       FROM subscribers WHERE admin_id = ?`,
+      [adminId]
     );
 
     // 2. Queue Stats
     const [queueStats] = await pool.query(
       `SELECT 
-        SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-       FROM email_queue`
+        SUM(CASE WHEN eq.status = 'sent' THEN 1 ELSE 0 END) as sent,
+        SUM(CASE WHEN eq.status = 'pending' THEN 1 ELSE 0 END) as pending
+       FROM email_queue eq
+       JOIN campaigns c ON eq.campaign_id = c.id
+       WHERE c.admin_id = ?`,
+      [adminId]
     );
 
     // 3. Campaign Performance (Global Opens/Clicks)
@@ -132,13 +139,22 @@ exports.getDashboardStats = async (req, res) => {
            ) days
          ) date_series
          LEFT JOIN (
-           SELECT DATE(created_at) as d, COUNT(*) as opens FROM campaign_opens GROUP BY DATE(created_at)
+           SELECT DATE(co.created_at) as d, COUNT(*) as opens 
+           FROM campaign_opens co
+           JOIN campaigns cmp ON co.campaign_id = cmp.id
+           WHERE cmp.admin_id = ?
+           GROUP BY DATE(co.created_at)
          ) o ON date_series.d = o.d
          LEFT JOIN (
-           SELECT DATE(created_at) as d, COUNT(*) as clicks FROM campaign_clicks GROUP BY DATE(created_at)
+           SELECT DATE(cc.created_at) as d, COUNT(*) as clicks 
+           FROM campaign_clicks cc
+           JOIN campaigns cmp ON cc.campaign_id = cmp.id
+           WHERE cmp.admin_id = ?
+           GROUP BY DATE(cc.created_at)
          ) c ON date_series.d = c.d
          ORDER BY date_series.d DESC
-         LIMIT 7`
+         LIMIT 7`,
+        [adminId, adminId]
       );
       timelineStats = rows;
     } catch (e) {
@@ -152,22 +168,26 @@ exports.getDashboardStats = async (req, res) => {
 
     // 4. Recent Campaigns
     const [recentCampaigns] = await pool.query(
-      `SELECT id, name, status, created_at FROM campaigns ORDER BY created_at DESC LIMIT 5`
+      `SELECT id, name, status, created_at FROM campaigns WHERE admin_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [adminId]
     );
 
     // 5. Recent Subscribers
     const [recentSubscribers] = await pool.query(
-      `SELECT id, email, status, created_at FROM subscribers ORDER BY created_at DESC LIMIT 5`
+      `SELECT id, email, status, created_at FROM subscribers WHERE admin_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [adminId]
     );
 
     // 6. Recent Automations
     const [recentAutomations] = await pool.query(
-      `SELECT id, name, status, created_at FROM automations ORDER BY created_at DESC LIMIT 5`
-    );
+      `SELECT id, name, status, created_at FROM automations WHERE admin_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [adminId]
+    ).catch(() => [[], []]);
 
     // 7. Recent Lists
     const [recentLists] = await pool.query(
-      `SELECT id, name, description, created_at FROM lists WHERE is_deleted = FALSE ORDER BY created_at DESC LIMIT 5`
+      `SELECT id, name, description, created_at FROM lists WHERE is_deleted = FALSE AND admin_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [adminId]
     );
 
     // Format for recharts

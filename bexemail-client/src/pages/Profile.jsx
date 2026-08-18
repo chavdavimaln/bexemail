@@ -56,10 +56,10 @@ const Profile = () => {
     setPasswords(prev => ({
       ...prev,
       new: generated,
-      confirm: generated
+      confirm: ''
     }));
     setShowNew(true);
-    setShowConfirm(true);
+    setShowConfirm(false);
   };
 
   const newPasswordCriteria = {

@@ -30,9 +30,9 @@ const ResetPassword = () => {
       generated += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     setNewPassword(generated);
-    setConfirmPassword(generated);
+    setConfirmPassword('');
     setShowNewPassword(true);
-    setShowConfirmPassword(true);
+    setShowConfirmPassword(false);
   };
 
   const handleResetPassword = async (e) => {

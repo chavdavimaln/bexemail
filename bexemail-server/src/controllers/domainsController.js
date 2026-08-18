@@ -1,9 +1,12 @@
 const pool = require('../config/db');
 
-// Get all registered domains
+// Get all registered domains for the current admin context
 exports.getDomains = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM registered_domains ORDER BY is_primary DESC, id ASC');
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
+    const [rows] = await pool.query('SELECT * FROM registered_domains WHERE admin_id = ? ORDER BY is_primary DESC, id ASC', [adminId]);
     res.json(rows);
   } catch (error) {
     console.error('Fetch domains error:', error);
@@ -14,6 +17,9 @@ exports.getDomains = async (req, res) => {
 // Create new registered domain
 exports.createDomain = async (req, res) => {
   try {
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
     const { company_name, domain_name, support_email, is_primary } = req.body;
 
     if (!company_name || !domain_name) {
@@ -22,24 +28,33 @@ exports.createDomain = async (req, res) => {
 
     const cleanDomain = domain_name.trim().toLowerCase();
 
-    // Check if domain already exists
-    const [existing] = await pool.query('SELECT id FROM registered_domains WHERE LOWER(domain_name) = ?', [cleanDomain]);
+    // Check plan limit for domain registration
+    const { getUserPlanLimits } = require('../utils/planLimits');
+    const limits = await getUserPlanLimits(adminId);
+    const [countRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains WHERE admin_id = ?', [adminId]);
+    const totalCount = countRows[0]?.count || 0;
+
+    if (totalCount >= limits.maxDomains) {
+      return res.status(400).json({
+        error: `Your current ${limits.planName} allows a maximum of ${limits.maxDomains} domain registration(s). Please upgrade your CRM plan to register more domains.`
+      });
+    }
+
+    // Check if domain already exists for this admin
+    const [existing] = await pool.query('SELECT id FROM registered_domains WHERE LOWER(domain_name) = ? AND admin_id = ?', [cleanDomain, adminId]);
     if (existing.length > 0) {
       return res.status(400).json({ error: `Domain '${cleanDomain}' is already registered.` });
     }
 
-    // Check total domain count to handle primary logic
-    const [countRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains');
-    const totalCount = countRows[0]?.count || 0;
     const shouldBePrimary = is_primary || totalCount === 0 ? 1 : 0;
 
     if (shouldBePrimary === 1) {
-      await pool.query('UPDATE registered_domains SET is_primary = 0');
+      await pool.query('UPDATE registered_domains SET is_primary = 0 WHERE admin_id = ?', [adminId]);
     }
 
     const [result] = await pool.query(
-      'INSERT INTO registered_domains (company_name, domain_name, support_email, is_primary, status, dkim_status, spf_status, dmarc_status) VALUES (?, ?, ?, ?, "active", "valid", "valid", "valid")',
-      [company_name.trim(), cleanDomain, support_email ? support_email.trim() : null, shouldBePrimary]
+      'INSERT INTO registered_domains (company_name, domain_name, support_email, is_primary, status, dkim_status, spf_status, dmarc_status, admin_id) VALUES (?, ?, ?, ?, "active", "valid", "valid", "valid", ?)',
+      [company_name.trim(), cleanDomain, support_email ? support_email.trim() : null, shouldBePrimary, adminId]
     );
 
     res.status(201).json({

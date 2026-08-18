@@ -44,19 +44,20 @@ const Register = () => {
     setFormData(prev => ({
       ...prev,
       password: generated,
-      confirmPassword: generated
+      confirmPassword: ''
     }));
     setShowPassword(true);
-    setShowConfirmPassword(true);
+    setShowConfirmPassword(false);
   };
 
-  // 4 Pricing Plans matching PDF Page 2 exactly
+  // 4 Pricing Plans matching requirement & limits matrix
   const plans = [
     {
       code: 'free',
       name: 'Free',
       price: '₹0/month',
-      seats: '1 Seat (Admin only)',
+      seats: '1 Admin Seat',
+      limits: '1 Domain Reg. | 1 SMTP Config',
       contacts: 'Up to 250 contacts',
       desc: 'Basic tools for businesses getting started.'
     },
@@ -65,7 +66,8 @@ const Register = () => {
       name: 'Essentials',
       price: '₹300/mo for 12 mos',
       priceSub: 'Then ₹550/mo',
-      seats: '3 Seats (1 Admin + 2 Associates/Developers)',
+      seats: '3 Admin Seats',
+      limits: '3 Domain Reg. | 3 SMTP Configs',
       contacts: 'Up to 50,000 contacts ($300/mo tier)',
       desc: 'Core automations & support.'
     },
@@ -74,7 +76,8 @@ const Register = () => {
       name: 'Standard',
       price: '₹525/mo for 12 mos',
       priceSub: 'Then ₹800/mo',
-      seats: '5 Seats (1 Admin + 4 Associates/Developers)',
+      seats: '5 Admin Seats',
+      limits: '5 Domain Reg. | 5 SMTP Configs',
       contacts: 'Up to 100,000 contacts ($800/mo tier)',
       desc: 'Advanced AI & growth insights.',
       popular: true
@@ -84,7 +87,8 @@ const Register = () => {
       name: 'Premium',
       price: '₹10,000/mo for 12 mos',
       priceSub: 'Then ₹15,000/mo',
-      seats: '10 Seats (1 Admin + 9 Associates/Developers)',
+      seats: '10 Admin Seats',
+      limits: '10 Domain Reg. | 10 SMTP Configs',
       contacts: 'Contact us for custom plan',
       desc: 'Enterprise capabilities & dedicated IP.'
     }
@@ -339,6 +343,7 @@ const Register = () => {
 
                       <div className="mt-3 pt-2 border-t border-slate-100/80 text-[11px] space-y-1 text-slate-600 font-medium">
                         <div><strong>Role Access:</strong> {p.seats}</div>
+                        <div><strong>Allowed Limits:</strong> <span className="font-bold text-slate-800">{p.limits}</span></div>
                         <div><strong>Contacts:</strong> {p.contacts}</div>
                       </div>
                     </div>

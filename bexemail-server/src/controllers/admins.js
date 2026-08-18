@@ -63,16 +63,12 @@ exports.getAdmins = async (req, res) => {
     let query = 'SELECT id, name, username, email, number, domain, role, permissions, plain_password, created_at, admin_id FROM admin_users';
     let params = [];
 
-    // Admin Isolation Policy: No Admin can view or display any other independent Admin account
-    if (currentUser.role !== 'Super Admin') {
-      if (planCode === 'free' || maxSeats <= 1) {
-        query += ' WHERE id = ?';
-        params.push(currentUser.id);
-      } else {
-        query += ' WHERE (id = ? OR (admin_id = ? AND LOWER(TRIM(role)) NOT IN ("admin", "super admin", "super_admin")))';
-        params.push(currentUser.id, currentUser.id);
-      }
-    }
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
+    // Admin Tenant Isolation: User sees their own account and sub-users under their admin_id
+    query += ' WHERE (id = ? OR admin_id = ?)';
+    params.push(adminId, adminId);
 
     query += ' ORDER BY created_at DESC';
     if (maxSeats > 0) {

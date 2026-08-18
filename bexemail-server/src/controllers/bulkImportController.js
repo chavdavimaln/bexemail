@@ -18,6 +18,8 @@ const getRequestUser = (req) => {
 
 // Parse uploaded contacts (TXT, CSV, Comma separated text) to find new/conflicting records
 exports.parseContacts = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
   const { emailsRaw, originSite } = req.body;
   if (!originSite) {
     return res.status(400).json({ error: 'Origin site/group name is required' });
@@ -36,8 +38,8 @@ exports.parseContacts = async (req, res) => {
     const conflicts = [];
 
     for (const email of emails) {
-      // 1. Check if email exists in subscribers
-      const [existingSubs] = await pool.query('SELECT * FROM subscribers WHERE email = ?', [email]);
+      // 1. Check if email exists in subscribers for this admin
+      const [existingSubs] = await pool.query('SELECT * FROM subscribers WHERE email = ? AND admin_id = ?', [email, targetAdminId]);
       
       if (existingSubs.length === 0) {
         newContacts.push({ email });
@@ -93,11 +95,8 @@ exports.confirmImport = async (req, res) => {
     return res.status(400).json({ error: 'Missing required import details' });
   }
 
-  const user = getRequestUser(req);
-  let targetAdminId = adminId;
-  if (user && user.role !== 'Super Admin') {
-    targetAdminId = user.id;
-  }
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
 
   let connection;
   try {
@@ -114,10 +113,10 @@ exports.confirmImport = async (req, res) => {
       subscriber_lists: []
     };
 
-    // 1. Gather all emails to fetch their current state for backup
+    // 1. Gather all emails to fetch their current state for backup for this admin
     const emailsToFetch = contacts.map(c => c.email ? c.email.toLowerCase().trim() : '').filter(Boolean);
     if (emailsToFetch.length > 0) {
-      const [existingSubs] = await connection.query('SELECT * FROM subscribers WHERE email IN (?)', [emailsToFetch]);
+      const [existingSubs] = await connection.query('SELECT * FROM subscribers WHERE email IN (?) AND admin_id = ?', [emailsToFetch, targetAdminId]);
       beforeState.subscribers = existingSubs;
 
       const subIds = existingSubs.map(s => s.id);
@@ -139,8 +138,8 @@ exports.confirmImport = async (req, res) => {
       if (!email) continue;
       const cleanEmail = email.toLowerCase().trim();
 
-      // Check if email already exists
-      const [existing] = await connection.query('SELECT id, first_name, status FROM subscribers WHERE email = ?', [cleanEmail]);
+      // Check if email already exists for this admin
+      const [existing] = await connection.query('SELECT id, first_name, status FROM subscribers WHERE email = ? AND admin_id = ?', [cleanEmail, targetAdminId]);
 
       if (existing.length === 0) {
         // Insert new subscriber
@@ -370,13 +369,14 @@ exports.getImportLogs = async (req, res) => {
 
 // Fetch detailed bifurcated subscribers for the directory view
 exports.getBifurcatedSubscribers = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
+
   const search = req.query.search || '';
   const status = req.query.status || '';
 
-  const user = getRequestUser(req);
-
-  let query = 'SELECT s.id, s.email, s.first_name, s.status, s.created_at, s.admin_id FROM subscribers s WHERE 1=1';
-  const queryParams = [];
+  let query = 'SELECT s.id, s.email, s.first_name, s.status, s.created_at, s.admin_id FROM subscribers s WHERE s.admin_id = ?';
+  const queryParams = [adminId];
 
   if (search) {
     query += ' AND (s.email LIKE ? OR s.first_name LIKE ?)';

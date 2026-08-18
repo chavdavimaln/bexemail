@@ -6,7 +6,10 @@ const campaignsController = require('../controllers/campaigns');
 const templatesController = require('../controllers/templates');
 const analyticsController = require('../controllers/analytics');
 const settingsController = require('../controllers/settings');
+const authController = require('../controllers/authController');
 const { checkRole, ROLES } = require('../middleware/rbac');
+
+router.get('/system-limits-status', authController.getSystemLimitsStatus);
 
 // Subscribers
 router.post('/subscribers', subscribersController.createSubscriber);

@@ -212,6 +212,7 @@ async function setupDB() {
       "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
       "ALTER TABLE lists ADD COLUMN admin_id INT NULL",
       "ALTER TABLE subscribers ADD COLUMN admin_id INT NULL",
+      "ALTER TABLE campaigns ADD COLUMN admin_id INT NULL",
       "ALTER TABLE admin_users ADD COLUMN domain VARCHAR(255) NULL",
       "ALTER TABLE admin_users ADD COLUMN custom_seats_limit INT NULL",
       "ALTER TABLE admin_users ADD COLUMN custom_contacts_limit INT NULL",
@@ -244,6 +245,11 @@ async function setupDB() {
     try {
       await pool.query('UPDATE admin_users SET admin_id = id WHERE role IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
       await pool.query('UPDATE admin_users SET admin_id = 1 WHERE role NOT IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
+      await pool.query('UPDATE senders SET admin_id = 1 WHERE admin_id IS NULL');
+      await pool.query('UPDATE registered_domains SET admin_id = 1 WHERE admin_id IS NULL');
+      await pool.query('UPDATE subscribers SET admin_id = 1 WHERE admin_id IS NULL');
+      await pool.query('UPDATE lists SET admin_id = 1 WHERE admin_id IS NULL');
+      await pool.query('UPDATE campaigns SET admin_id = 1 WHERE admin_id IS NULL');
     } catch (e) {}
 
     await setupAutomationDB();
@@ -295,10 +301,15 @@ async function setupDB() {
         dkim_status VARCHAR(50) DEFAULT 'valid',
         spf_status VARCHAR(50) DEFAULT 'valid',
         dmarc_status VARCHAR(50) DEFAULT 'valid',
+        admin_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    try {
+      await pool.query("ALTER TABLE registered_domains ADD COLUMN admin_id INT NULL");
+    } catch (e) { /* ignore existing column error */ }
 
     // Seed default initial domain 'bexcodeservices'
     await pool.query(`

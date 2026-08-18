@@ -5,8 +5,9 @@ import { Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 
 const Login = () => {
-  const [email, setEmail] = useState('vimal@bexcodeservices.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState(() => localStorage.getItem('bex_remembered_email') || 'vimal@bexcodeservices.com');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('bex_remember_me') !== 'false');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -15,10 +16,19 @@ const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password, rememberMe });
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
+
+      if (rememberMe) {
+        localStorage.setItem('bex_remembered_email', email);
+        localStorage.setItem('bex_remember_me', 'true');
+      } else {
+        localStorage.removeItem('bex_remembered_email');
+        localStorage.setItem('bex_remember_me', 'false');
+      }
+
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to login');
@@ -102,17 +112,19 @@ const Login = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 cursor-pointer font-medium">
                   Remember me
                 </label>
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
+                <Link to="/reset-password" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
                   Forgot your password?
-                </a>
+                </Link>
               </div>
             </div>
 

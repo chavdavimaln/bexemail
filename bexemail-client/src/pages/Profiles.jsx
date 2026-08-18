@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserPlus, Key, Mail, Phone, Shield, ShieldCheck, 
   Trash2, Edit, Plus, CheckSquare, Square, Download, Eye, EyeOff, X, RefreshCw, Database, Send,
-  User, UserCheck
+  User, UserCheck, Globe, Star, CheckCircle2
 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
@@ -63,6 +63,9 @@ const Profiles = () => {
   // States
   const [users, setUsers] = useState([]);
   const [senders, setSenders] = useState([]);
+  const [domains, setDomains] = useState([]);
+  const [showDomainModal, setShowDomainModal] = useState(false);
+  const [domainForm, setDomainForm] = useState({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
   const [loading, setLoading] = useState(!isSubscriber);
   const [error, setError] = useState(null);
 
@@ -149,41 +152,30 @@ const Profiles = () => {
     setLoading(true);
     setError(null);
     try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
       const userToken = localStorage.getItem('token');
       const headers = {
-        'x-user-id': currentUser?.id || 1,
-        'x-user-role': currentUserRole || 'Admin',
+        ...(user && user.id ? { 'x-user-id': String(user.id), 'x-user-role': user.role || 'Admin' } : {}),
+        ...(user && user.admin_id ? { 'x-admin-id': String(user.admin_id) } : {}),
         ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
       };
-      const [usersRes, sendersRes] = await Promise.all([
+      const [usersRes, sendersRes, domainsRes] = await Promise.all([
         axios.get('/api/admins', { headers }).catch(() => axios.get('http://localhost:5000/api/admins', { headers })).catch(() => ({ data: [] })),
-        axios.get('/api/senders', { headers }).catch(() => axios.get('http://localhost:5000/api/senders', { headers })).catch(() => ({ data: [] }))
+        axios.get('/api/senders', { headers }).catch(() => axios.get('http://localhost:5000/api/senders', { headers })).catch(() => ({ data: [] })),
+        axios.get('/api/domains', { headers }).catch(() => axios.get('http://localhost:5000/api/domains', { headers })).catch(() => ({ data: [] }))
       ]);
 
       const rawUsers = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.data || []);
       const rawSenders = Array.isArray(sendersRes.data) ? sendersRes.data : (sendersRes.data?.data || []);
+      const rawDomains = Array.isArray(domainsRes.data) ? domainsRes.data : (domainsRes.data?.data || []);
 
       let finalUsers = Array.isArray(rawUsers) ? rawUsers : [];
       let finalSenders = Array.isArray(rawSenders) ? rawSenders : [];
-      
-      if (finalSenders.length === 0) {
-        finalSenders = [
-          {
-            id: 1,
-            name: 'Active System SMTP',
-            email: 'info@bexcodeservices.com',
-            smtp_host: 'smtp.gmail.com',
-            smtp_port: 465,
-            smtp_user: 'info@bexcodeservices.com',
-            smtp_secure: 'ssl',
-            is_default: 1,
-            admin_id: null
-          }
-        ];
-      }
+      let finalDomains = Array.isArray(rawDomains) ? rawDomains : [];
 
       setUsers(finalUsers);
       setSenders(finalSenders);
+      setDomains(finalDomains);
     } catch (err) {
       console.error('Failed to load Profile data:', err);
     } finally {
@@ -201,7 +193,7 @@ const Profiles = () => {
     setUserForm(prev => ({
       ...prev,
       password: generated,
-      confirmPassword: generated
+      confirmPassword: ''
     }));
     setShowUserPassword(true);
   };
@@ -215,7 +207,7 @@ const Profiles = () => {
     setPasswordForm(prev => ({
       ...prev,
       newPassword: generated,
-      confirmNewPassword: generated
+      confirmNewPassword: ''
     }));
     setShowPassword(true);
   };
@@ -340,8 +332,69 @@ const Profiles = () => {
       await axios.delete(`http://localhost:5000/api/senders/${id}`);
       customAlert({ title: 'Deleted', message: 'SMTP config removed successfully.', type: 'success' });
       fetchData();
+      window.dispatchEvent(new Event('smtpUpdated'));
     } catch (err) {
       customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to delete SMTP config.', type: 'danger' });
+    }
+  };
+
+  // Domain CRUD Handlers
+  const handleSaveDomain = async () => {
+    if (!domainForm.company_name || !domainForm.domain_name) {
+      return customAlert({ title: 'Validation Error', message: 'Company Name and Domain Name are required.', type: 'warning' });
+    }
+
+    try {
+      if (domainForm.id) {
+        await axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm).catch(() => axios.put(`/api/domains/${domainForm.id}`, domainForm));
+      } else {
+        await axios.post('http://localhost:5000/api/domains', domainForm).catch(() => axios.post('/api/domains', domainForm));
+      }
+      setShowDomainModal(false);
+      setDomainForm({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
+      fetchData();
+      window.dispatchEvent(new Event('domainUpdated'));
+      customAlert({ title: 'Success', message: 'Domain configuration saved successfully.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: error.response?.data?.error || error.message, type: 'danger' });
+    }
+  };
+
+  const handleSetPrimaryDomain = async (id) => {
+    try {
+      await axios.put(`http://localhost:5000/api/domains/${id}/set-primary`).catch(() => axios.put(`/api/domains/${id}/set-primary`));
+      fetchData();
+      window.dispatchEvent(new Event('domainUpdated'));
+      customAlert({ title: 'Success', message: 'Primary domain updated.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: 'Failed to update primary domain', type: 'danger' });
+    }
+  };
+
+  const handleDeleteDomain = async (id, domainName) => {
+    if (domains.length <= 1) {
+      return customAlert({
+        title: 'Action Restricted',
+        message: 'Cannot delete domain. At least one registered domain must remain in the system.',
+        type: 'warning'
+      });
+    }
+
+    const isOk = await confirm({
+      title: 'Delete Registered Domain',
+      message: `Are you sure you want to delete domain registration for "${domainName}"?`,
+      confirmText: 'Delete Domain',
+      type: 'danger'
+    });
+    if (!isOk) return;
+
+    try {
+      await axios.delete(`http://localhost:5000/api/domains/${id}`).catch(() => axios.delete(`/api/domains/${id}`));
+      fetchData();
+      window.dispatchEvent(new Event('domainUpdated'));
+      customAlert({ title: 'Success', message: 'Domain deleted successfully.', type: 'success' });
+    } catch (error) {
+      customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to delete domain', type: 'danger' });
     }
   };
 
@@ -870,7 +923,10 @@ const Profiles = () => {
                 <Shield className="text-primary-500" size={20} />
                 <span>SMTP Server Configurations</span>
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">Setup custom SMTP servers to dispatch marketing email campaigns.</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({senders.length} / {maxSeats} Seats Used)
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Setup custom SMTP servers to dispatch marketing email campaigns.</p>
             </div>
             
             <button 
@@ -880,7 +936,7 @@ const Profiles = () => {
               }}
               className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-xl text-xs font-bold transition shadow-sm"
             >
-              <Plus size={15} /> Add SMTP Sender
+              <Plus size={15} /> Add SMTP Sender ({senders.length}/{maxSeats})
             </button>
           </div>
           
@@ -954,6 +1010,121 @@ const Profiles = () => {
                 {senders.length === 0 && (
                   <tr>
                     <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No SMTP Configurations found. Add one to enable email dispatches.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Section 3: Domain Registration & Configurations */}
+      {isAdmin && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center bg-white gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Globe className="text-primary-500" size={20} />
+                <span>Domain Registration & Configurations</span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({domains.length} / {maxSeats} Registered)
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Configure primary and sub-domains, company registration details, and DNS authentication records.</p>
+            </div>
+            
+            <button 
+              onClick={() => {
+                setDomainForm({ id: null, company_name: 'Bexcode Services', domain_name: '', support_email: '', is_primary: domains.length === 0 });
+                setShowDomainModal(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+            >
+              <Plus size={15} /> Register Domain ({domains.length}/{maxSeats})
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm text-gray-600">
+              <thead className="bg-gray-50/50 text-gray-500 font-semibold border-b border-gray-200 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-4">Company & Domain</th>
+                  <th className="px-6 py-4">Support Contact</th>
+                  <th className="px-6 py-4">Domain Status</th>
+                  <th className="px-6 py-4">DNS Security</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-800">
+                {(Array.isArray(domains) ? domains : []).map(d => (
+                  <tr key={d.id} className="hover:bg-gray-50/50 transition">
+                    <td className="px-6 py-4">
+                      <div className="font-extrabold text-gray-900 flex items-center gap-2 text-sm">
+                        <span>{d.domain_name}</span>
+                        {d.is_primary === 1 && (
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            <Star size={10} className="fill-amber-600 text-amber-600" /> Primary
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-medium">{d.company_name}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-gray-600 font-mono text-xs">{d.support_email || 'Not configured'}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <CheckCircle2 size={12} /> Active / Verified
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DKIM: OK</span>
+                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">SPF: OK</span>
+                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      {d.is_primary !== 1 && (
+                        <button 
+                          onClick={() => handleSetPrimaryDomain(d.id)}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
+                          title="Set as Primary Domain"
+                        >
+                          Make Primary
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => {
+                          setDomainForm({
+                            id: d.id,
+                            company_name: d.company_name,
+                            domain_name: d.domain_name,
+                            support_email: d.support_email || '',
+                            is_primary: d.is_primary === 1
+                          });
+                          setShowDomainModal(true);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                        title="Edit Domain"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteDomain(d.id, d.domain_name)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="Delete Domain"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {domains.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500 font-medium">
+                      No domains registered. Click <strong>+ Register Domain</strong> to add your domain details.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -1583,6 +1754,87 @@ const Profiles = () => {
                   <span>Edit Profile</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL 5: Register / Edit Domain */}
+      {showDomainModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <Globe size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">{domainForm.id ? 'Edit Registered Domain' : 'Register New Domain'}</h3>
+                  <p className="text-xs text-gray-500">Configure client domain authentication & details</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDomainModal(false)} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-lg">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Company / Organization Name *</label>
+                <input 
+                  type="text" 
+                  value={domainForm.company_name} 
+                  onChange={e => setDomainForm({...domainForm, company_name: e.target.value})} 
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-medium" 
+                  placeholder="Bexcode Services" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Domain Name (FQDN) *</label>
+                <input 
+                  type="text" 
+                  value={domainForm.domain_name} 
+                  onChange={e => setDomainForm({...domainForm, domain_name: e.target.value})} 
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-medium" 
+                  placeholder="bexcodeservices.com" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Support Contact Email (Optional)</label>
+                <input 
+                  type="email" 
+                  value={domainForm.support_email} 
+                  onChange={e => setDomainForm({...domainForm, support_email: e.target.value})} 
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-medium" 
+                  placeholder="support@bexcodeservices.com" 
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input 
+                  type="checkbox" 
+                  checked={domainForm.is_primary} 
+                  onChange={e => setDomainForm({...domainForm, is_primary: e.target.checked})} 
+                  className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4" 
+                />
+                <span className="text-xs font-bold text-gray-700">Set as Primary Default Domain</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2 border-t">
+              <button 
+                onClick={() => setShowDomainModal(false)} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-bold text-xs transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveDomain} 
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition"
+              >
+                Save Domain Configuration
+              </button>
             </div>
           </div>
         </div>

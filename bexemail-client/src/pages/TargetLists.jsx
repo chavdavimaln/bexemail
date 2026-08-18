@@ -39,11 +39,17 @@ const TargetLists = () => {
   const fetchLists = async () => {
     try {
       setLoading(true);
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const userToken = localStorage.getItem('token');
+      const headers = {
+        ...(user && user.id ? { 'x-user-id': String(user.id), 'x-user-role': user.role || 'Admin' } : {}),
+        ...(user && user.admin_id ? { 'x-admin-id': String(user.admin_id) } : {}),
+        ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+      };
+
       const [listsRes, adminsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/lists'),
-        axios.get('http://localhost:5000/api/admins', {
-          headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
-        }).catch(() => ({ data: [] }))
+        axios.get('/api/lists', { headers }),
+        axios.get('/api/admins', { headers }).catch(() => ({ data: [] }))
       ]);
       
       let fetchedLists = listsRes.data || [];

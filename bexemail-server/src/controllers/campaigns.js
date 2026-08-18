@@ -222,11 +222,14 @@ exports.dispatchCampaign = async (req, res) => {
 
     const initialSenderHistory = finalSenderId || null;
 
+    const getAdminId = require('../utils/getAdminId');
+    const targetAdminId = getAdminId(req);
+
     // 1. Insert Campaign
     const [campaignResult] = await connection.query(
-      `INSERT INTO campaigns (name, subject, html_content, list_id, target_email, sender_id, sender_history, sender_mode, sender_mapping, status, is_ab_test, variant_b_subject, variant_b_html)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [finalName, finalSubject, finalHtml, finalListId, finalTargetEmail, finalSenderId, initialSenderHistory, finalSenderMode, finalSenderMapping, initialStatus, finalAbTest ? 1 : 0, finalVarBSubject || null, finalVarBHtml || null]
+      `INSERT INTO campaigns (name, subject, html_content, list_id, target_email, sender_id, sender_history, sender_mode, sender_mapping, status, is_ab_test, variant_b_subject, variant_b_html, admin_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [finalName, finalSubject, finalHtml, finalListId, finalTargetEmail, finalSenderId, initialSenderHistory, finalSenderMode, finalSenderMapping, initialStatus, finalAbTest ? 1 : 0, finalVarBSubject || null, finalVarBHtml || null, targetAdminId]
     );
     const campaignId = campaignResult.insertId;
 
@@ -255,6 +258,9 @@ exports.dispatchCampaign = async (req, res) => {
 
 exports.getCampaigns = async (req, res) => {
   try {
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
     const [rows] = await pool.query(`
       SELECT 
         c.*, 
@@ -264,8 +270,9 @@ exports.getCampaigns = async (req, res) => {
         (SELECT COUNT(DISTINCT eq.sender_id) FROM email_queue eq WHERE eq.campaign_id = c.id AND eq.sender_id IS NOT NULL) as queue_sender_count
       FROM campaigns c 
       LEFT JOIN lists l ON c.list_id = l.id 
+      WHERE c.admin_id = ?
       ORDER BY c.created_at DESC
-    `);
+    `, [adminId]);
 
     // Calculate dynamic sender_count combining sender_history, current sender_id, and email_queue
     const campaignsWithSenderCount = rows.map(c => {

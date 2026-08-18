@@ -38,11 +38,23 @@ import axios from 'axios';
 axios.defaults.baseURL = import.meta.env.VITE_API_URL
   || (import.meta.env.DEV ? 'http://localhost:5000' : undefined);
 
-// Global Axios Interceptor for JWT
+// Global Axios Interceptor for JWT and User Context
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
+  const userStr = localStorage.getItem('user');
+  let user = null;
+  if (userStr) {
+    try { user = JSON.parse(userStr); } catch (e) {}
+  }
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (user && user.id) {
+    config.headers['x-user-id'] = String(user.id);
+    config.headers['x-user-role'] = user.role || 'Admin';
+    if (user.admin_id) {
+      config.headers['x-admin-id'] = String(user.admin_id);
+    }
   }
   return config;
 }, (error) => {

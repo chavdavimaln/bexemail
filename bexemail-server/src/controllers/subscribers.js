@@ -28,15 +28,11 @@ exports.createSubscriber = async (req, res) => {
   const { email, first_name, status, tags, admin_id } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
-  const user = getRequestUser(req);
-  let targetAdminId = admin_id;
-  if (user && user.role !== 'Super Admin') {
-    targetAdminId = user.id;
-  }
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
 
   try {
     // Check contact limit quota against user subscription
-    const reqUserId = (user && user.id) ? user.id : (targetAdminId || 1);
     const [subRows] = await pool.query(`
       SELECT us.custom_contacts_limit, us.plan_code, p.contacts_limit as plan_contacts, au.custom_contacts_limit as user_custom_contacts
       FROM admin_users au
@@ -44,17 +40,17 @@ exports.createSubscriber = async (req, res) => {
       LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
       WHERE au.id = ?
       ORDER BY us.id DESC LIMIT 1
-    `, [reqUserId]);
+    `, [targetAdminId]);
 
     const subMeta = subRows[0] || {};
     const planCode = (subMeta.plan_code || 'free').toLowerCase();
     const maxContacts = subMeta.user_custom_contacts || subMeta.custom_contacts_limit || subMeta.plan_contacts || (planCode === 'free' ? 250 : planCode === 'essentials' ? 50000 : planCode === 'standard' ? 100000 : 1000000);
 
-    const [countRows] = await pool.query('SELECT COUNT(*) as total FROM subscribers');
+    const [countRows] = await pool.query('SELECT COUNT(*) as total FROM subscribers WHERE admin_id = ?', [targetAdminId]);
     const currentTotal = countRows[0]?.total || 0;
 
-    // Check existing email to allow update
-    const [existingCheck] = await pool.query('SELECT id FROM subscribers WHERE email = ?', [email]);
+    // Check existing email for this admin to allow update
+    const [existingCheck] = await pool.query('SELECT id FROM subscribers WHERE email = ? AND admin_id = ?', [email, targetAdminId]);
     if (existingCheck.length === 0 && currentTotal >= maxContacts) {
       return res.status(400).json({
         error: `Contact limit reached (${currentTotal}/${maxContacts.toLocaleString()} contacts used for ${planCode.toUpperCase()} Plan). Please upgrade your subscription plan to add more contacts.`
@@ -121,16 +117,17 @@ exports.updateSubscriber = async (req, res) => {
 
 // Fetch Subscribers with pagination, search, filter
 exports.getSubscribers = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
+
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
   const search = req.query.search || '';
   const status = req.query.status || '';
 
-  const user = getRequestUser(req);
-
-  let query = 'SELECT * FROM subscribers WHERE 1=1';
-  const queryParams = [];
+  let query = 'SELECT * FROM subscribers WHERE admin_id = ?';
+  const queryParams = [adminId];
 
   if (search) {
     query += ' AND (email LIKE ? OR first_name LIKE ?)';

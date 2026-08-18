@@ -2,6 +2,7 @@ import React from 'react';
 import axios from 'axios';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Megaphone, Users, LayoutTemplate, BarChart3, Settings, Workflow, Code, Key, History, List as ListIcon, LogOut, ChevronDown, ChevronRight, ChevronLeft, Database, ShieldCheck } from 'lucide-react';
+import RedlineAlertBanner from './RedlineAlertBanner';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -401,6 +402,7 @@ const Layout = () => {
         <Header />
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
           <div className="max-w-7xl mx-auto">
+            <RedlineAlertBanner />
             <Outlet />
           </div>
         </main>

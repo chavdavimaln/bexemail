@@ -132,6 +132,7 @@ const Settings = () => {
       setShowDomainModal(false);
       setDomainForm({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
       fetchDomains();
+      window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Domain configuration saved successfully.', type: 'success' });
     } catch (error) {
       customAlert({ title: 'Error', message: error.response?.data?.error || error.message, type: 'danger' });
@@ -142,6 +143,7 @@ const Settings = () => {
     try {
       await axios.put(`http://localhost:5000/api/domains/${id}/set-primary`);
       fetchDomains();
+      window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Primary domain updated.', type: 'success' });
     } catch (error) {
       customAlert({ title: 'Error', message: 'Failed to update primary domain', type: 'danger' });
@@ -168,6 +170,7 @@ const Settings = () => {
     try {
       await axios.delete(`http://localhost:5000/api/domains/${id}`);
       fetchDomains();
+      window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Domain deleted successfully.', type: 'success' });
     } catch (error) {
       customAlert({ title: 'Error', message: error.response?.data?.error || 'Failed to delete domain', type: 'danger' });
@@ -184,6 +187,7 @@ const Settings = () => {
       setShowSenderModal(false);
       setSenderForm({ id: null, name: '', email: '', is_default: false });
       fetchSenders();
+      window.dispatchEvent(new Event('smtpUpdated'));
     } catch (error) {
       alert('Failed to save sender: ' + (error.response?.data?.error || error.message));
     }
@@ -200,6 +204,7 @@ const Settings = () => {
     try {
       await axios.delete(`http://localhost:5000/api/senders/${id}`, { headers: { 'x-user-role': currentUserRole } });
       fetchSenders();
+      window.dispatchEvent(new Event('smtpUpdated'));
     } catch (error) {
       customAlert({ title: 'Error', message: 'Failed to delete sender', type: 'danger' });
     }
@@ -297,7 +302,7 @@ const Settings = () => {
                 </div>
               </div>
 
-              {/* Registered Domain Configurations Panel */}
+              {/* Registered Domain Configurations Panel (Informational View for Primary Domain Only) */}
               <div className="space-y-4 pt-4 border-t border-gray-200">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -306,21 +311,18 @@ const Settings = () => {
                       Domain Registration & Configurations
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Configure primary and sub-domains, company registration details, and DNS authentication records.
+                      Displaying primary domain registration information. To register or manage all domains, navigate to User Profiles.
                     </p>
                   </div>
                   <button 
-                    onClick={() => {
-                      setDomainForm({ id: null, company_name: settings.company_name || 'Bexcode Services', domain_name: '', support_email: '', is_primary: domains.length === 0 });
-                      setShowDomainModal(true);
-                    }} 
+                    onClick={() => navigate('/profiles')} 
                     className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center self-start sm:self-auto"
                   >
-                    <Plus size={16} className="mr-1.5" /> Register Domain
+                    <Globe size={16} className="mr-1.5" /> Manage Domains in User Profiles
                   </button>
                 </div>
 
-                {/* Domains Table */}
+                {/* Primary Domain Informational Table */}
                 <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -333,79 +335,54 @@ const Settings = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 text-xs font-medium text-gray-800">
-                      {domains.map(d => (
-                        <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-5 py-4">
-                            <div className="font-extrabold text-slate-900 flex items-center gap-2 text-sm">
-                              <span>{d.domain_name}</span>
-                              {d.is_primary === 1 && (
+                      {(() => {
+                        const primaryDomain = (domains || []).find(d => d.is_primary === 1) || (domains || [])[0];
+                        if (!primaryDomain) {
+                          return (
+                            <tr>
+                              <td colSpan="5" className="px-5 py-8 text-center text-gray-500 font-medium">
+                                No primary domain registered. Go to <strong className="text-primary-600 cursor-pointer" onClick={() => navigate('/profiles')}>User Profiles</strong> to register your domain.
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return (
+                          <tr key={primaryDomain.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-5 py-4">
+                              <div className="font-extrabold text-slate-900 flex items-center gap-2 text-sm">
+                                <span>{primaryDomain.domain_name}</span>
                                 <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                                   <Star size={10} className="fill-amber-600 text-amber-600" /> Primary
                                 </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-gray-500 font-medium">{d.company_name}</div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="text-gray-600 font-mono text-xs">{d.support_email || 'Not configured'}</span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 size={12} /> Active / Verified
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex flex-wrap gap-1">
-                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DKIM: OK</span>
-                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">SPF: OK</span>
-                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 text-right">
-                            <div className="flex items-center justify-end space-x-2">
-                              {d.is_primary !== 1 && (
-                                <button 
-                                  onClick={() => handleSetPrimaryDomain(d.id)}
-                                  className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
-                                  title="Set as Primary Domain"
-                                >
-                                  Make Primary
-                                </button>
-                              )}
+                              </div>
+                              <div className="text-[11px] text-gray-500 font-medium">{primaryDomain.company_name}</div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className="text-gray-600 font-mono text-xs">{primaryDomain.support_email || 'Not configured'}</span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 size={12} /> Active / Verified
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DKIM: OK</span>
+                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">SPF: OK</span>
+                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-right">
                               <button 
-                                onClick={() => {
-                                  setDomainForm({
-                                    id: d.id,
-                                    company_name: d.company_name,
-                                    domain_name: d.domain_name,
-                                    support_email: d.support_email || '',
-                                    is_primary: d.is_primary === 1
-                                  });
-                                  setShowDomainModal(true);
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
-                                title="Edit Domain"
+                                onClick={() => navigate('/profiles')}
+                                className="px-3 py-1.5 text-xs font-bold bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition border border-primary-200"
                               >
-                                <Edit2 size={16} />
+                                Manage in Profiles
                               </button>
-                              <button 
-                                onClick={() => handleDeleteDomain(d.id, d.domain_name)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Delete Domain"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {domains.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="px-5 py-8 text-center text-gray-500 font-medium">
-                            No domains registered. Click <strong>+ Register Domain</strong> to add your domain details.
-                          </td>
-                        </tr>
-                      )}
+                            </td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
