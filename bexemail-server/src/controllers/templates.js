@@ -335,8 +335,14 @@ exports.sendTestTemplate = async (req, res) => {
         sender = defaultSenderRows[0];
       } else {
         const [anySenderRows] = await pool.query('SELECT * FROM senders LIMIT 1');
-        if (anySenderRows.length > 0) sender = anySenderRows[0];
+        if (anySenderRows.length > 0) {
+          sender = anySenderRows[0];
+        }
       }
+    }
+
+    if (!sender) {
+      return res.status(400).json({ error: 'Cannot send test email: No active SMTP server configuration found. You must add an SMTP sender configuration under Profiles & User Access before sending test emails.' });
     }
 
     const host = (sender?.smtp_host || 'smtp.gmail.com').trim();

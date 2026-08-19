@@ -52,9 +52,91 @@ const TemplatesList = () => {
   // Dropdown UI toggles
   const [showIndustryDropdown, setShowIndustryDropdown] = useState(false);
   const [cloningId, setCloningId] = useState(null);
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
+  // Send Test Email States
+  const [showSendTestModal, setShowSendTestModal] = useState(false);
+  const [testTemplateTarget, setTestTemplateTarget] = useState(null);
+  const [senders, setSenders] = useState([]);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testEmailForm, setTestEmailForm] = useState({
+    test_email: currentUser.email || '',
+    sender_id: '',
+    subject: ''
+  });
+
+  const fetchSenders = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/senders').catch(() => axios.get('/api/senders'));
+      const sendersList = res.data || [];
+      setSenders(sendersList);
+      return sendersList;
+    } catch (e) {
+      console.error('Error fetching senders:', e);
+      return [];
+    }
+  };
+
+  const handleOpenSendTest = async (template) => {
+    let currentSenders = senders;
+    if (currentSenders.length === 0) {
+      currentSenders = await fetchSenders();
+    }
+    const defaultSender = currentSenders.find(s => s.is_default) || currentSenders[0];
+
+    setTestTemplateTarget(template);
+    setTestEmailForm({
+      test_email: currentUser.email || '',
+      sender_id: defaultSender ? String(defaultSender.id) : '',
+      subject: `[Test Email] ${template.template_name || 'Email Template Preview'}`
+    });
+    setShowSendTestModal(true);
+  };
+
+  const handleSendTestEmail = async (e) => {
+    if (e) e.preventDefault();
+    if (!testEmailForm.test_email || !testEmailForm.test_email.trim()) {
+      return customAlert({
+        title: 'Validation Error',
+        message: 'Please enter a valid recipient test email address.',
+        type: 'warning'
+      });
+    }
+
+    setSendingTest(true);
+    try {
+      const payload = {
+        test_email: testEmailForm.test_email.trim(),
+        sender_id: testEmailForm.sender_id || null,
+        subject: testEmailForm.subject || `[Test Email] ${testTemplateTarget?.template_name || 'Email Template Preview'}`,
+        template_name: testTemplateTarget?.template_name,
+        html_content: testTemplateTarget?.html_content || '<h1>Template Preview</h1>',
+        include_footer: 0
+      };
+
+      const res = await axios.post('http://localhost:5000/api/templates/send-test', payload);
+
+      customAlert({
+        title: 'Test Email Sent',
+        message: res.data.message || `Test email sent successfully to ${testEmailForm.test_email}!`,
+        type: 'success'
+      });
+      setShowSendTestModal(false);
+    } catch (error) {
+      console.error('Send test email error:', error);
+      customAlert({
+        title: 'Send Test Failed',
+        message: error.response?.data?.error || error.message || 'Failed to send test email.',
+        type: 'danger'
+      });
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   useEffect(() => {
     fetchTemplates();
+    fetchSenders();
   }, []);
 
   const fetchTemplates = async () => {
@@ -462,6 +544,14 @@ const TemplatesList = () => {
                     <Eye size={14} /> Preview
                   </button>
                   <span className="text-gray-300">•</span>
+                  <button 
+                    onClick={() => handleOpenSendTest(template)}
+                    className="text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                    title="Send a test email of this template to any email ID"
+                  >
+                    <Send size={14} /> Send Test
+                  </button>
+                  <span className="text-gray-300">•</span>
                   <Link 
                     to={`/templates/${template.id}/edit`}
                     className="text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-1"
@@ -503,10 +593,10 @@ const TemplatesList = () => {
         )}
       </div>
 
-      {/* PREVIEW TEMPLATE MODAL */}
+      {/* Modal: Preview Template */}
       {selectedTemplate && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-5xl w-full h-[88vh] flex flex-col overflow-hidden animate-in fade-in-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-100">
             
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-gray-100 p-4 shrink-0 bg-gray-50">
@@ -588,6 +678,16 @@ const TemplatesList = () => {
               <div className="flex gap-2">
                 <button
                   type="button"
+                  onClick={() => handleOpenSendTest(selectedTemplate)}
+                  className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 text-xs font-bold rounded-xl shadow-2xs transition flex items-center gap-1.5"
+                  title="Send a test email of this template to any email ID"
+                >
+                  <Send size={14} />
+                  <span>Send Test Email</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setSelectedTemplate(null)}
                   className="px-4 py-2 border border-gray-200 text-gray-600 text-xs font-semibold rounded-xl hover:bg-gray-100 transition"
                 >
@@ -608,6 +708,113 @@ const TemplatesList = () => {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Send Test Email */}
+      {showSendTestModal && testTemplateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Send size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900">Send Test Email</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Template: <span className="font-semibold text-gray-800">{testTemplateTarget.template_name}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSendTestModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendTestEmail} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Recipient Test Email Address <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    required
+                    value={testEmailForm.test_email}
+                    onChange={(e) => setTestEmailForm({ ...testEmailForm, test_email: e.target.value })}
+                    placeholder="e.g. yourname@example.com"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Enter ANY email address to receive a live test preview of this template.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  SMTP Sender Profile
+                </label>
+                <select
+                  value={testEmailForm.sender_id}
+                  onChange={(e) => setTestEmailForm({ ...testEmailForm, sender_id: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                >
+                  {senders.length === 0 ? (
+                    <option value="">Default System SMTP</option>
+                  ) : (
+                    senders.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.email}) {s.is_default ? '— Default Sender' : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Subject Line
+                </label>
+                <input
+                  type="text"
+                  value={testEmailForm.subject}
+                  onChange={(e) => setTestEmailForm({ ...testEmailForm, subject: e.target.value })}
+                  placeholder="[Test Email] Template Preview"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowSendTestModal(false)}
+                  className="px-4 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl border border-gray-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendingTest}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-200 transition disabled:opacity-50"
+                >
+                  {sendingTest ? (
+                    <>
+                      <RotateCcw size={14} className="animate-spin" />
+                      <span>Sending Test...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      <span>Send Test Email Now</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

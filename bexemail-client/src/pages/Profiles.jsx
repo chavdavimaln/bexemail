@@ -58,7 +58,18 @@ const Profiles = () => {
 
   const activeSub = currentUser.subscription || {};
   const activePlanCode = (activeSub.plan_code || currentUser.plan || 'free').toLowerCase();
-  const maxSeats = activeSub.custom_seats_limit || activeSub.seats_limit || (activePlanCode === 'free' ? 1 : activePlanCode === 'essentials' ? 3 : activePlanCode === 'standard' ? 5 : 10);
+
+  const planLimitsMap = {
+    free: { seats: 1, smtps: 1, domains: 1 },
+    essentials: { seats: 3, smtps: 3, domains: 3 },
+    standard: { seats: 5, smtps: 5, domains: 5 },
+    premium: { seats: 10, smtps: 10, domains: 10 }
+  };
+  const currentPlanDefaults = planLimitsMap[activePlanCode] || planLimitsMap['free'];
+
+  const maxSeats = activeSub.custom_seats_limit || activeSub.seats_limit || currentPlanDefaults.seats;
+  const maxSmtps = activeSub.custom_smtps_limit || currentPlanDefaults.smtps;
+  const maxDomains = activeSub.custom_domains_limit || currentPlanDefaults.domains;
 
   // States
   const [users, setUsers] = useState([]);
@@ -314,6 +325,7 @@ const Profiles = () => {
       }
       setShowSmtpModal(false);
       fetchData();
+      window.dispatchEvent(new Event('smtpUpdated'));
     } catch (err) {
       customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to save SMTP config.', type: 'danger' });
     }
@@ -836,75 +848,67 @@ const Profiles = () => {
                         </button>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      {/* View Profile Action */}
-                      <button 
-                        onClick={() => {
-                          setViewProfileData({ user: u, perms });
-                          setShowViewProfilePassword(false);
-                          setShowViewProfileModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-                        title="View Profile Quick Summary"
-                      >
-                        <Eye size={16} />
-                      </button>
-
-                      {/* Go to My Profile Details Page */}
-                      <button 
-                        onClick={() => navigate('/profile')}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                        title="Go to My Profile Details Page"
-                      >
-                        <User size={16} />
-                      </button>
-
-                      {/* Password Actions */}
-                      <button 
-                        onClick={() => triggerForgetPassword(u.email)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                        title="Send Forget Password Link"
-                      >
-                        <Mail size={16} />
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setResetTargetUser(u);
-                          setPasswordForm({ userId: u.id, newPassword: '', confirmNewPassword: '' });
-                          setShowOldPassword(false);
-                          setShowResetPassword(false);
-                          setShowResetConfirmPassword(false);
-                          setShowResetPasswordModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                        title="Reset Password Manually"
-                      >
-                        <Key size={16} />
-                      </button>
-
-                      {/* Edit/Delete Actions */}
-                      {(currentUserRole === 'Super Admin' || Number(currentUser.id) === Number(u.id) || (currentUserRole === 'Admin' && u.role !== 'Super Admin')) && (
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {/* View Profile Action */}
                         <button 
                           onClick={() => {
-                            setUserForm({ ...u, permissions: perms, password: '' });
-                            setShowUserModal(true);
+                            setViewProfileData({ user: u, perms });
+                            setShowViewProfilePassword(false);
+                            setShowViewProfileModal(true);
                           }}
-                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
-                          title="Edit Profile"
+                          className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition flex-shrink-0"
+                          title="View Profile Quick Summary"
                         >
-                          <Edit size={16} />
+                          <Eye size={16} />
                         </button>
-                      )}
-                      
-                      {currentUserRole === 'Super Admin' || (currentUserRole === 'Admin' && u.role !== 'Super Admin' && Number(currentUser.id) !== Number(u.id)) ? (
+
+                        {/* Go to My Profile Details Page */}
                         <button 
-                          onClick={() => handleDeleteUser(u.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Delete Profile"
+                          onClick={() => navigate('/profile')}
+                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition flex-shrink-0"
+                          title="Go to My Profile Details Page"
                         >
-                          <Trash2 size={16} />
+                          <User size={16} />
                         </button>
-                      ) : null}
+
+                        {/* Password Actions */}
+                        <button 
+                          onClick={() => triggerForgetPassword(u.email)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition flex-shrink-0"
+                          title="Send Forget Password Link"
+                        >
+                          <Mail size={16} />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setResetTargetUser(u);
+                            setPasswordForm({ userId: u.id, newPassword: '', confirmNewPassword: '' });
+                            setShowOldPassword(false);
+                            setShowResetPassword(false);
+                            setShowResetConfirmPassword(false);
+                            setShowResetPasswordModal(true);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition flex-shrink-0"
+                          title="Reset Password Manually"
+                        >
+                          <Key size={16} />
+                        </button>
+
+                        {/* Edit/Delete Actions */}
+                        {(currentUserRole === 'Super Admin' || Number(currentUser.id) === Number(u.id) || (currentUserRole === 'Admin' && u.role !== 'Super Admin')) && (
+                          <button 
+                            onClick={() => {
+                              setUserForm({ ...u, permissions: perms, password: '' });
+                              setShowUserModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition flex-shrink-0"
+                            title="Edit Profile"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -924,24 +928,58 @@ const Profiles = () => {
                 <span>SMTP Server Configurations</span>
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({senders.length} / {maxSeats} Seats Used)
+                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({senders.length} / {maxSmtps} SMTPs Configured)
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">Setup custom SMTP servers to dispatch marketing email campaigns.</p>
             </div>
             
             <button 
               onClick={() => {
+                if (senders.length >= maxSmtps) {
+                  customAlert({
+                    title: 'SMTP Configuration Limit Reached',
+                    message: activePlanCode === 'free'
+                      ? 'Free Plan is allowed to add only 1 SMTP configuration. Upgrade your plan to Essentials (3), Standard (5), or Premium (10) to add more SMTP configurations.'
+                      : `SMTP configuration limit reached (${senders.length}/${maxSmtps} configured for ${activePlanCode.toUpperCase()} Plan). Please upgrade your subscription plan to add more SMTP servers.`,
+                    type: 'warning'
+                  });
+                  return;
+                }
                 setSmtpForm({ id: null, name: '', email: '', smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_secure: 'tls', admin_id: currentUser.id });
                 setShowSmtpModal(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white hover:bg-primary-700 rounded-xl text-xs font-bold transition shadow-sm"
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                senders.length >= maxSmtps
+                  ? 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed'
+                  : 'bg-primary-600 text-white hover:bg-primary-700'
+              }`}
             >
-              <Plus size={15} /> Add SMTP Sender ({senders.length}/{maxSeats})
+              <Plus size={15} /> Add SMTP Sender ({senders.length}/{maxSmtps})
             </button>
           </div>
+
+          {senders.length === 0 && (
+            <div className="mx-6 mt-4 p-3.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
+                <span>
+                  No SMTP Configurations found. An SMTP configuration <strong>MUST</strong> be added before you can send marketing emails or campaigns.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setSmtpForm({ id: null, name: '', email: '', smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_secure: 'tls', admin_id: currentUser.id });
+                  setShowSmtpModal(true);
+                }}
+                className="px-3 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-xs transition flex-shrink-0 font-bold"
+              >
+                + Add SMTP Now
+              </button>
+            </div>
+          )}
           
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm text-gray-600">
+            <table className="w-full text-left border-collapse text-sm text-gray-600 min-w-[850px]">
               <thead className="bg-gray-50/50 text-gray-500 font-semibold border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-4">Sender Profile</th>
@@ -971,38 +1009,49 @@ const Profiles = () => {
                       <td className="px-6 py-4 text-gray-500">
                         {s.admin_id ? (owner ? `${owner.name} (${owner.role})` : `User #${s.admin_id}`) : 'Global Default'}
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        <button 
-                          onClick={() => handleOpenTestSmtp(s)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg text-xs font-bold transition border border-blue-200 shadow-sm align-middle"
-                          title="Test SMTP configuration & send test email"
-                        >
-                          <Send size={12} />
-                          <span>Test Connection</span>
-                        </button>
-                        <button 
-                          onClick={() => navigate(`/campaigns/new?sender_id=${s.id}`)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-600 hover:text-white rounded-lg text-xs font-bold transition border border-green-200 shadow-sm align-middle"
-                          title="Send campaign using this email"
-                        >
-                          <Mail size={12} />
-                          <span>Send campaign using this email</span>
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setSmtpForm({ ...s });
-                            setShowSmtpModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition inline-flex items-center justify-center align-middle"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteSmtp(s.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition inline-flex items-center justify-center align-middle"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2.5 whitespace-nowrap">
+                          {/* 2-Line Action Buttons */}
+                          <div className="flex flex-col gap-1.5 min-w-[145px]">
+                            <button 
+                              onClick={() => handleOpenTestSmtp(s)}
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg text-xs font-bold transition border border-blue-200 shadow-2xs w-full"
+                              title="Test SMTP configuration & send test email"
+                            >
+                              <Send size={12} />
+                              <span>Test Connection</span>
+                            </button>
+                            <button 
+                              onClick={() => navigate(`/campaigns/new?sender_id=${s.id}`)}
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition border border-emerald-200 shadow-2xs w-full"
+                              title="Send campaign using this email"
+                            >
+                              <Mail size={12} />
+                              <span>Send Campaign</span>
+                            </button>
+                          </div>
+
+                          {/* Edit & Delete Action Icons */}
+                          <div className="flex flex-col gap-1 items-center justify-center border-l border-gray-200 pl-2">
+                            <button 
+                              onClick={() => {
+                                setSmtpForm({ ...s });
+                                setShowSmtpModal(true);
+                              }}
+                              className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                              title="Edit SMTP Profile"
+                            >
+                              <Edit size={15} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteSmtp(s.id)}
+                              className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              title="Delete SMTP Profile"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1028,24 +1077,38 @@ const Profiles = () => {
                 <span>Domain Registration & Configurations</span>
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({domains.length} / {maxSeats} Registered)
+                Plan Quota: <strong className="uppercase text-primary-700">{activePlanCode} PLAN</strong> ({domains.length} / {maxDomains} Registered)
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">Configure primary and sub-domains, company registration details, and DNS authentication records.</p>
             </div>
             
             <button 
               onClick={() => {
+                if (domains.length >= maxDomains) {
+                  customAlert({
+                    title: 'Domain Registration Limit Reached',
+                    message: activePlanCode === 'free'
+                      ? 'Free Plan is allowed to register only 1 Domain. Upgrade your plan to Essentials (3), Standard (5), or Premium (10) to register more domains.'
+                      : `Domain registration limit reached (${domains.length}/${maxDomains} registered for ${activePlanCode.toUpperCase()} Plan). Please upgrade your subscription plan to register more domains.`,
+                    type: 'warning'
+                  });
+                  return;
+                }
                 setDomainForm({ id: null, company_name: 'Bexcode Services', domain_name: '', support_email: '', is_primary: domains.length === 0 });
                 setShowDomainModal(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                domains.length >= maxDomains
+                  ? 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed'
+                  : 'bg-primary-600 hover:bg-primary-700 text-white'
+              }`}
             >
-              <Plus size={15} /> Register Domain ({domains.length}/{maxSeats})
+              <Plus size={15} /> Register Domain ({domains.length}/{maxDomains})
             </button>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm text-gray-600">
+            <table className="w-full text-left border-collapse text-sm text-gray-600 min-w-[750px]">
               <thead className="bg-gray-50/50 text-gray-500 font-semibold border-b border-gray-200 text-xs uppercase tracking-wider">
                 <tr>
                   <th className="px-6 py-4">Company & Domain</th>
@@ -1084,39 +1147,41 @@ const Profiles = () => {
                         <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      {d.is_primary !== 1 && (
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {d.is_primary !== 1 && (
+                          <button 
+                            onClick={() => handleSetPrimaryDomain(d.id)}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition flex-shrink-0"
+                            title="Set as Primary Domain"
+                          >
+                            Make Primary
+                          </button>
+                        )}
                         <button 
-                          onClick={() => handleSetPrimaryDomain(d.id)}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
-                          title="Set as Primary Domain"
+                          onClick={() => {
+                            setDomainForm({
+                              id: d.id,
+                              company_name: d.company_name,
+                              domain_name: d.domain_name,
+                              support_email: d.support_email || '',
+                              is_primary: d.is_primary === 1
+                            });
+                            setShowDomainModal(true);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition flex-shrink-0"
+                          title="Edit Domain"
                         >
-                          Make Primary
+                          <Edit size={16} />
                         </button>
-                      )}
-                      <button 
-                        onClick={() => {
-                          setDomainForm({
-                            id: d.id,
-                            company_name: d.company_name,
-                            domain_name: d.domain_name,
-                            support_email: d.support_email || '',
-                            is_primary: d.is_primary === 1
-                          });
-                          setShowDomainModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
-                        title="Edit Domain"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteDomain(d.id, d.domain_name)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Delete Domain"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <button 
+                          onClick={() => handleDeleteDomain(d.id, d.domain_name)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition flex-shrink-0"
+                          title="Delete Domain"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

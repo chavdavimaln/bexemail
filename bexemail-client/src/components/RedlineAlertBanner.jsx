@@ -19,31 +19,40 @@ const RedlineAlertBanner = () => {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await axios.get('/api/auth/system-limits-status').catch(() => axios.get('http://localhost:5000/api/auth/system-limits-status'));
-      if (res.data) {
-        setStatus(res.data);
-      }
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const headers = {
+        'x-user-id': currentUser.id,
+        'x-user-role': currentUser.role
+      };
+
+      const [statusRes, sendersRes, domainsRes] = await Promise.all([
+        axios.get('/api/auth/system-limits-status', { headers }).catch(() => axios.get('http://localhost:5000/api/auth/system-limits-status', { headers })).catch(() => ({ data: null })),
+        axios.get('/api/senders', { headers }).catch(() => axios.get('http://localhost:5000/api/senders', { headers })).catch(() => ({ data: [] })),
+        axios.get('/api/domains', { headers }).catch(() => axios.get('http://localhost:5000/api/domains', { headers })).catch(() => ({ data: [] }))
+      ]);
+
+      const senders = Array.isArray(sendersRes.data) ? sendersRes.data : (sendersRes.data?.data || []);
+      const domains = Array.isArray(domainsRes.data) ? domainsRes.data : (domainsRes.data?.data || []);
+
+      const apiStatus = statusRes.data || {};
+      const hasSmtp = senders.length > 0 || Boolean(apiStatus.hasSmtp);
+      const hasDomain = domains.length > 0 || Boolean(apiStatus.hasDomain);
+
+      setStatus({
+        success: true,
+        planCode: apiStatus.planCode || 'free',
+        planName: apiStatus.planName || 'Free Plan',
+        hasSmtp,
+        smtpCount: senders.length || apiStatus.smtpCount || 0,
+        smtpLimit: apiStatus.smtpLimit || 1,
+        hasDomain,
+        domainCount: domains.length || apiStatus.domainCount || 0,
+        domainLimit: apiStatus.domainLimit || 1,
+        adminCount: apiStatus.adminCount || 1,
+        adminLimit: apiStatus.adminLimit || 1
+      });
     } catch (err) {
-      // Fallback check directly via senders & domains
-      try {
-        const [sendersRes, domainsRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/senders').catch(() => ({ data: [] })),
-          axios.get('http://localhost:5000/api/domains').catch(() => ({ data: [] }))
-        ]);
-        const senders = Array.isArray(sendersRes.data) ? sendersRes.data : [];
-        const domains = Array.isArray(domainsRes.data) ? domainsRes.data : [];
-        setStatus({
-          hasSmtp: senders.length > 0,
-          hasDomain: domains.length > 0,
-          smtpCount: senders.length,
-          domainCount: domains.length,
-          smtpLimit: 5,
-          domainLimit: 5,
-          planName: 'CRM Plan'
-        });
-      } catch (e) {
-        console.error('Fallback limit check error:', e);
-      }
+      console.error('Error fetching limit status in RedlineAlertBanner:', err);
     } finally {
       setLoading(false);
     }

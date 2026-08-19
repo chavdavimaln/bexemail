@@ -436,7 +436,8 @@ exports.resetPasswordPublic = async (req, res) => {
 // GET /api/auth/system-limits-status
 exports.getSystemLimitsStatus = async (req, res) => {
     try {
-        const userId = req.user?.id || req.headers['x-user-id'] || req.headers['X-User-Id'] || null;
+        const getAdminId = require('../utils/getAdminId');
+        const userId = getAdminId(req);
         const status = await getSystemLimitsStatus(userId);
         res.json(status);
     } catch (error) {

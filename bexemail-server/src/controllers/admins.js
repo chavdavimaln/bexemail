@@ -120,6 +120,9 @@ exports.createAdmin = async (req, res) => {
     const [currentUsers] = await pool.query('SELECT COUNT(*) as totalCount FROM admin_users');
     const userCount = currentUsers[0]?.totalCount || 0;
 
+    const { getUserPlanLimits } = require('../utils/planLimits');
+    const userLimits = await getUserPlanLimits(currentUser.id);
+
     // Get current user's subscription or default plan seat limits
     const [subs] = await pool.query(`
       SELECT au.domain, us.custom_seats_limit, us.custom_admins_limit, us.custom_associates_limit, us.seats_limit as sub_seats_limit, p.seats_limit as plan_seats_limit, p.name as plan_name, au.custom_seats_limit as user_custom_seats
@@ -131,7 +134,7 @@ exports.createAdmin = async (req, res) => {
     `, [currentUser.id]);
 
     const activeSub = subs[0] || {};
-    const maxSeats = activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
+    const maxSeats = userLimits.maxAdmins || activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
     const targetDomain = activeSub.domain || (currentUser.email ? currentUser.email.split('@')[1] : null);
 
     // If role is Associates, check associate limit
@@ -145,7 +148,7 @@ exports.createAdmin = async (req, res) => {
     // Enforce overall seat limit
     if (userCount >= maxSeats && currentUser.role !== 'Super Admin') {
       return res.status(400).json({
-        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active plan tier allows up to ${maxSeats} seats (1 Admin + ${maxSeats - 1} Associates/Developers). Upgrade your plan to add more team members.`
+        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active ${userLimits.planName} allows up to ${maxSeats} seats (1 Admin + ${maxSeats - 1} Associates/Developers). Upgrade your plan to add more team members.`
       });
     }
 

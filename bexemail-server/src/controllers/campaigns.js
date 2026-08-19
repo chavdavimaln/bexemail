@@ -222,8 +222,17 @@ exports.dispatchCampaign = async (req, res) => {
 
     const initialSenderHistory = finalSenderId || null;
 
-    const getAdminId = require('../utils/getAdminId');
-    const targetAdminId = getAdminId(req);
+  const getAdminId = require('../utils/getAdminId');
+  const targetAdminId = getAdminId(req);
+
+  // Require at least 1 SMTP configuration before allowing email dispatch
+  const { checkSmtpRequirement } = require('../utils/planLimits');
+  const hasSmtp = await checkSmtpRequirement(targetAdminId);
+  if (!hasSmtp) {
+    return res.status(400).json({
+      error: 'Cannot send email: No active SMTP server configuration found. You must add an SMTP sender configuration under Profiles & User Access before sending emails.'
+    });
+  }
 
     // 1. Insert Campaign
     const [campaignResult] = await connection.query(
