@@ -185,16 +185,27 @@ const Contacts = () => {
 
     try {
       setAdding(true);
-      const res = await axios.post('http://localhost:5000/api/bulk-import/confirm', {
+      const getAuthHeaders = () => {
+        let user = {};
+        try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) {}
+        const token = localStorage.getItem('token');
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (user && user.id) {
+          headers['x-user-id'] = String(user.id);
+          headers['x-user-role'] = user.role || 'Admin';
+          if (user.admin_id) headers['x-admin-id'] = String(user.admin_id);
+        }
+        return headers;
+      };
+      const headers = getAuthHeaders();
+      const res = await axios.post('/api/bulk-import/confirm', {
         originSite: window.location.hostname || 'localhost',
         importType: 'manual',
         filename: 'Manual & Profile Contact Add',
         listIds: selectedListIds.map(Number),
-        adminId: currentUserRole === 'Super Admin'
-          ? (newContactAdminId !== '' && newContactAdminId !== null && newContactAdminId !== undefined ? Number(newContactAdminId) : null)
-          : currentUser.id,
         contacts: contactsToAdd
-      });
+      }, { headers });
 
       setNewEmail('');
       setNewName('');

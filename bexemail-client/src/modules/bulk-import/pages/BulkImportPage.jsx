@@ -44,11 +44,24 @@ export default function BulkImportPage() {
     setOriginSite(window.location.hostname || 'domain1.com');
   }, []);
 
+  const getAuthHeaders = () => {
+    let user = {};
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) {}
+    const token = localStorage.getItem('token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (user && user.id) {
+      headers['x-user-id'] = String(user.id);
+      headers['x-user-role'] = user.role || 'Admin';
+      if (user.admin_id) headers['x-admin-id'] = String(user.admin_id);
+    }
+    return headers;
+  };
+
   const fetchAdmins = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/admins', {
-        headers: { 'x-user-role': currentUserRole || 'Admin', 'x-user-id': currentUser.id || 1 }
-      }).catch(() => ({ data: [] }));
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/admins', { headers }).catch(() => ({ data: [] }));
       setAdminUsers(res.data || []);
     } catch (err) {
       console.error(err);
@@ -57,7 +70,8 @@ export default function BulkImportPage() {
 
   const fetchLists = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/lists');
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/lists', { headers });
       setLists(res.data || []);
       if (res.data && res.data.length > 0) {
         setSelectedListIds([res.data[0].id]);
@@ -328,12 +342,12 @@ export default function BulkImportPage() {
         if (confirmCreate) {
           setLoading(true);
           const newCreatedIds = [];
+          const headers = getAuthHeaders();
           for (const listName of missingLists) {
-            const createRes = await axios.post('http://localhost:5000/api/lists', {
+            const createRes = await axios.post('/api/lists', {
               name: listName,
-              description: 'Created during bulk import',
-              admin_id: currentUserRole === 'Super Admin' ? null : currentUser.id
-            }, { headers: { 'x-user-role': currentUserRole } });
+              description: 'Created during bulk import'
+            }, { headers });
             if (createRes.data && createRes.data.id) {
               newCreatedIds.push(createRes.data.id);
             }
@@ -345,10 +359,11 @@ export default function BulkImportPage() {
         }
       }
 
-      const res = await axios.post('http://localhost:5000/api/bulk-import/parse', {
+      const headers = getAuthHeaders();
+      const res = await axios.post('/api/bulk-import/parse', {
         emailsRaw,
         originSite: originSite.trim()
-      });
+      }, { headers });
 
       const { newContacts, conflicts } = res.data;
 
@@ -379,16 +394,14 @@ export default function BulkImportPage() {
   const executeImport = async (contacts, importListIds = selectedListIds) => {
     try {
       setLoading(true);
-      const res = await axios.post('http://localhost:5000/api/bulk-import/confirm', {
+      const headers = getAuthHeaders();
+      const res = await axios.post('/api/bulk-import/confirm', {
         originSite: originSite.trim(),
         importType: fileName ? (fileName.endsWith('.json') ? 'json' : 'csv') : 'manual',
         filename: fileName || 'Direct Text Input',
         listIds: importListIds,
-        adminId: currentUserRole === 'Super Admin'
-          ? (targetAdminId !== '' && targetAdminId !== null && targetAdminId !== undefined ? Number(targetAdminId) : null)
-          : currentUser.id,
         contacts
-      });
+      }, { headers });
 
       const alreadyExisting = res.data?.alreadyExistingEmails || [];
       const importedCount = res.data?.importedCount ?? contacts.length;

@@ -57,12 +57,22 @@ exports.createSubscriber = async (req, res) => {
       });
     }
 
+    // Fetch Admin email, primary domain and primary smtp for association tracking
+    const [uRows] = await pool.query('SELECT email FROM admin_users WHERE id = ?', [targetAdminId]);
+    const adminEmail = uRows.length > 0 ? uRows[0].email : null;
+
+    const [dRows] = await pool.query('SELECT domain_name FROM registered_domains WHERE admin_id = ? LIMIT 1', [targetAdminId]);
+    const domainName = dRows.length > 0 ? dRows[0].domain_name : null;
+
+    const [sRows] = await pool.query('SELECT email FROM senders WHERE admin_id = ? LIMIT 1', [targetAdminId]);
+    const smtpEmail = sRows.length > 0 ? sRows[0].email : null;
+
     const tagsJson = tags ? JSON.stringify(tags) : null;
     const [result] = await pool.query(
-      `INSERT INTO subscribers (email, first_name, status, tags, admin_id)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags), admin_id = VALUES(admin_id)`,
-      [email, first_name || null, status || 'subscribed', tagsJson, targetAdminId || null]
+      `INSERT INTO subscribers (email, first_name, status, tags, admin_id, admin_email, domain_name, smtp_email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), status = VALUES(status), tags = VALUES(tags), admin_id = VALUES(admin_id), admin_email = VALUES(admin_email), domain_name = VALUES(domain_name), smtp_email = VALUES(smtp_email)`,
+      [email, first_name || null, status || 'subscribed', tagsJson, targetAdminId || null, adminEmail, domainName, smtpEmail]
     );
 
     let subscriberId = result.insertId;

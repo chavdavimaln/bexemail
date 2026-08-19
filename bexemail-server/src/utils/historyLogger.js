@@ -10,18 +10,48 @@ const pool = require('../config/db');
  * @param {object|null} newData - The new state of the record (for add/edit).
  * @param {string} changedBy - Identifier for who made the change.
  */
-async function logHistory(tableName, recordId, action, oldData, newData, changedBy = 'System') {
+const getAdminId = require('./getAdminId');
+
+/**
+ * Logs a change to the data_history table with tenant admin_id scoping.
+ */
+async function logHistory(tableName, recordId, action, oldData, newData, changedBy = 'System', reqOrAdminId = null) {
   try {
+    let adminId = 0;
+    if (reqOrAdminId) {
+      if (typeof reqOrAdminId === 'object') {
+        adminId = getAdminId(reqOrAdminId);
+      } else {
+        adminId = Number(reqOrAdminId) || 0;
+      }
+    }
+
+    if (!adminId && newData && (newData.admin_id || newData.adminId)) {
+      adminId = Number(newData.admin_id || newData.adminId);
+    }
+    if (!adminId && oldData && (oldData.admin_id || oldData.adminId)) {
+      adminId = Number(oldData.admin_id || oldData.adminId);
+    }
+    if (!adminId) adminId = 1;
+
+    let adminEmail = null;
+    if (adminId) {
+      const [users] = await pool.query('SELECT email FROM admin_users WHERE id = ?', [adminId]);
+      if (users.length > 0) adminEmail = users[0].email;
+    }
+
     await pool.query(
-      `INSERT INTO data_history (table_name, record_id, action, old_data, new_data, changed_by) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO data_history (table_name, record_id, action, old_data, new_data, changed_by, admin_id, admin_email) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         tableName, 
         recordId, 
         action, 
         oldData ? JSON.stringify(oldData) : null, 
         newData ? JSON.stringify(newData) : null,
-        changedBy
+        changedBy || 'System',
+        adminId || null,
+        adminEmail
       ]
     );
   } catch (error) {

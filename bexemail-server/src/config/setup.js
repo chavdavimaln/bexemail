@@ -160,6 +160,21 @@ async function setupDB() {
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    try {
+      await pool.query('ALTER TABLE data_history ADD COLUMN admin_id INT NULL');
+      await pool.query('ALTER TABLE data_history ADD COLUMN admin_email VARCHAR(255) NULL');
+      await pool.query('UPDATE data_history SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+    } catch (e) {}
+    try {
+      await pool.query('ALTER TABLE backup_schedules ADD COLUMN admin_id INT NULL');
+      await pool.query('UPDATE backup_schedules SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+    } catch (e) {}
+    try {
+      await pool.query('ALTER TABLE subscribers DROP INDEX email');
+    } catch (e) {}
+    try {
+      await pool.query('ALTER TABLE subscribers ADD UNIQUE KEY unique_email_admin (email, admin_id)');
+    } catch (e) {}
 
     // Create subscriber_origins table if not exists
     await pool.query(`
@@ -232,7 +247,32 @@ async function setupDB() {
       "ALTER TABLE user_subscriptions ADD COLUMN custom_emails_limit INT NULL",
       "ALTER TABLE user_subscriptions ADD COLUMN custom_campaigns_limit INT NULL",
       "ALTER TABLE user_subscriptions ADD COLUMN custom_admins_limit INT NULL",
-      "ALTER TABLE user_subscriptions ADD COLUMN custom_associates_limit INT NULL"
+      "ALTER TABLE user_subscriptions ADD COLUMN custom_associates_limit INT NULL",
+
+      // Explicit Admin Email, Domain & SMTP Tracking Columns Across Modules
+      "ALTER TABLE subscribers ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE subscribers ADD COLUMN domain_name VARCHAR(255) NULL",
+      "ALTER TABLE subscribers ADD COLUMN smtp_email VARCHAR(255) NULL",
+
+      "ALTER TABLE campaigns ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE campaigns ADD COLUMN domain_name VARCHAR(255) NULL",
+      "ALTER TABLE campaigns ADD COLUMN smtp_id INT NULL",
+      "ALTER TABLE campaigns ADD COLUMN smtp_email VARCHAR(255) NULL",
+
+      "ALTER TABLE templates ADD COLUMN admin_id INT NULL",
+      "ALTER TABLE templates ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE templates ADD COLUMN domain_name VARCHAR(255) NULL",
+
+      "ALTER TABLE lists ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE lists ADD COLUMN domain_name VARCHAR(255) NULL",
+
+      "ALTER TABLE senders ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE senders ADD COLUMN domain_name VARCHAR(255) NULL",
+
+      "ALTER TABLE registered_domains ADD COLUMN admin_email VARCHAR(255) NULL",
+
+      "ALTER TABLE automations ADD COLUMN admin_email VARCHAR(255) NULL",
+      "ALTER TABLE automations ADD COLUMN domain_name VARCHAR(255) NULL"
     ];
     for (const q of migrationQueries) {
       try {
@@ -245,11 +285,20 @@ async function setupDB() {
     try {
       await pool.query('UPDATE admin_users SET admin_id = id WHERE role IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
       await pool.query('UPDATE admin_users SET admin_id = 1 WHERE role NOT IN ("Admin", "Super Admin") AND (admin_id IS NULL OR admin_id = 0)');
-      await pool.query('UPDATE senders SET admin_id = 1 WHERE admin_id IS NULL');
-      await pool.query('UPDATE registered_domains SET admin_id = 1 WHERE admin_id IS NULL');
-      await pool.query('UPDATE subscribers SET admin_id = 1 WHERE admin_id IS NULL');
-      await pool.query('UPDATE lists SET admin_id = 1 WHERE admin_id IS NULL');
-      await pool.query('UPDATE campaigns SET admin_id = 1 WHERE admin_id IS NULL');
+      await pool.query('UPDATE senders SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+      await pool.query('UPDATE registered_domains SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+      await pool.query('UPDATE subscribers SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+      await pool.query('UPDATE lists SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+      await pool.query('UPDATE campaigns SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+      await pool.query('UPDATE templates SET admin_id = 1 WHERE is_predesigned = 0 AND (admin_id IS NULL OR admin_id = 0)');
+
+      // Sync admin_email for all tables
+      await pool.query(`UPDATE subscribers s JOIN admin_users u ON s.admin_id = u.id SET s.admin_email = u.email WHERE s.admin_email IS NULL OR s.admin_email = ''`);
+      await pool.query(`UPDATE campaigns c JOIN admin_users u ON c.admin_id = u.id SET c.admin_email = u.email WHERE c.admin_email IS NULL OR c.admin_email = ''`);
+      await pool.query(`UPDATE templates t JOIN admin_users u ON t.admin_id = u.id SET t.admin_email = u.email WHERE t.admin_email IS NULL OR t.admin_email = ''`);
+      await pool.query(`UPDATE lists l JOIN admin_users u ON l.admin_id = u.id SET l.admin_email = u.email WHERE l.admin_email IS NULL OR l.admin_email = ''`);
+      await pool.query(`UPDATE senders snd JOIN admin_users u ON snd.admin_id = u.id SET snd.admin_email = u.email WHERE snd.admin_email IS NULL OR snd.admin_email = ''`);
+      await pool.query(`UPDATE registered_domains d JOIN admin_users u ON d.admin_id = u.id SET d.admin_email = u.email WHERE d.admin_email IS NULL OR d.admin_email = ''`);
     } catch (e) {}
 
     await setupAutomationDB();
@@ -265,6 +314,11 @@ async function setupDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    try {
+      await pool.query("ALTER TABLE db_backups ADD COLUMN admin_id INT NULL");
+      await pool.query("ALTER TABLE db_backups ADD COLUMN admin_email VARCHAR(255) NULL");
+      await pool.query('UPDATE db_backups SET admin_id = 1 WHERE admin_id IS NULL OR admin_id = 0');
+    } catch (e) {}
 
     // Add module_type column if not exists
     try {

@@ -103,6 +103,16 @@ exports.confirmImport = async (req, res) => {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
+    // Fetch Admin email, primary domain and primary smtp for association tracking
+    const [uRows] = await connection.query('SELECT email FROM admin_users WHERE id = ?', [targetAdminId]);
+    const adminEmail = uRows.length > 0 ? uRows[0].email : null;
+
+    const [dRows] = await connection.query('SELECT domain_name FROM registered_domains WHERE admin_id = ? LIMIT 1', [targetAdminId]);
+    const domainName = dRows.length > 0 ? dRows[0].domain_name : null;
+
+    const [sRows] = await connection.query('SELECT email FROM senders WHERE admin_id = ? LIMIT 1', [targetAdminId]);
+    const smtpEmail = sRows.length > 0 ? sRows[0].email : null;
+
     const addedSubscriberIds = [];
     const alreadyExistingEmails = [];
     const newEmails = [];
@@ -144,8 +154,8 @@ exports.confirmImport = async (req, res) => {
       if (existing.length === 0) {
         // Insert new subscriber
         const [subResult] = await connection.query(
-          'INSERT INTO subscribers (email, first_name, status, admin_id) VALUES (?, ?, ?, ?)',
-          [cleanEmail, name || null, 'subscribed', targetAdminId || null]
+          'INSERT INTO subscribers (email, first_name, status, admin_id, admin_email, domain_name, smtp_email) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [cleanEmail, name || null, 'subscribed', targetAdminId || null, adminEmail, domainName, smtpEmail]
         );
         const subId = subResult.insertId;
         addedSubscriberIds.push(subId);

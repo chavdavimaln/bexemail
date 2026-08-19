@@ -189,9 +189,14 @@ exports.createDatabaseBackup = async (req, res) => {
     const tablesIncluded = validIncludedTables.join(',');
     const backupJsonString = JSON.stringify(backupDataMap);
 
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+    const [uRows] = await db.query('SELECT email FROM admin_users WHERE id = ?', [adminId]);
+    const adminEmail = uRows.length > 0 ? uRows[0].email : null;
+
     await db.query(
-      'INSERT INTO db_backups (module_type, description, backup_data, tables_included) VALUES (?, ?, ?, ?)',
-      [module_type, description, backupJsonString, tablesIncluded]
+      'INSERT INTO db_backups (module_type, description, backup_data, tables_included, admin_id, admin_email) VALUES (?, ?, ?, ?, ?, ?)',
+      [module_type, description, backupJsonString, tablesIncluded, adminId || null, adminEmail]
     );
 
     res.status(201).json({ message: 'Backup created successfully', module_type, tables: validIncludedTables });
@@ -256,6 +261,61 @@ exports.importDatabaseBackup = async (req, res) => {
   }
 };
 
+exports.getDatabaseBackups = async (req, res) => {
+  try {
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
+    const { module_type, startDate, endDate, year, month, day } = req.query;
+    let query = 'SELECT id, module_type, description, tables_included, created_at, LENGTH(backup_data) as data_size FROM db_backups WHERE admin_id = ?';
+    const params = [adminId];
+
+    if (module_type && module_type !== 'All' && module_type !== 'all') {
+      query += ' AND (module_type = ? OR (module_type IS NULL AND ? = "all"))';
+      params.push(module_type.toLowerCase(), module_type.toLowerCase());
+    }
+
+    if (startDate) {
+      query += ' AND created_at >= ?';
+      params.push(`${startDate} 00:00:00`);
+    }
+
+    if (endDate) {
+      query += ' AND created_at <= ?';
+      params.push(`${endDate} 23:59:59`);
+    }
+
+    if (year) {
+      query += ' AND YEAR(created_at) = ?';
+      params.push(year);
+    }
+
+    if (month) {
+      query += ' AND MONTH(created_at) = ?';
+      params.push(month);
+    }
+
+    if (day) {
+      query += ' AND DAY(created_at) = ?';
+      params.push(day);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const [rows] = await db.query(query, params);
+    
+    const normalizedRows = rows.map(r => ({
+      ...r,
+      module_type: r.module_type || 'all'
+    }));
+
+    res.status(200).json(normalizedRows);
+  } catch (error) {
+    console.error('List backups error:', error);
+    res.status(500).json({ error: 'Failed to retrieve backup list' });
+  }
+};
+
 exports.getBackupHistory = async (req, res) => {
   try {
     const { module_type, startDate, endDate, year, month, day } = req.query;
@@ -309,11 +369,13 @@ exports.getBackupHistory = async (req, res) => {
 };
 
 exports.restoreDatabaseBackup = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
   const { id } = req.params;
   const { tablesToRestore } = req.body;
 
   try {
-    const [rows] = await db.query('SELECT * FROM db_backups WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT * FROM db_backups WHERE id = ? AND admin_id = ?', [id, adminId]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Backup record not found' });
     }
@@ -369,13 +431,15 @@ exports.restoreDatabaseBackup = async (req, res) => {
 };
 
 exports.deleteDatabaseBackup = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
   const id = req.params.id || req.query.id || req.body?.id || req.body?.delete_id;
   if (!id) {
     return res.status(400).json({ error: 'Backup ID is required for deletion' });
   }
 
   try {
-    const [result] = await db.query('DELETE FROM db_backups WHERE id = ?', [id]);
+    const [result] = await db.query('DELETE FROM db_backups WHERE id = ? AND admin_id = ?', [id, adminId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Backup record not found' });
     }
@@ -387,11 +451,13 @@ exports.deleteDatabaseBackup = async (req, res) => {
 };
 
 exports.downloadSpecificBackup = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
   const { id } = req.params;
   const downloadType = req.query.type || 'sql';
 
   try {
-    const [rows] = await db.query('SELECT * FROM db_backups WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT * FROM db_backups WHERE id = ? AND admin_id = ?', [id, adminId]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Backup snapshot not found' });
     }
@@ -458,7 +524,9 @@ exports.downloadSpecificBackup = async (req, res) => {
 
 exports.getBackupSchedules = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM backup_schedules ORDER BY created_at DESC');
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+    const [rows] = await db.query('SELECT * FROM backup_schedules WHERE admin_id = ? ORDER BY created_at DESC', [adminId]);
     res.status(200).json(rows);
   } catch (error) {
     console.error('Get schedules error:', error);
@@ -467,20 +535,22 @@ exports.getBackupSchedules = async (req, res) => {
 };
 
 exports.saveBackupSchedule = async (req, res) => {
+  const getAdminId = require('../utils/getAdminId');
+  const adminId = getAdminId(req);
   const { module_type = 'all', frequency = 'weekly', status = 'active', reminder_enabled = 1, reminder_email = '' } = req.body;
 
   try {
-    const [existing] = await db.query('SELECT id FROM backup_schedules WHERE module_type = ? LIMIT 1', [module_type]);
+    const [existing] = await db.query('SELECT id FROM backup_schedules WHERE module_type = ? AND admin_id = ? LIMIT 1', [module_type, adminId]);
 
     if (existing.length > 0) {
       await db.query(
-        'UPDATE backup_schedules SET frequency = ?, status = ?, reminder_enabled = ?, reminder_email = ?, updated_at = NOW() WHERE id = ?',
-        [frequency, status, reminder_enabled ? 1 : 0, reminder_email, existing[0].id]
+        'UPDATE backup_schedules SET frequency = ?, status = ?, reminder_enabled = ?, reminder_email = ?, updated_at = NOW() WHERE id = ? AND admin_id = ?',
+        [frequency, status, reminder_enabled ? 1 : 0, reminder_email, existing[0].id, adminId]
       );
     } else {
       await db.query(
-        'INSERT INTO backup_schedules (module_type, frequency, status, reminder_enabled, reminder_email) VALUES (?, ?, ?, ?, ?)',
-        [module_type, frequency, status, reminder_enabled ? 1 : 0, reminder_email]
+        'INSERT INTO backup_schedules (module_type, frequency, status, reminder_enabled, reminder_email, admin_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [module_type, frequency, status, reminder_enabled ? 1 : 0, reminder_email, adminId]
       );
     }
 
@@ -490,3 +560,5 @@ exports.saveBackupSchedule = async (req, res) => {
     res.status(500).json({ error: 'Failed to save backup schedule' });
   }
 };
+
+exports.getBackupHistory = exports.getDatabaseBackups;

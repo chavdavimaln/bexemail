@@ -136,10 +136,25 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
     fetchHistoryLogs();
   }, []);
 
+  const getAuthHeaders = () => {
+    let user = {};
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) {}
+    const token = localStorage.getItem('token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (user && user.id) {
+      headers['x-user-id'] = String(user.id);
+      headers['x-user-role'] = user.role || 'Admin';
+      if (user.admin_id) headers['x-admin-id'] = String(user.admin_id);
+    }
+    return headers;
+  };
+
   const fetchBackups = async () => {
     try {
       setLoadingBackups(true);
-      const res = await axios.get('/api/backup/list').catch(() => axios.get('http://localhost:5000/api/backup/list'));
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/backup/list', { headers });
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setBackups(data);
     } catch (err) {
@@ -152,7 +167,8 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   const fetchSchedules = async () => {
     try {
       setLoadingSchedules(true);
-      const res = await axios.get('/api/backup/schedules').catch(() => axios.get('http://localhost:5000/api/backup/schedules'));
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/backup/schedules', { headers });
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setSchedules(data);
       if (data && data.length > 0) {
@@ -175,7 +191,8 @@ export default function BackupsAndHistory({ initialTab = 'management' }) {
   const fetchHistoryLogs = async () => {
     try {
       setLoadingLogs(true);
-      const res = await axios.get('/api/history').catch(() => axios.get('http://localhost:5000/api/history'));
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/history', { headers });
       const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setLogs(data);
     } catch (err) {

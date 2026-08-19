@@ -32,10 +32,25 @@ export default function BackupRestore() {
     fetchBackups();
   }, []);
 
+  const getAuthHeaders = () => {
+    let user = {};
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) {}
+    const token = localStorage.getItem('token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (user && user.id) {
+      headers['x-user-id'] = String(user.id);
+      headers['x-user-role'] = user.role || 'Admin';
+      if (user.admin_id) headers['x-admin-id'] = String(user.admin_id);
+    }
+    return headers;
+  };
+
   const fetchBackups = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/backup/list');
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/backup/list', { headers });
       setBackups(res.data || []);
     } catch (err) {
       console.error(err);
@@ -58,10 +73,11 @@ export default function BackupRestore() {
 
     try {
       setCreating(true);
-      await axios.post('http://localhost:5000/api/backup/create', {
+      const headers = getAuthHeaders();
+      await axios.post('/api/backup/create', {
         description: description.trim(),
         tables: selectedTablesToBackup
-      });
+      }, { headers });
       setDescription('');
       customAlert({ title: 'Success', message: 'Database backup created and registered successfully!', type: 'success' });
       fetchBackups();

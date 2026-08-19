@@ -1,8 +1,10 @@
 const pool = require('../config/db');
+const getAdminId = require('../utils/getAdminId');
 
 exports.getHistory = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM data_history ORDER BY timestamp DESC LIMIT 500');
+    const adminId = getAdminId(req);
+    const [rows] = await pool.query('SELECT * FROM data_history WHERE admin_id = ? ORDER BY timestamp DESC LIMIT 500', [adminId]);
     res.json(rows);
   } catch (error) {
     console.error('Fetch history error:', error);
@@ -76,7 +78,8 @@ exports.restoreHistory = async (req, res) => {
 
 exports.downloadHistory = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM data_history ORDER BY timestamp DESC');
+    const adminId = getAdminId(req);
+    const [rows] = await pool.query('SELECT * FROM data_history WHERE admin_id = ? ORDER BY timestamp DESC', [adminId]);
     
     if (rows.length === 0) {
       return res.send('No history data available.');

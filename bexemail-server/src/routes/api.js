@@ -11,6 +11,21 @@ const { checkRole, ROLES } = require('../middleware/rbac');
 
 router.get('/system-limits-status', authController.getSystemLimitsStatus);
 
+// Developer Data Merge Endpoint
+const { mergeAdminData } = require('../utils/devMergeUtility');
+router.post('/admin/merge-data', async (req, res) => {
+  const { sourceAdminId, targetAdminId } = req.body;
+  if (!sourceAdminId || !targetAdminId) {
+    return res.status(400).json({ error: 'sourceAdminId and targetAdminId are required' });
+  }
+  try {
+    const result = await mergeAdminData(Number(sourceAdminId), Number(targetAdminId));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Subscribers
 router.post('/subscribers', subscribersController.createSubscriber);
 router.get('/subscribers', subscribersController.getSubscribers);
@@ -111,7 +126,7 @@ router.get('/backup/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, RO
 router.get('/backup/download-code-ui', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.downloadCodeUiSystem);
 router.post('/backup/create', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.createDatabaseBackup);
 router.post('/backup/import', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.importDatabaseBackup);
-router.get('/backup/list', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getBackupHistory);
+router.get('/backup/list', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getDatabaseBackups);
 router.post('/backup/:id/restore', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.restoreDatabaseBackup);
 router.delete('/backup/delete', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.deleteDatabaseBackup);
 router.post('/backup/delete', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.deleteDatabaseBackup);

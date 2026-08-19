@@ -1,8 +1,11 @@
 const pool = require('../config/db');
 const nodemailer = require('nodemailer');
 const { logHistory } = require('../utils/historyLogger');
+const getAdminId = require('../utils/getAdminId');
+
 // Create Template
 exports.createTemplate = async (req, res) => {
+  const adminId = getAdminId(req);
   const { 
     template_name, 
     category, 
@@ -24,6 +27,12 @@ exports.createTemplate = async (req, res) => {
   const footerDesignStr = typeof footer_design_json === 'object' ? JSON.stringify(footer_design_json) : (footer_design_json || null);
 
   try {
+    const [uRows] = await pool.query('SELECT email FROM admin_users WHERE id = ?', [adminId]);
+    const adminEmail = uRows.length > 0 ? uRows[0].email : null;
+
+    const [dRows] = await pool.query('SELECT domain_name FROM registered_domains WHERE admin_id = ? LIMIT 1', [adminId]);
+    const domainName = dRows.length > 0 ? dRows[0].domain_name : null;
+
     const [insertRes] = await pool.query(
       `INSERT INTO templates (
         template_name, 
@@ -37,8 +46,11 @@ exports.createTemplate = async (req, res) => {
         include_footer, 
         footer_editor_type, 
         footer_html, 
-        footer_design_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        footer_design_json,
+        admin_id,
+        admin_email,
+        domain_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         template_name, 
         category || 'General', 
@@ -51,7 +63,10 @@ exports.createTemplate = async (req, res) => {
         include_footer !== undefined ? include_footer : 1, 
         footer_editor_type || 'html', 
         footer_html || null, 
-        footerDesignStr
+        footerDesignStr,
+        adminId || null,
+        adminEmail,
+        domainName
       ]
     );
 
@@ -68,7 +83,10 @@ exports.createTemplate = async (req, res) => {
       include_footer: include_footer !== undefined ? include_footer : 1,
       footer_editor_type: footer_editor_type || 'html',
       footer_html: footer_html || null,
-      footer_design_json: footerDesignStr
+      footer_design_json: footerDesignStr,
+      admin_id: adminId,
+      admin_email: adminEmail,
+      domain_name: domainName
     };
     await logHistory('templates', insertRes.insertId, 'add', null, newTemplate, req.headers['x-user-role']).catch(() => {});
     res.status(201).json({ message: 'Template created successfully', id: insertRes.insertId, template: newTemplate });
@@ -81,9 +99,10 @@ exports.createTemplate = async (req, res) => {
 // Get all Templates (with optional filter query parameters)
 exports.getTemplates = async (req, res) => {
   try {
+    const adminId = getAdminId(req);
     const { category, industry, is_predesigned, search } = req.query;
-    let sql = 'SELECT * FROM templates WHERE 1=1';
-    let params = [];
+    let sql = 'SELECT * FROM templates WHERE (is_predesigned = 1 OR admin_id = ?)';
+    let params = [adminId];
 
     if (category && category !== 'All') {
       sql += ' AND category = ?';

@@ -28,9 +28,10 @@ exports.login = async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        const effectiveAdminId = user.admin_id || user.id;
         const expiresIn = rememberMe ? '30d' : '24h';
         const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role },
+            { id: user.id, email: user.email, role: user.role, admin_id: effectiveAdminId },
             JWT_SECRET,
             { expiresIn }
         );
@@ -56,6 +57,7 @@ exports.login = async (req, res) => {
             token,
             user: {
                 id: user.id,
+                admin_id: effectiveAdminId,
                 name: user.name,
                 username: user.username,
                 email: user.email,
@@ -140,7 +142,7 @@ exports.register = async (req, res) => {
         `, [newUserId, matchedPlan.id, matchedPlan.plan_code, trialDays, startDate, endDate, isTrial ? 'trialing' : 'active', matchedPlan.seats_limit || 1]);
 
         const token = jwt.sign(
-            { id: newUserId, email: email.toLowerCase().trim(), role: userRole },
+            { id: newUserId, email: email.toLowerCase().trim(), role: userRole, admin_id: newUserId },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
@@ -150,6 +152,7 @@ exports.register = async (req, res) => {
             token,
             user: {
                 id: newUserId,
+                admin_id: newUserId,
                 name: name.trim(),
                 username: genUsername,
                 email: email.toLowerCase().trim(),
@@ -177,13 +180,14 @@ exports.register = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const userId = req.user?.id || req.headers['x-user-id'] || req.headers['X-User-Id'] || 1;
-        const [users] = await db.query(`SELECT id, name, username, email, number, domain, avatar, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
+        const [users] = await db.query(`SELECT id, admin_id, name, username, email, number, domain, avatar, role, permissions, plain_password, custom_seats_limit, custom_contacts_limit, custom_emails_limit, created_at FROM admin_users WHERE id = ?`, [userId]);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
 
         const user = users[0];
+        user.admin_id = user.admin_id || user.id;
         let perms = user.permissions;
         if (typeof perms === 'string') {
             try { perms = JSON.parse(perms); } catch (e) {}

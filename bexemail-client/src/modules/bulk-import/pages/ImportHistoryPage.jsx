@@ -15,10 +15,25 @@ export default function ImportHistoryPage() {
     fetchLogs();
   }, []);
 
+  const getAuthHeaders = () => {
+    let user = {};
+    try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch (e) {}
+    const token = localStorage.getItem('token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (user && user.id) {
+      headers['x-user-id'] = String(user.id);
+      headers['x-user-role'] = user.role || 'Admin';
+      if (user.admin_id) headers['x-admin-id'] = String(user.admin_id);
+    }
+    return headers;
+  };
+
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5000/api/bulk-import/logs');
+      const headers = getAuthHeaders();
+      const res = await axios.get('/api/bulk-import/logs', { headers });
       setLogs(res.data || []);
     } catch (err) {
       console.error(err);
@@ -40,7 +55,8 @@ export default function ImportHistoryPage() {
 
     try {
       setRollbackLoadingId(id);
-      await axios.post(`http://localhost:5000/api/bulk-import/logs/${id}/rollback`);
+      const headers = getAuthHeaders();
+      await axios.post(`/api/bulk-import/logs/${id}/rollback`, {}, { headers });
       success('Import rolled back and old state restored successfully!');
       fetchLogs(); // refresh list
     } catch (err) {
