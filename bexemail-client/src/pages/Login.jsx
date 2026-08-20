@@ -122,7 +122,7 @@ const Login = () => {
               </div>
 
               <div className="text-sm">
-                <Link to="/reset-password" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
+                <Link to={`/reset-password?email=${encodeURIComponent(email || '')}`} className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
                   Forgot your password?
                 </Link>
               </div>

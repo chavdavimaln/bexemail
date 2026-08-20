@@ -21,15 +21,28 @@ exports.getSenders = async (req, res) => {
     const getAdminId = require('../utils/getAdminId');
     const adminId = getAdminId(req);
 
-    const [rows] = await pool.query('SELECT * FROM senders WHERE admin_id = ? ORDER BY is_default DESC, name ASC', [adminId]);
+    const [rows] = await pool.query('SELECT * FROM senders WHERE admin_id = ? OR admin_id IS NULL ORDER BY is_default DESC, id ASC', [adminId]);
+
+    // Strict single-primary enforcement check
+    const primaryRows = rows.filter(r => r.is_default === 1 || r.is_default === true);
+    if (primaryRows.length > 1) {
+      const keepPrimaryId = primaryRows[0].id;
+      await pool.query('UPDATE senders SET is_default = 0 WHERE admin_id = ? OR admin_id IS NULL', [adminId]);
+      await pool.query('UPDATE senders SET is_default = 1 WHERE id = ?', [keepPrimaryId]);
+      rows.forEach(r => {
+        r.is_default = (r.id === keepPrimaryId) ? 1 : 0;
+      });
+    }
+
     res.json(rows);
   } catch (error) {
     console.error('Fetch senders error:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 };
 
 exports.createSender = async (req, res) => {
+  const currentUser = getCurrentUser(req);
   const getAdminId = require('../utils/getAdminId');
   const targetAdminId = getAdminId(req);
   const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure } = req.body;
@@ -58,24 +71,25 @@ exports.createSender = async (req, res) => {
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
-    if (is_default) {
-      if (currentUser && currentUser.role === 'Super Admin') {
-        await connection.query('UPDATE senders SET is_default = FALSE WHERE is_default = TRUE');
-      } else {
-        await connection.query('UPDATE senders SET is_default = FALSE WHERE admin_id = ? AND is_default = TRUE', [currentUser?.id || 1]);
-      }
+    const [countRows] = await connection.query('SELECT COUNT(*) as count FROM senders WHERE admin_id = ?', [targetAdminId]);
+    const totalCount = countRows[0]?.count || 0;
+
+    const shouldBeDefault = is_default || totalCount === 0 ? 1 : 0;
+
+    if (shouldBeDefault === 1) {
+      await connection.query('UPDATE senders SET is_default = 0 WHERE admin_id = ?', [targetAdminId]);
     }
 
     const [result] = await connection.query(
-      `INSERT INTO senders (name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, is_default || false, smtp_host || null, smtp_port || null, smtp_user || null, smtp_pass || null, smtp_secure || 'tls', targetAdminId]
+      `INSERT INTO senders (name, email, is_default, is_active, status, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id)
+       VALUES (?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?)`,
+      [name.trim(), email.trim(), shouldBeDefault, smtp_host ? smtp_host.trim() : null, smtp_port || null, smtp_user ? smtp_user.trim() : null, smtp_pass || null, smtp_secure || 'tls', targetAdminId]
     );
 
     await connection.commit();
     const newSender = { 
-      id: result.insertId, name, email, is_default: is_default || false,
-      smtp_host: smtp_host || null, smtp_port: smtp_port || null, smtp_user: smtp_user || null, smtp_pass: smtp_pass || null, smtp_secure: smtp_secure || 'tls',
+      id: result.insertId, name: name.trim(), email: email.trim(), is_default: shouldBeDefault, is_active: 1, status: 'active',
+      smtp_host: smtp_host ? smtp_host.trim() : null, smtp_port: smtp_port || null, smtp_user: smtp_user ? smtp_user.trim() : null, smtp_pass: smtp_pass || null, smtp_secure: smtp_secure || 'tls',
       admin_id: targetAdminId
     };
     await logHistory('senders', result.insertId, 'add', null, newSender, currentUser?.role || 'Super Admin');
@@ -92,7 +106,7 @@ exports.createSender = async (req, res) => {
 exports.updateSender = async (req, res) => {
   const currentUser = getCurrentUser(req);
   const { id } = req.params;
-  const { name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id } = req.body;
+  const { name, email, is_default, is_active, status, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id } = req.body;
 
   let connection;
   try {
@@ -105,23 +119,23 @@ exports.updateSender = async (req, res) => {
       return res.status(404).json({ error: 'Sender not found' });
     }
     const oldData = oldRows[0];
-
-    if (is_default) {
-      await connection.query('UPDATE senders SET is_default = FALSE WHERE id != ?', [id]);
-    }
-
     let targetAdminId = oldData.admin_id || currentUser?.id || 1;
-    if (admin_id !== undefined) {
-      targetAdminId = admin_id;
+    if (admin_id !== undefined) targetAdminId = admin_id;
+
+    if (is_default === 1 || is_default === true) {
+      await connection.query('UPDATE senders SET is_default = 0 WHERE admin_id = ?', [targetAdminId]);
     }
+
+    const activeState = (is_active !== undefined) ? (is_active ? 1 : 0) : (status === 'inactive' ? 0 : 1);
+    const statusText = activeState === 1 ? 'active' : 'inactive';
 
     await connection.query(
-      `UPDATE senders SET name = ?, email = ?, is_default = ?, smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, smtp_secure = ?, admin_id = ? WHERE id = ?`,
-      [name, email, is_default, smtp_host || null, smtp_port || null, smtp_user || null, smtp_pass || null, smtp_secure || 'tls', targetAdminId, id]
+      `UPDATE senders SET name = ?, email = ?, is_default = ?, is_active = ?, status = ?, smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, smtp_secure = ?, admin_id = ? WHERE id = ?`,
+      [name.trim(), email.trim(), (is_default === 1 || is_default === true) ? 1 : 0, activeState, statusText, smtp_host ? smtp_host.trim() : null, smtp_port || null, smtp_user ? smtp_user.trim() : null, smtp_pass || null, smtp_secure || 'tls', targetAdminId, id]
     );
 
     await connection.commit();
-    const newData = { id, name, email, is_default, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id: targetAdminId };
+    const newData = { id, name, email, is_default: (is_default === 1 || is_default === true) ? 1 : 0, is_active: activeState, status: statusText, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, admin_id: targetAdminId };
     await logHistory('senders', id, 'edit', oldData, newData, currentUser?.role || 'Admin');
     res.json({ message: 'Sender updated successfully' });
   } catch (error) {
@@ -133,6 +147,74 @@ exports.updateSender = async (req, res) => {
   }
 };
 
+// Set single SMTP as Primary / Default
+exports.setPrimarySender = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const getAdminId = require('../utils/getAdminId');
+    const adminId = getAdminId(req);
+
+    const [senderRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [id]);
+    if (senderRows.length === 0) {
+      return res.status(404).json({ error: 'Sender not found' });
+    }
+
+    const targetAdminId = senderRows[0].admin_id || adminId;
+
+    // Unset is_default on all senders for this admin context, then set target sender to 1
+    await pool.query('UPDATE senders SET is_default = 0 WHERE admin_id = ?', [targetAdminId]);
+    await pool.query('UPDATE senders SET is_default = 1, is_active = 1, status = "active" WHERE id = ?', [id]);
+
+    res.json({ message: 'Primary SMTP sender updated successfully', id: Number(id) });
+  } catch (error) {
+    console.error('Set primary sender error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+};
+
+// Toggle Active / Deactive Status for an SMTP Server
+exports.toggleSenderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [senderRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [id]);
+    if (senderRows.length === 0) {
+      return res.status(404).json({ error: 'Sender not found' });
+    }
+
+    const currentSender = senderRows[0];
+    const isCurrentlyActive = currentSender.is_active === 1 || currentSender.status === 'active';
+    const newActiveState = isCurrentlyActive ? 0 : 1;
+    const newStatusText = newActiveState === 1 ? 'active' : 'inactive';
+
+    // If attempting to deactivate the default primary sender, prevent deactivation unless another active sender exists
+    if (currentSender.is_default === 1 && isCurrentlyActive) {
+      const [otherActive] = await pool.query('SELECT id FROM senders WHERE id != ? AND (is_active = 1 OR status = "active") LIMIT 1', [id]);
+      if (otherActive.length > 0) {
+        // Promote other active sender to default primary
+        await pool.query('UPDATE senders SET is_default = 1 WHERE id = ?', [otherActive[0].id]);
+        await pool.query('UPDATE senders SET is_default = 0, is_active = 0, status = "inactive" WHERE id = ?', [id]);
+      } else {
+        return res.status(400).json({
+          error: 'Cannot deactivate the primary SMTP server. At least one active primary SMTP server must remain active.'
+        });
+      }
+    } else {
+      await pool.query('UPDATE senders SET is_active = ?, status = ? WHERE id = ?', [newActiveState, newStatusText, id]);
+    }
+
+    res.json({
+      message: `SMTP sender status updated to ${newStatusText}`,
+      id: Number(id),
+      is_active: newActiveState,
+      status: newStatusText
+    });
+  } catch (error) {
+    console.error('Toggle sender status error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+};
+
 exports.deleteSender = async (req, res) => {
   const currentUser = getCurrentUser(req);
   const { id } = req.params;
@@ -140,14 +222,19 @@ exports.deleteSender = async (req, res) => {
     const [oldRows] = await pool.query('SELECT * FROM senders WHERE id = ?', [id]);
     if (oldRows.length === 0) return res.status(404).json({ error: 'Sender not found' });
     const oldData = oldRows[0];
+
+    const [countRows] = await pool.query('SELECT COUNT(*) as count FROM senders WHERE admin_id = ?', [oldData.admin_id || 1]);
+    if (countRows[0]?.count <= 1) {
+      return res.status(400).json({ error: 'Cannot delete SMTP server. At least one SMTP configuration must remain in the system.' });
+    }
     
     await pool.query('DELETE FROM senders WHERE id = ?', [id]);
 
-    // If the deleted sender was the default, automatically assign default status to the next available sender
-    if (oldData.is_default) {
-      const [remaining] = await pool.query('SELECT id FROM senders ORDER BY id ASC LIMIT 1');
+    // If the deleted sender was the default primary, automatically assign default status to the next available sender
+    if (oldData.is_default === 1 || oldData.is_default === true) {
+      const [remaining] = await pool.query('SELECT id FROM senders WHERE admin_id = ? ORDER BY id ASC LIMIT 1', [oldData.admin_id || 1]);
       if (remaining.length > 0) {
-        await pool.query('UPDATE senders SET is_default = TRUE WHERE id = ?', [remaining[0].id]);
+        await pool.query('UPDATE senders SET is_default = 1, is_active = 1, status = "active" WHERE id = ?', [remaining[0].id]);
       }
     }
     

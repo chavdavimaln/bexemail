@@ -37,14 +37,14 @@ function getAdminId(req) {
     const role = (user && user.role) ? user.role : (headerRole || 'Admin');
     const adminId = (user && user.admin_id) ? Number(user.admin_id) : (headerAdminId ? Number(headerAdminId) : null);
 
-    if (!userId) return 0;
+    if (!userId) return 1;
 
     if (role === 'Admin' || role === 'Super Admin') {
       return adminId || userId;
     }
     return adminId || userId;
   } catch (e) {
-    return 0;
+    return 1;
   }
 }
 

@@ -1,7 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getSystemLimitsStatus, getUserPlanLimits } = require('../utils/planLimits');
+const { getSystemLimitsStatus: getLimitsStatus, getUserPlanLimits } = require('../utils/planLimits');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bexemail_super_secret_key_2026';
 
@@ -437,8 +437,9 @@ exports.resetPasswordPublic = async (req, res) => {
 exports.getSystemLimitsStatus = async (req, res) => {
     try {
         const getAdminId = require('../utils/getAdminId');
-        const userId = getAdminId(req);
-        const status = await getSystemLimitsStatus(userId);
+        const headerUserId = req.headers['x-user-id'] ? Number(req.headers['x-user-id']) : null;
+        const userId = headerUserId || getAdminId(req);
+        const status = await getLimitsStatus(userId, headerUserId ? null : req.companyId);
         res.json(status);
     } catch (error) {
         console.error('getSystemLimitsStatus error:', error);

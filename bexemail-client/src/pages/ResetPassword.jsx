@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, Key, Eye, EyeOff, ArrowLeft, UserPlus } from 'lucide-react';
+import { useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { Mail, Lock, Key, Eye, EyeOff, ArrowLeft, UserPlus, Edit2, Check } from 'lucide-react';
 import axios from 'axios';
 import { useModal } from '../context/ModalContext';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { alert: customAlert } = useModal();
 
   const queryEmail = searchParams.get('email') || '';
-  const [email, setEmail] = useState(queryEmail);
+
+  const [email, setEmail] = useState(() => {
+    if (queryEmail && queryEmail.trim()) return queryEmail.trim();
+    if (location.state?.email && location.state.email.trim()) return location.state.email.trim();
+    const remembered = localStorage.getItem('bex_remembered_email');
+    if (remembered && remembered.trim()) return remembered.trim();
+    try {
+      const u = JSON.parse(localStorage.getItem('user'));
+      if (u && u.email) return u.email;
+    } catch (e) {}
+    return 'vimal@bexcodeservices.com';
+  });
+
+  const [isEmailEditable, setIsEmailEditable] = useState(() => !queryEmail && !localStorage.getItem('bex_remembered_email'));
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -18,8 +32,8 @@ const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (queryEmail) {
-      setEmail(queryEmail);
+    if (queryEmail && queryEmail.trim()) {
+      setEmail(queryEmail.trim());
     }
   }, [queryEmail]);
 
@@ -37,7 +51,7 @@ const ResetPassword = () => {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (!email) {
+    if (!email || !email.trim()) {
       customAlert({ title: 'Validation Error', message: 'Target registered email address is missing.', type: 'danger' });
       return;
     }
@@ -96,26 +110,43 @@ const ResetPassword = () => {
         <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/60 sm:rounded-2xl sm:px-10 border border-slate-200/80">
           <form className="space-y-5" onSubmit={handleResetPassword}>
             
-            {/* Email ID input - Disabled by default */}
+            {/* Registered Email ID input */}
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">
-                Registered Email ID (Disabled)
-              </label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Registered Email Address *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsEmailEditable(!isEmailEditable)}
+                  className="text-[11px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none flex items-center gap-1"
+                >
+                  {isEmailEditable ? <Check size={12} /> : <Edit2 size={12} />}
+                  <span>{isEmailEditable ? 'Lock Email' : 'Change Email'}</span>
+                </button>
+              </div>
+
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                   <Mail size={18} />
                 </div>
                 <input
                   type="email"
-                  disabled
-                  readOnly
+                  required
+                  readOnly={!isEmailEditable}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-100 border border-slate-300 text-gray-700 font-mono text-xs font-bold rounded-xl cursor-not-allowed outline-none"
-                  placeholder="user@example.com"
+                  className={`block w-full pl-10 pr-3.5 py-2.5 border text-xs font-bold font-mono rounded-xl outline-none transition-all ${
+                    isEmailEditable
+                      ? 'bg-white border-primary-400 text-gray-900 focus:ring-2 focus:ring-primary-500'
+                      : 'bg-slate-100 border-slate-300 text-gray-800'
+                  }`}
+                  placeholder="vimal@bexcodeservices.com"
                 />
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">This email address is locked for account verification security.</p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {isEmailEditable ? 'Type your registered account email address.' : 'This email address is set for account password recovery.'}
+              </p>
             </div>
 
             {/* New Password input */}

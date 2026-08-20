@@ -26,6 +26,9 @@ router.post('/admin/merge-data', async (req, res) => {
   }
 });
 
+// Plan Limit & SMTP Validation Middleware
+const { checkDomainLimit, checkSmtpLimit, checkSeatLimit, checkSmtpExists } = require('../middleware/planCheck');
+
 // Subscribers
 router.post('/subscribers', subscribersController.createSubscriber);
 router.get('/subscribers', subscribersController.getSubscribers);
@@ -36,11 +39,13 @@ router.delete('/subscribers/:id', subscribersController.deleteSubscriber);
 // Senders
 const sendersController = require('../controllers/senders');
 router.get('/senders', sendersController.getSenders);
-router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.createSender);
+router.post('/senders', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), checkSmtpLimit, sendersController.createSender);
 router.put('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.updateSender);
+router.put('/senders/:id/set-primary', sendersController.setPrimarySender);
+router.put('/senders/:id/toggle-status', sendersController.toggleSenderStatus);
 router.delete('/senders/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), sendersController.deleteSender);
-router.post('/senders/:id/test', sendersController.testSender);
-router.post('/senders/test', sendersController.testSender);
+router.post('/senders/:id/test', checkSmtpExists, sendersController.testSender);
+router.post('/senders/test', checkSmtpExists, sendersController.testSender);
 
 // Lists
 router.post('/lists', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), listsController.createList);
@@ -51,22 +56,22 @@ router.post('/lists/assign', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGE
 router.post('/lists/sync', listsController.syncSubscriberLists);  // no role guard - used by contacts edit
 router.post('/lists/merge-duplicates', listsController.mergeDuplicateLists);
 
-// Campaigns
+// Campaigns (Enforcing active SMTP configuration before launch/dispatch)
 router.get('/campaigns', campaignsController.getCampaigns);
 router.get('/campaigns/:id', campaignsController.getCampaignById);
-router.post('/campaigns', campaignsController.dispatchCampaign);
+router.post('/campaigns', checkSmtpExists, campaignsController.dispatchCampaign);
 router.put('/campaigns/:id', campaignsController.updateCampaign);
 router.delete('/campaigns/:id', campaignsController.deleteCampaign);
-router.post('/campaigns/dispatch', campaignsController.dispatchCampaign);
-router.post('/campaigns_wizard/dispatch', campaignsController.dispatchCampaign);
+router.post('/campaigns/dispatch', checkSmtpExists, campaignsController.dispatchCampaign);
+router.post('/campaigns_wizard/dispatch', checkSmtpExists, campaignsController.dispatchCampaign);
 router.put('/campaigns/:id/approve', campaignsController.approveCampaign);
 router.get('/campaigns/:id/logs', campaignsController.getCampaignLogs);
 router.post('/campaigns/:id/duplicate', campaignsController.duplicateCampaign);
 router.put('/campaigns/:id/status', campaignsController.updateCampaignStatus);
 
 // Templates
-router.post('/templates/send-test', templatesController.sendTestTemplate);
-router.post('/templates/:id/send-test', templatesController.sendTestTemplate);
+router.post('/templates/send-test', checkSmtpExists, templatesController.sendTestTemplate);
+router.post('/templates/:id/send-test', checkSmtpExists, templatesController.sendTestTemplate);
 router.post('/templates/:id/clone', templatesController.cloneTemplate);
 router.post('/templates', templatesController.createTemplate);
 router.get('/templates', templatesController.getTemplates);
@@ -111,12 +116,12 @@ router.put('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsCont
 router.delete('/integrations/:id', checkRole([ROLES.SUPER_ADMIN]), integrationsController.deleteIntegration);
 router.post('/integrations/:id/sync', checkRole([ROLES.SUPER_ADMIN, ROLES.CAMPAIGN_MANAGER]), integrationsController.syncIntegration);
 
-// Admin Users (RBAC protected with controller-level scoping)
+// Admin Users (RBAC protected with seat limit check)
 const adminsController = require('../controllers/admins');
 const backupController = require('../controllers/backupController');
 
 router.get('/admins', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.getAdmins);
-router.post('/admins', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), adminsController.createAdmin);
+router.post('/admins', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), checkSeatLimit, adminsController.createAdmin);
 router.put('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.updateAdmin);
 router.delete('/admins/:id', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN]), adminsController.deleteAdmin);
 router.post('/admins/:id/reset-password', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), adminsController.resetPasswordManually);
@@ -137,12 +142,13 @@ router.get('/backup/:id/download', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN
 router.get('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.getBackupSchedules);
 router.post('/backup/schedules', checkRole([ROLES.SUPER_ADMIN, ROLES.SUB_ADMIN, ROLES.USER]), backupController.saveBackupSchedule);
 
-// Registered Domains Configuration
+// Registered Domains Configuration (with domain limit enforcement)
 const domainsController = require('../controllers/domainsController');
 router.get('/domains', domainsController.getDomains);
-router.post('/domains', domainsController.createDomain);
+router.post('/domains', checkDomainLimit, domainsController.createDomain);
 router.put('/domains/:id', domainsController.updateDomain);
 router.put('/domains/:id/set-primary', domainsController.setPrimaryDomain);
+router.put('/domains/:id/toggle-status', domainsController.toggleDomainStatus);
 router.delete('/domains/:id', domainsController.deleteDomain);
 
 module.exports = router;

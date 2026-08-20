@@ -3,6 +3,8 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Save, Settings2, Send, Mail, Plus, Trash2, Edit2, Link, RefreshCw, Database, Globe, Eye, EyeOff, ShieldCheck, CheckCircle2, Star, Building } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
+import DomainManager from '../components/DomainManager';
+import SmtpManager from '../components/SmtpManager';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -302,90 +304,9 @@ const Settings = () => {
                 </div>
               </div>
 
-              {/* Registered Domain Configurations Panel (Informational View for Primary Domain Only) */}
-              <div className="space-y-4 pt-4 border-t border-gray-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
-                      <Globe size={20} className="text-primary-600" />
-                      Domain Registration & Configurations
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Displaying primary domain registration information. To register or manage all domains, navigate to User Profiles.
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => navigate('/profiles')} 
-                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center self-start sm:self-auto"
-                  >
-                    <Globe size={16} className="mr-1.5" /> Manage Domains in User Profiles
-                  </button>
-                </div>
-
-                {/* Primary Domain Informational Table */}
-                <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-gray-200 text-xs font-extrabold text-gray-500 uppercase tracking-wider">
-                        <th className="px-5 py-3.5">Company & Domain</th>
-                        <th className="px-5 py-3.5">Support Contact</th>
-                        <th className="px-5 py-3.5">Domain Status</th>
-                        <th className="px-5 py-3.5">DNS Security</th>
-                        <th className="px-5 py-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 text-xs font-medium text-gray-800">
-                      {(() => {
-                        const primaryDomain = (domains || []).find(d => d.is_primary === 1) || (domains || [])[0];
-                        if (!primaryDomain) {
-                          return (
-                            <tr>
-                              <td colSpan="5" className="px-5 py-8 text-center text-gray-500 font-medium">
-                                No primary domain registered. Go to <strong className="text-primary-600 cursor-pointer" onClick={() => navigate('/profiles')}>User Profiles</strong> to register your domain.
-                              </td>
-                            </tr>
-                          );
-                        }
-                        return (
-                          <tr key={primaryDomain.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="px-5 py-4">
-                              <div className="font-extrabold text-slate-900 flex items-center gap-2 text-sm">
-                                <span>{primaryDomain.domain_name}</span>
-                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                  <Star size={10} className="fill-amber-600 text-amber-600" /> Primary
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-gray-500 font-medium">{primaryDomain.company_name}</div>
-                            </td>
-                            <td className="px-5 py-4">
-                              <span className="text-gray-600 font-mono text-xs">{primaryDomain.support_email || 'Not configured'}</span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                <CheckCircle2 size={12} /> Active / Verified
-                              </span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <div className="flex flex-wrap gap-1">
-                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DKIM: OK</span>
-                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">SPF: OK</span>
-                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold">DMARC: OK</span>
-                              </div>
-                            </td>
-                            <td className="px-5 py-4 text-right">
-                              <button 
-                                onClick={() => navigate('/profiles')}
-                                className="px-3 py-1.5 text-xs font-bold bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition border border-primary-200"
-                              >
-                                Manage in Profiles
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
+              {/* Multi-Tenant Domain Configurations Manager */}
+              <div className="pt-4 border-t border-gray-200">
+                <DomainManager customAlert={customAlert} />
               </div>
             </div>
           )}
@@ -431,28 +352,8 @@ const Settings = () => {
           )}
 
           {activeTab === 'senders' && (
-            <div className="max-w-3xl space-y-6 animate-in fade-in">
-              <div className="flex justify-between items-center border-b pb-2">
-                <h3 className="text-lg font-semibold text-gray-900">Sender Profiles</h3>
-                <button onClick={() => { setSenderForm({ id: null, name: '', email: '', is_default: false }); setShowSenderModal(true); }} className="px-3 py-1.5 bg-primary-100 text-primary-700 hover:bg-primary-200 rounded-lg text-sm font-medium transition-colors flex items-center">
-                  <Plus size={16} className="mr-1" /> Add Sender
-                </button>
-              </div>
-              <p className="text-sm text-gray-500 mb-4">Manage the names and email addresses you send campaigns from.</p>
-              <div className="space-y-3">
-                {senders.map(s => (
-                  <div key={s.id} className="flex justify-between items-center p-4 bg-gray-50 border border-gray-200 rounded-xl">
-                    <div>
-                      <div className="font-semibold text-gray-900 flex items-center">{s.name}{s.is_default && <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">Default</span>}</div>
-                      <div className="text-sm text-gray-500">{s.email}</div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button onClick={() => { setSenderForm(s); setShowSenderModal(true); }} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                      <button onClick={() => handleDeleteSender(s.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="space-y-6 animate-in fade-in">
+              <SmtpManager customAlert={customAlert} />
             </div>
           )}
 
@@ -512,77 +413,7 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Add / Edit Domain Modal */}
-      {showDomainModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
-            <h3 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
-              <Globe size={22} className="text-primary-600" />
-              {domainForm.id ? 'Edit Domain Configuration' : 'Register New Domain'}
-            </h3>
-            
-            <div className="space-y-4 text-xs font-medium">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Company Name *</label>
-                <input 
-                  type="text" 
-                  value={domainForm.company_name} 
-                  onChange={e => setDomainForm({ ...domainForm, company_name: e.target.value })} 
-                  placeholder="e.g. Bexcode Services"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" 
-                />
-              </div>
-              
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Domain Name / Slug *</label>
-                <input 
-                  type="text" 
-                  value={domainForm.domain_name} 
-                  onChange={e => setDomainForm({ ...domainForm, domain_name: e.target.value })} 
-                  placeholder="e.g. bexcodeservices or bexcodeservices.com"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono" 
-                />
-              </div>
 
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Support / Contact Email</label>
-                <input 
-                  type="email" 
-                  value={domainForm.support_email} 
-                  onChange={e => setDomainForm({ ...domainForm, support_email: e.target.value })} 
-                  placeholder="e.g. info@bexcodeservices.com"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono" 
-                />
-              </div>
-
-              <label className="flex items-center space-x-2 cursor-pointer pt-1">
-                <input 
-                  type="checkbox" 
-                  checked={domainForm.is_primary} 
-                  onChange={e => setDomainForm({ ...domainForm, is_primary: e.target.checked })} 
-                  className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4" 
-                />
-                <span className="text-xs font-bold text-gray-800">Set as Primary Domain</span>
-              </label>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-3 border-t">
-              <button 
-                onClick={() => setShowDomainModal(false)} 
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-xs transition"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSaveDomain} 
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-lg shadow-xs transition"
-              >
-                Save Domain
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add/Edit Sender Modal */}
       {showSenderModal && (

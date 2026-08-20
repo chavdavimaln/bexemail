@@ -14,15 +14,21 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+const domainRouter = require('./src/middleware/domainRouter');
+const runMultiTenantMigration = require('./db-update-multitenant');
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' })); // For standard HTML forms
+app.use(domainRouter);
 
+// Run Multi-Tenant & Plan Limits DB Migration automatically on startup
+runMultiTenantMigration().catch(err => console.error('[Server] Migration notice:', err.message));
 
 // Routes
 app.get('/', (req, res) => {
-  res.json({ message: 'BexEmail API is running successfully on port 5000!' });
+  res.json({ message: 'BexEmail API is running successfully on port 5000!', environment: req.environment, tenant: req.tenant });
 });
 
 // ── Dedicated Contact Update + List Sync (no role guard, for Contacts page edit) ──
@@ -100,9 +106,6 @@ app.use('/api/plans', require('./src/routes/planRoutes'));
 app.use('/api/payments', require('./src/routes/paymentRoutes'));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
 
 // Initialize non-Redis cron workers immediately
 require('./src/workers/cron');
@@ -127,7 +130,7 @@ isRedisAvailable(REDIS_HOST, REDIS_PORT).then((available) => {
 
 const setupDB = require('./src/config/setup');
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   await setupDB();
-  console.log(`Server running on port ${PORT}`);
+  console.log(`BexEmail Server successfully running on http://127.0.0.1:${PORT}`);
 });
