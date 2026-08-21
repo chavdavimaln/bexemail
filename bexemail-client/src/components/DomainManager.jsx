@@ -83,6 +83,16 @@ export default function DomainManager({ customAlert }) {
     setShowModal(true);
   };
 
+  const getAuthHeaders = () => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const token = localStorage.getItem('token');
+    return {
+      'x-user-id': currentUser.id || currentUser.user_id || 1,
+      'x-user-role': currentUser.role || 'Admin',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   const handleSaveDomain = async (e) => {
     e.preventDefault();
     if (!domainForm.company_name || !domainForm.domain_name) {
@@ -93,12 +103,13 @@ export default function DomainManager({ customAlert }) {
 
     setSaving(true);
     try {
+      const headers = getAuthHeaders();
       if (domainForm.id) {
-        await axios.put(`/api/domains/${domainForm.id}`, domainForm)
-          .catch(() => axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm));
+        await axios.put(`/api/domains/${domainForm.id}`, domainForm, { headers })
+          .catch(() => axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm, { headers }));
       } else {
-        await axios.post('/api/domains', domainForm)
-          .catch(() => axios.post('http://localhost:5000/api/domains', domainForm));
+        await axios.post('/api/domains', domainForm, { headers })
+          .catch(() => axios.post('http://localhost:5000/api/domains', domainForm, { headers }));
       }
 
       setShowModal(false);
@@ -126,8 +137,9 @@ export default function DomainManager({ customAlert }) {
     })));
 
     try {
-      await axios.put(`/api/domains/${domainId}/set-primary`)
-        .catch(() => axios.put(`http://localhost:5000/api/domains/${domainId}/set-primary`));
+      const headers = getAuthHeaders();
+      await axios.put(`/api/domains/${domainId}/set-primary`, {}, { headers })
+        .catch(() => axios.put(`http://localhost:5000/api/domains/${domainId}/set-primary`, {}, { headers }));
 
       fetchDomainData();
       const alertFn = customAlert || alert;
@@ -145,8 +157,9 @@ export default function DomainManager({ customAlert }) {
 
   const handleToggleStatus = async (id) => {
     try {
-      await axios.put(`/api/domains/${id}/toggle-status`)
-        .catch(() => axios.put(`http://localhost:5000/api/domains/${id}/toggle-status`));
+      const headers = getAuthHeaders();
+      await axios.put(`/api/domains/${id}/toggle-status`, {}, { headers })
+        .catch(() => axios.put(`http://localhost:5000/api/domains/${id}/toggle-status`, {}, { headers }));
       fetchDomainData();
     } catch (err) {
       const alertFn = customAlert || alert;
@@ -172,8 +185,9 @@ export default function DomainManager({ customAlert }) {
 
     if (confirmed || confirmed === undefined) {
       try {
-        await axios.delete(`/api/domains/${id}`)
-          .catch(() => axios.delete(`http://localhost:5000/api/domains/${id}`));
+        const headers = getAuthHeaders();
+        await axios.delete(`/api/domains/${id}`, { headers })
+          .catch(() => axios.delete(`http://localhost:5000/api/domains/${id}`, { headers }));
         fetchDomainData();
       } catch (err) {
         const alertFn = customAlert || alert;

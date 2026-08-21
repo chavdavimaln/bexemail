@@ -30,6 +30,7 @@ const ResetPassword = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sendingLink, setSendingLink] = useState(false);
 
   useEffect(() => {
     if (queryEmail && queryEmail.trim()) {
@@ -47,6 +48,31 @@ const ResetPassword = () => {
     setConfirmPassword('');
     setShowNewPassword(true);
     setShowConfirmPassword(false);
+  };
+
+  const handleSendResetLink = async () => {
+    if (!email || !email.trim()) {
+      customAlert({ title: 'Validation Error', message: 'Please enter a valid registered email address.', type: 'warning' });
+      return;
+    }
+    setSendingLink(true);
+    try {
+      await axios.post('/api/auth/forget-password', { email: email.trim() })
+        .catch(() => axios.post('http://localhost:5000/api/auth/forget-password', { email: email.trim() }));
+      customAlert({
+        title: 'Reset Link Dispatched!',
+        message: `Password reset link email has been dispatched via SMTP to ${email.trim()}! Please check your inbox and click the link to proceed.`,
+        type: 'success'
+      });
+    } catch (err) {
+      customAlert({
+        title: 'Dispatch Failed',
+        message: err.response?.data?.error || 'Failed to send password reset email. Please check registered email address.',
+        type: 'danger'
+      });
+    } finally {
+      setSendingLink(false);
+    }
   };
 
   const handleResetPassword = async (e) => {
@@ -116,14 +142,26 @@ const ResetPassword = () => {
                 <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
                   Registered Email Address *
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsEmailEditable(!isEmailEditable)}
-                  className="text-[11px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none flex items-center gap-1"
-                >
-                  {isEmailEditable ? <Check size={12} /> : <Edit2 size={12} />}
-                  <span>{isEmailEditable ? 'Lock Email' : 'Change Email'}</span>
-                </button>
+                <div className="flex gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={handleSendResetLink}
+                    disabled={sendingLink}
+                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 uppercase focus:outline-none flex items-center gap-1 disabled:opacity-50"
+                    title="Send Reset Password Link via SMTP Email"
+                  >
+                    <Mail size={12} />
+                    <span>{sendingLink ? 'Sending...' : 'Send Reset Link Email'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailEditable(!isEmailEditable)}
+                    className="text-[11px] font-bold text-primary-600 hover:text-primary-700 uppercase focus:outline-none flex items-center gap-1"
+                  >
+                    {isEmailEditable ? <Check size={12} /> : <Edit2 size={12} />}
+                    <span>{isEmailEditable ? 'Lock' : 'Change Email'}</span>
+                  </button>
+                </div>
               </div>
 
               <div className="relative rounded-xl shadow-sm">
@@ -141,7 +179,7 @@ const ResetPassword = () => {
                       ? 'bg-white border-primary-400 text-gray-900 focus:ring-2 focus:ring-primary-500'
                       : 'bg-slate-100 border-slate-300 text-gray-800'
                   }`}
-                  placeholder="vimal@bexcodeservices.com"
+                  placeholder="user@domain.com"
                 />
               </div>
               <p className="text-[11px] text-gray-400 mt-1">

@@ -299,7 +299,14 @@ const Profiles = () => {
     }
 
     try {
-      await axios.post(`http://localhost:5000/api/admins/${passwordForm.userId}/reset-password`, { newPassword: passwordForm.newPassword });
+      const token = localStorage.getItem('token');
+      const headers = {
+        'x-user-id': currentUser?.id || 1,
+        'x-user-role': currentUserRole,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+      await axios.post(`/api/admins/${passwordForm.userId}/reset-password`, { newPassword: passwordForm.newPassword }, { headers })
+        .catch(() => axios.post(`http://localhost:5000/api/admins/${passwordForm.userId}/reset-password`, { newPassword: passwordForm.newPassword }, { headers }));
       customAlert({ title: 'Success', message: 'Password has been manually reset successfully.', type: 'success' });
       setShowResetPasswordModal(false);
       setPasswordForm({ userId: null, newPassword: '', confirmNewPassword: '' });
@@ -307,6 +314,16 @@ const Profiles = () => {
     } catch (err) {
       customAlert({ title: 'Error', message: err.response?.data?.error || 'Failed to reset password.', type: 'danger' });
     }
+  };
+
+  // Helper for auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'x-user-id': currentUser?.id || 1,
+      'x-user-role': currentUserRole,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
   };
 
   // SMTP Configurations Actions
@@ -317,12 +334,15 @@ const Profiles = () => {
     }
 
     try {
+      const headers = getAuthHeaders();
       const payload = { ...smtpForm };
       if (smtpForm.id) {
-        await axios.put(`http://localhost:5000/api/senders/${smtpForm.id}`, payload);
+        await axios.put(`/api/senders/${smtpForm.id}`, payload, { headers })
+          .catch(() => axios.put(`http://localhost:5000/api/senders/${smtpForm.id}`, payload, { headers }));
         customAlert({ title: 'Success', message: 'SMTP configuration updated successfully!', type: 'success' });
       } else {
-        await axios.post('http://localhost:5000/api/senders', payload);
+        await axios.post('/api/senders', payload, { headers })
+          .catch(() => axios.post('http://localhost:5000/api/senders', payload, { headers }));
         customAlert({ title: 'Success', message: 'SMTP configuration added successfully!', type: 'success' });
       }
       setShowSmtpModal(false);
@@ -343,7 +363,9 @@ const Profiles = () => {
     if (!isOk) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/senders/${id}`);
+      const headers = getAuthHeaders();
+      await axios.delete(`/api/senders/${id}`, { headers })
+        .catch(() => axios.delete(`http://localhost:5000/api/senders/${id}`, { headers }));
       customAlert({ title: 'Deleted', message: 'SMTP config removed successfully.', type: 'success' });
       fetchData();
       window.dispatchEvent(new Event('smtpUpdated'));
@@ -359,10 +381,13 @@ const Profiles = () => {
     }
 
     try {
+      const headers = getAuthHeaders();
       if (domainForm.id) {
-        await axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm).catch(() => axios.put(`/api/domains/${domainForm.id}`, domainForm));
+        await axios.put(`/api/domains/${domainForm.id}`, domainForm, { headers })
+          .catch(() => axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm, { headers }));
       } else {
-        await axios.post('http://localhost:5000/api/domains', domainForm).catch(() => axios.post('/api/domains', domainForm));
+        await axios.post('/api/domains', domainForm, { headers })
+          .catch(() => axios.post('http://localhost:5000/api/domains', domainForm, { headers }));
       }
       setShowDomainModal(false);
       setDomainForm({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
@@ -376,7 +401,9 @@ const Profiles = () => {
 
   const handleSetPrimaryDomain = async (id) => {
     try {
-      await axios.put(`http://localhost:5000/api/domains/${id}/set-primary`).catch(() => axios.put(`/api/domains/${id}/set-primary`));
+      const headers = getAuthHeaders();
+      await axios.put(`/api/domains/${id}/set-primary`, {}, { headers })
+        .catch(() => axios.put(`http://localhost:5000/api/domains/${id}/set-primary`, {}, { headers }));
       fetchData();
       window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Primary domain updated.', type: 'success' });
@@ -403,7 +430,9 @@ const Profiles = () => {
     if (!isOk) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/domains/${id}`).catch(() => axios.delete(`/api/domains/${id}`));
+      const headers = getAuthHeaders();
+      await axios.delete(`/api/domains/${id}`, { headers })
+        .catch(() => axios.delete(`http://localhost:5000/api/domains/${id}`, { headers }));
       fetchData();
       window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Domain deleted successfully.', type: 'success' });

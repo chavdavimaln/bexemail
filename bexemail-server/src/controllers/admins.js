@@ -117,11 +117,12 @@ exports.createAdmin = async (req, res) => {
     }
 
     // Check seat capacity limits against active plan and custom DB overrides
-    const [currentUsers] = await pool.query('SELECT COUNT(*) as totalCount FROM admin_users');
+    const targetTenantAdminId = currentUser.admin_id || currentUser.id || 1;
+    const [currentUsers] = await pool.query('SELECT COUNT(*) as totalCount FROM admin_users WHERE id = ? OR admin_id = ?', [targetTenantAdminId, targetTenantAdminId]);
     const userCount = currentUsers[0]?.totalCount || 0;
 
     const { getUserPlanLimits } = require('../utils/planLimits');
-    const userLimits = await getUserPlanLimits(currentUser.id);
+    const userLimits = await getUserPlanLimits(targetTenantAdminId);
 
     // Get current user's subscription or default plan seat limits
     const [subs] = await pool.query(`
@@ -131,7 +132,7 @@ exports.createAdmin = async (req, res) => {
       LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
       WHERE au.id = ? OR au.role IN ('Super Admin', 'Admin')
       ORDER BY us.id DESC LIMIT 1
-    `, [currentUser.id]);
+    `, [targetTenantAdminId]);
 
     const activeSub = subs[0] || {};
     const maxSeats = userLimits.maxAdmins || activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
@@ -139,7 +140,7 @@ exports.createAdmin = async (req, res) => {
 
     // If role is Associates, check associate limit
     if (role === 'Associates' && activeSub.custom_associates_limit) {
-      const [assocCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Associates"');
+      const [assocCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Associates" AND (id = ? OR admin_id = ?)', [targetTenantAdminId, targetTenantAdminId]);
       if ((assocCountRows[0]?.count || 0) >= activeSub.custom_associates_limit) {
         return res.status(400).json({ error: `Associates seat limit reached. Maximum allowed Associates configured in database is ${activeSub.custom_associates_limit}.` });
       }
@@ -344,7 +345,8 @@ exports.sendForgetPassword = async (req, res) => {
     const isSecure = (sender.smtp_secure === 'ssl' || sender.smtp_secure === 'true' || port === 465);
     const fromEmail = sender.email || smtpUser;
     const fromName = sender.name || 'BexEmail Security';
-    const resetLink = `http://localhost:5173/reset-password?email=${encodeURIComponent(user.email)}`;
+    const clientOrigin = process.env.CLIENT_URL || req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : 'http://localhost:5173');
+    const resetLink = `${clientOrigin}/reset-password?email=${encodeURIComponent(user.email)}`;
 
     const transporter = nodemailer.createTransport({
       host,

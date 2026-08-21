@@ -119,6 +119,16 @@ const Settings = () => {
     }
   };
 
+  const getSettingsAuthHeaders = () => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const token = localStorage.getItem('token');
+    return {
+      'x-user-id': currentUser.id || currentUser.user_id || 1,
+      'x-user-role': currentUserRole || currentUser.role || 'Admin',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   // Domain CRUD Handlers
   const handleSaveDomain = async () => {
     if (!domainForm.company_name || !domainForm.domain_name) {
@@ -126,10 +136,13 @@ const Settings = () => {
     }
 
     try {
+      const headers = getSettingsAuthHeaders();
       if (domainForm.id) {
-        await axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm);
+        await axios.put(`/api/domains/${domainForm.id}`, domainForm, { headers })
+          .catch(() => axios.put(`http://localhost:5000/api/domains/${domainForm.id}`, domainForm, { headers }));
       } else {
-        await axios.post('http://localhost:5000/api/domains', domainForm);
+        await axios.post('/api/domains', domainForm, { headers })
+          .catch(() => axios.post('http://localhost:5000/api/domains', domainForm, { headers }));
       }
       setShowDomainModal(false);
       setDomainForm({ id: null, company_name: '', domain_name: '', support_email: '', is_primary: false });
@@ -143,7 +156,9 @@ const Settings = () => {
 
   const handleSetPrimaryDomain = async (id) => {
     try {
-      await axios.put(`http://localhost:5000/api/domains/${id}/set-primary`);
+      const headers = getSettingsAuthHeaders();
+      await axios.put(`/api/domains/${id}/set-primary`, {}, { headers })
+        .catch(() => axios.put(`http://localhost:5000/api/domains/${id}/set-primary`, {}, { headers }));
       fetchDomains();
       window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Primary domain updated.', type: 'success' });
@@ -170,7 +185,9 @@ const Settings = () => {
     if (!isOk) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/domains/${id}`);
+      const headers = getSettingsAuthHeaders();
+      await axios.delete(`/api/domains/${id}`, { headers })
+        .catch(() => axios.delete(`http://localhost:5000/api/domains/${id}`, { headers }));
       fetchDomains();
       window.dispatchEvent(new Event('domainUpdated'));
       customAlert({ title: 'Success', message: 'Domain deleted successfully.', type: 'success' });
@@ -181,10 +198,13 @@ const Settings = () => {
 
   const handleSaveSender = async () => {
     try {
+      const headers = getSettingsAuthHeaders();
       if (senderForm.id) {
-        await axios.put(`http://localhost:5000/api/senders/${senderForm.id}`, senderForm, { headers: { 'x-user-role': currentUserRole } });
+        await axios.put(`/api/senders/${senderForm.id}`, senderForm, { headers })
+          .catch(() => axios.put(`http://localhost:5000/api/senders/${senderForm.id}`, senderForm, { headers }));
       } else {
-        await axios.post('http://localhost:5000/api/senders', senderForm, { headers: { 'x-user-role': currentUserRole } });
+        await axios.post('/api/senders', senderForm, { headers })
+          .catch(() => axios.post('http://localhost:5000/api/senders', senderForm, { headers }));
       }
       setShowSenderModal(false);
       setSenderForm({ id: null, name: '', email: '', is_default: false });
@@ -204,7 +224,9 @@ const Settings = () => {
     });
     if (!isOk) return;
     try {
-      await axios.delete(`http://localhost:5000/api/senders/${id}`, { headers: { 'x-user-role': currentUserRole } });
+      const headers = getSettingsAuthHeaders();
+      await axios.delete(`/api/senders/${id}`, { headers })
+        .catch(() => axios.delete(`http://localhost:5000/api/senders/${id}`, { headers }));
       fetchSenders();
       window.dispatchEvent(new Event('smtpUpdated'));
     } catch (error) {

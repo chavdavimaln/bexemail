@@ -8,17 +8,10 @@ const { getUserPlanLimits, checkSmtpRequirement } = require('../utils/planLimits
 const checkDomainLimit = async (req, res, next) => {
   try {
     const adminId = getAdminId(req);
-    const companyId = req.companyId || req.tenant?.id || null;
-
-    const limits = await getUserPlanLimits(adminId, companyId);
+    const limits = await getUserPlanLimits(adminId);
     
-    let countQuery = 'SELECT COUNT(*) as count FROM registered_domains WHERE admin_id = ?';
-    let queryParams = [adminId];
-
-    if (companyId) {
-      countQuery = 'SELECT COUNT(*) as count FROM registered_domains WHERE company_id = ?';
-      queryParams = [companyId];
-    }
+    const countQuery = 'SELECT COUNT(*) as count FROM registered_domains WHERE admin_id = ?';
+    const queryParams = [adminId];
 
     const [countRows] = await pool.query(countQuery, queryParams);
     const currentCount = countRows[0]?.count || 0;
@@ -48,17 +41,10 @@ const checkDomainLimit = async (req, res, next) => {
 const checkSmtpLimit = async (req, res, next) => {
   try {
     const adminId = getAdminId(req);
-    const companyId = req.companyId || req.tenant?.id || null;
+    const limits = await getUserPlanLimits(adminId);
 
-    const limits = await getUserPlanLimits(adminId, companyId);
-
-    let countQuery = 'SELECT COUNT(*) as count FROM senders WHERE admin_id = ?';
-    let queryParams = [adminId];
-
-    if (companyId) {
-      countQuery = 'SELECT COUNT(*) as count FROM senders WHERE company_id = ?';
-      queryParams = [companyId];
-    }
+    const countQuery = 'SELECT COUNT(*) as count FROM senders WHERE admin_id = ?';
+    const queryParams = [adminId];
 
     const [countRows] = await pool.query(countQuery, queryParams);
     const currentCount = countRows[0]?.count || 0;
@@ -88,17 +74,10 @@ const checkSmtpLimit = async (req, res, next) => {
 const checkSeatLimit = async (req, res, next) => {
   try {
     const adminId = getAdminId(req);
-    const companyId = req.companyId || req.tenant?.id || null;
+    const limits = await getUserPlanLimits(adminId);
 
-    const limits = await getUserPlanLimits(adminId, companyId);
-
-    let countQuery = "SELECT COUNT(*) as count FROM admin_users WHERE (id = ? OR admin_id = ?)";
-    let queryParams = [adminId, adminId];
-
-    if (companyId) {
-      countQuery = 'SELECT COUNT(*) as count FROM admin_users WHERE company_id = ?';
-      queryParams = [companyId];
-    }
+    const countQuery = "SELECT COUNT(*) as count FROM admin_users WHERE (id = ? OR admin_id = ?)";
+    const queryParams = [adminId, adminId];
 
     const [countRows] = await pool.query(countQuery, queryParams);
     const currentCount = countRows[0]?.count || 0;
@@ -128,9 +107,7 @@ const checkSeatLimit = async (req, res, next) => {
 const checkSmtpExists = async (req, res, next) => {
   try {
     const adminId = getAdminId(req);
-    const companyId = req.companyId || req.tenant?.id || null;
-
-    const hasSmtp = await checkSmtpRequirement(adminId, companyId);
+    const hasSmtp = await checkSmtpRequirement(adminId);
 
     if (!hasSmtp) {
       return res.status(400).json({

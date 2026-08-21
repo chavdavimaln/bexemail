@@ -98,8 +98,8 @@ async function getSystemLimitsStatus(userId, companyId = null) {
       [domainRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains WHERE company_id = ?', [companyId]);
       [adminRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE company_id = ?', [companyId]);
     } else if (userId && userId !== 0) {
-      [senderRows] = await pool.query('SELECT COUNT(*) as count FROM senders WHERE admin_id = ? OR admin_id IS NULL OR is_default = 1', [userId]);
-      [domainRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains WHERE admin_id = ? OR admin_id IS NULL OR is_primary = 1', [userId]);
+      [senderRows] = await pool.query('SELECT COUNT(*) as count FROM senders WHERE admin_id = ?', [userId]);
+      [domainRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains WHERE admin_id = ?', [userId]);
       [adminRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE id = ? OR admin_id = ?', [userId, userId]);
     } else {
       [senderRows] = await pool.query('SELECT COUNT(*) as count FROM senders');
@@ -152,7 +152,7 @@ async function checkSmtpRequirement(userId, companyId = null) {
       [countRows] = await pool.query('SELECT COUNT(*) as count FROM senders WHERE company_id = ? AND (is_active = 1 OR is_active IS NULL)', [companyId]);
     } else if (userId) {
       [countRows] = await pool.query(
-        'SELECT COUNT(*) as count FROM senders WHERE (admin_id = ? OR is_default = 1) AND (is_active = 1 OR is_active IS NULL)',
+        'SELECT COUNT(*) as count FROM senders WHERE admin_id = ? AND (is_active = 1 OR is_active IS NULL)',
         [userId]
       );
     } else {

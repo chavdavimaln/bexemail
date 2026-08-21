@@ -15,11 +15,16 @@ async function getActiveSmtpTransporter(userId = null, companyId = null) {
     query = 'SELECT * FROM senders WHERE company_id = ? AND (is_active = 1 OR is_active IS NULL) ORDER BY is_default DESC, id DESC LIMIT 1';
     params = [companyId];
   } else if (userId) {
-    query = 'SELECT * FROM senders WHERE (admin_id = ? OR is_default = 1) AND (is_active = 1 OR is_active IS NULL) ORDER BY is_default DESC, id DESC LIMIT 1';
+    query = 'SELECT * FROM senders WHERE admin_id = ? AND (is_active = 1 OR is_active IS NULL) ORDER BY is_default DESC, id DESC LIMIT 1';
     params = [userId];
   }
 
-  const [rows] = await pool.query(query, params);
+  let [rows] = await pool.query(query, params);
+  if (rows.length === 0 && userId) {
+    // Fallback to any active sender if user has no specific sender
+    const [fallbackRows] = await pool.query('SELECT * FROM senders WHERE (is_active = 1 OR is_active IS NULL) ORDER BY is_default DESC, id DESC LIMIT 1');
+    rows = fallbackRows;
+  }
 
   if (rows.length === 0) {
     // Check fallback environment variables if no DB sender exists
