@@ -92,11 +92,11 @@ const Sidebar = () => {
   const checkPermission = (item) => {
     if (item.adminOnly) {
       const rawRoleStr = (userRole || '').toString().toLowerCase();
-      return rawRoleStr === 'super admin' || rawRoleStr === 'admin';
+      return rawRoleStr === 'super admin' || rawRoleStr === 'admin' || rawRoleStr === 'leader';
     }
 
     const rawUserRole = (userRole || '').toString().toLowerCase();
-    if (rawUserRole === 'super admin' || rawUserRole === 'admin') return true;
+    if (rawUserRole === 'super admin' || rawUserRole === 'admin' || rawUserRole === 'leader') return true;
     
     // Default allowed items
     if (item.path === '/' || item.path === '/profile') return true;
@@ -163,7 +163,7 @@ const Sidebar = () => {
         const allowedSubItems = item.subItems.filter(sub => {
           if (sub.adminOnly) {
             const rawRoleStr = (userRole || '').toString().toLowerCase();
-            return rawRoleStr === 'super admin' || rawRoleStr === 'admin';
+            return rawRoleStr === 'super admin' || rawRoleStr === 'admin' || rawRoleStr === 'leader';
           }
           return checkPermission(sub);
         });
@@ -178,9 +178,13 @@ const Sidebar = () => {
     <aside className={`${isCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-gray-200 flex-shrink-0 hidden md:flex flex-col h-full transition-all duration-300 ease-in-out`}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
         {!isCollapsed ? (
-          <h1 className="text-xl font-bold text-primary-600 tracking-tight transition-all">BexEmail</h1>
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/bexcode-logo.png" alt="BexCode" className="h-9 object-contain" />
+          </Link>
         ) : (
-          <div className="w-full text-center font-extrabold text-xl text-primary-600">B</div>
+          <Link to="/" className="w-full flex justify-center">
+            <img src="/bexcode-icon.png" alt="BexCode Icon" className="w-8 h-8 object-contain" />
+          </Link>
         )}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -205,11 +209,11 @@ const Sidebar = () => {
                       setOpenDropdowns(prev => ({ ...prev, [item.id]: true }));
                     }}
                     className={`w-full flex items-center justify-center p-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isAnyChildActive ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                      isAnyChildActive ? 'bg-red-50 text-[#d90a2c]' : 'text-secondary hover:bg-gray-100'
                     }`}
                     title={item.name}
                   >
-                    <span className={isAnyChildActive ? 'text-primary-600' : 'text-gray-500'}>
+                    <span className={isAnyChildActive ? 'text-[#d90a2c]' : 'text-gray-500'}>
                       {item.icon}
                     </span>
                   </button>
@@ -235,11 +239,11 @@ const Sidebar = () => {
                     }
                   })}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isAnyChildActive && !isDropdownOpen ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                    isAnyChildActive && !isDropdownOpen ? 'bg-red-50 text-[#d90a2c]' : 'text-secondary hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex items-center">
-                    <span className={`mr-3 ${isAnyChildActive && !isDropdownOpen ? 'text-primary-600' : 'text-gray-400'}`}>
+                    <span className={`mr-3 ${isAnyChildActive && !isDropdownOpen ? 'text-[#d90a2c]' : 'text-gray-400'}`}>
                       {item.icon}
                     </span>
                     {item.name}
@@ -258,7 +262,7 @@ const Sidebar = () => {
                             key={sub.name}
                             to={sub.path}
                             className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              isSubActive ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'
+                              isSubActive ? 'bg-red-50 text-[#d90a2c] font-semibold' : 'text-gray-600 hover:bg-gray-100'
                             }`}
                           >
                             {sub.name}
@@ -278,11 +282,11 @@ const Sidebar = () => {
                 key={item.name}
                 to={item.path}
                 className={`flex items-center justify-center p-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-primary-50 text-primary-600' : 'text-gray-700 hover:bg-gray-100'
+                  isActive ? 'bg-red-50 text-[#d90a2c]' : 'text-secondary hover:bg-gray-100'
                 }`}
                 title={item.name}
               >
-                <span className={isActive ? 'text-primary-600' : 'text-gray-500'}>
+                <span className={isActive ? 'text-[#d90a2c]' : 'text-gray-500'}>
                   {item.icon}
                 </span>
               </Link>
@@ -295,11 +299,11 @@ const Sidebar = () => {
               to={item.path}
               className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'bg-red-50 text-[#d90a2c] font-semibold'
+                  : 'text-secondary hover:bg-gray-100'
               }`}
             >
-              <span className={`mr-3 ${isActive ? 'text-primary-600' : 'text-gray-400'}`}>
+              <span className={`mr-3 ${isActive ? 'text-[#d90a2c]' : 'text-gray-400'}`}>
                 {item.icon}
               </span>
               {item.name}
@@ -332,8 +336,14 @@ const Header = () => {
     };
   }, []);
 
-  const avatarLetter = user.name ? user.name.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'A');
+  const avatarLetter = user.name ? user.name.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'L');
   const userAvatar = user.avatar || user.profile_picture || null;
+
+  // Role display normalization
+  let displayRole = user.role || 'Leader';
+  if (displayRole === 'Admin' || displayRole === 'Super Admin') displayRole = 'Leader';
+  if (displayRole === 'Associates' || displayRole === 'Sub Admin' || displayRole === 'Subscriber') displayRole = 'Manager';
+  if (displayRole === 'Developer' || displayRole === 'Developers' || displayRole === 'User') displayRole = 'Team Member';
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -354,12 +364,23 @@ const Header = () => {
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
-      <div className="font-semibold text-gray-800">Admin Panel</div>
+      <div className="font-bold text-secondary text-lg flex items-center gap-2">
+        <span className="text-[#d90a2c]">BexCode</span> Workspace
+      </div>
       <div className="flex items-center space-x-4">
+        {/* Role Pill Badge */}
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+          displayRole === 'Leader' ? 'bg-red-100 text-[#d90a2c] border border-red-200' :
+          displayRole === 'Manager' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+          'bg-emerald-100 text-emerald-800 border border-emerald-200'
+        }`}>
+          {displayRole}
+        </span>
+
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold focus:outline-none ring-2 ring-transparent hover:ring-primary-300 transition-all text-sm uppercase overflow-hidden border border-gray-200 shadow-xs"
+            className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-[#d90a2c] font-bold focus:outline-none ring-2 ring-transparent hover:ring-red-300 transition-all text-sm uppercase overflow-hidden border border-red-200 shadow-xs"
             title={user.name || user.email || 'My Profile'}
           >
             {userAvatar ? (
@@ -370,18 +391,22 @@ const Header = () => {
           </button>
           
           {isProfileOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
+            <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-xl py-2 ring-1 ring-black ring-opacity-5 z-50 border border-gray-100">
+              <div className="px-4 py-2 border-b border-gray-100">
+                <div className="font-semibold text-secondary text-sm truncate">{user.name || 'User'}</div>
+                <div className="text-xs text-gray-500 truncate">{user.email || ''}</div>
+              </div>
               <Link
                 to="/profile"
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                className="block px-4 py-2 text-sm text-secondary hover:bg-red-50 hover:text-[#d90a2c] transition-colors font-medium"
                 onClick={() => setIsProfileOpen(false)}
               >
-                View Profile
+                View Profile & Subscription
               </Link>
               <div className="border-t border-gray-100 my-1"></div>
               <button
                 onClick={handleLogout}
-                className="w-full text-left flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full text-left flex items-center px-4 py-2 text-sm text-[#d90a2c] hover:bg-red-50 transition-colors font-semibold"
               >
                 <LogOut size={16} className="mr-2" />
                 Logout

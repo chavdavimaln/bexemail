@@ -857,16 +857,16 @@ const Profiles = () => {
                     <td className="px-6 py-4 font-mono text-xs">{u.number || '—'}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${
-                        u.role === 'Admin' || u.role === 'Super Admin' ? 'bg-purple-100 text-purple-700' :
-                        u.role === 'Associates' || u.role === 'Subscriber' || u.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700' :
-                        'bg-emerald-100 text-emerald-700'
+                        u.role === 'Leader' || u.role === 'Admin' || u.role === 'Super Admin' ? 'bg-red-100 text-[#d90a2c] border border-red-200' :
+                        u.role === 'Manager' || u.role === 'Associates' || u.role === 'Subscriber' || u.role === 'Sub Admin' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                        'bg-emerald-100 text-emerald-700 border border-emerald-200'
                       }`}>
-                        {u.role === 'Super Admin' ? 'Admin' : (u.role === 'Subscriber' || u.role === 'Sub Admin' ? 'Associates' : (u.role === 'User' ? 'Developer' : u.role))}
+                        {u.role === 'Super Admin' || u.role === 'Admin' ? 'Leader' : (u.role === 'Subscriber' || u.role === 'Sub Admin' || u.role === 'Associates' ? 'Manager' : (u.role === 'User' || u.role === 'Developer' ? 'Team Member' : u.role))}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {u.role === 'Super Admin' || u.role === 'Admin' ? (
-                        <span className="text-xs text-purple-600 font-medium">All Access (Admin)</span>
+                      {u.role === 'Super Admin' || u.role === 'Admin' || u.role === 'Leader' ? (
+                        <span className="text-xs text-red-600 font-medium">All Access (Leader)</span>
                       ) : (
                         <button 
                           type="button"
@@ -1125,36 +1125,36 @@ const Profiles = () => {
                 </div>
               )}
 
-              {/* Roles: Subscription policy allows only 1 Admin account per subscription. Additional team seats are Associates or Developer */}
+              {/* Roles: Subscription policy allows only 1 Leader account per subscription. Additional team seats are Manager or Team Member */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Access Role *</label>
                 <select 
                   value={
-                    userForm.role === 'Super Admin' || userForm.role === 'Admin' ? 'Admin' :
-                    userForm.role === 'Associates' || userForm.role === 'Subscriber' || userForm.role === 'Sub Admin' ? 'Associates' :
-                    'Developer'
+                    userForm.role === 'Leader' || userForm.role === 'Super Admin' || userForm.role === 'Admin' ? 'Leader' :
+                    userForm.role === 'Manager' || userForm.role === 'Associates' || userForm.role === 'Subscriber' || userForm.role === 'Sub Admin' ? 'Manager' :
+                    'Team Member'
                   } 
                   disabled={userForm.id === currentUser.id} // Prevent lockouts
                   onChange={e => setUserForm({...userForm, role: e.target.value})} 
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-blue-50/20 font-medium text-sm"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none bg-red-50/20 font-medium text-sm text-secondary"
                 >
-                  {(currentUserRole === 'Super Admin' || userForm.id) && (
-                    <option value="Admin" disabled={!userForm.id || userForm.id !== currentUser.id}>
-                      Admin (Subscription Owner - Max 1)
+                  {(currentUserRole === 'Super Admin' || currentUserRole === 'Admin' || currentUserRole === 'Leader' || userForm.id) && (
+                    <option value="Leader" disabled={!userForm.id || userForm.id !== currentUser.id}>
+                      Leader (Subscription Owner - Max 1)
                     </option>
                   )}
-                  <option value="Associates">Associates</option>
-                  <option value="Developer">Developer</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Team Member">Team Member</option>
                 </select>
-                {!userForm.id && currentUserRole !== 'Super Admin' && (
+                {!userForm.id && currentUserRole !== 'Super Admin' && currentUserRole !== 'Leader' && (
                   <p className="text-[11px] text-amber-700 font-medium mt-1">
-                    * Subscription plans allow 1 Admin account. Additional seats are assigned as Associates or Developer.
+                    * Subscription plans allow 1 Leader account. Additional seats are assigned as Manager or Team Member.
                   </p>
                 )}
               </div>
 
               {/* Module Access Permissions Link */}
-              {userForm.role !== 'Super Admin' && userForm.role !== 'Admin' && (
+              {userForm.role !== 'Super Admin' && userForm.role !== 'Admin' && userForm.role !== 'Leader' && (
                 <div className="pt-3 border-t space-y-2">
                   <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Module Access Permissions</span>
                   <div className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl flex items-center justify-between">

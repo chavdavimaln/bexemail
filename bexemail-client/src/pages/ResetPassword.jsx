@@ -123,8 +123,10 @@ const ResetPassword = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 animate-in fade-in duration-300">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 className="text-4xl font-extrabold text-primary-600 tracking-tight mb-1">BexEmail</h1>
-        <h2 className="mt-2 text-2xl font-extrabold text-gray-900 tracking-tight">
+        <div className="flex justify-center mb-3">
+          <img src="/bexcode-logo.png" alt="BexCode CRM" className="h-12 object-contain" />
+        </div>
+        <h2 className="mt-2 text-2xl font-extrabold text-secondary tracking-tight">
           Reset Your Password
         </h2>
         <p className="mt-1 text-xs text-gray-500">

@@ -15,7 +15,7 @@ const Register = () => {
     number: '',
     password: '',
     confirmPassword: '',
-    role: 'Admin',
+    role: 'Leader',
     plan: urlPlan.toLowerCase()
   });
 
@@ -160,15 +160,14 @@ const Register = () => {
       
       {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-3xl text-center mb-6">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary-600 text-white shadow-lg shadow-primary-200 mb-3">
-          <Zap size={26} />
+        <div className="flex justify-center mb-3">
+          <img src="/bexcode-logo.png" alt="BexCode CRM" className="h-12 object-contain" />
         </div>
-        <h1 className="text-4xl font-black text-slate-900 tracking-tight">BexEmail CRM</h1>
-        <h2 className="mt-2 text-2xl font-extrabold text-slate-800 tracking-tight">
-          Domain & Account Registration
+        <h2 className="mt-2 text-2xl font-extrabold text-secondary tracking-tight">
+          Domain & Leader Account Registration
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium max-w-lg mx-auto">
-          Register your client domain, email format, and configure your plan features.
+          Register your client domain, workspace leader account, and configure your plan features.
         </p>
       </div>
 

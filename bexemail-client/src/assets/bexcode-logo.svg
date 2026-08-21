@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" fill="none">
+  <g transform="translate(10, 5)">
+    <path d="M42 5C22 5 6 21 6 41C6 54 13 65 24 71C17 76 9 79 2 80C14 86 28 88 42 88C64 88 82 70 82 48C82 24 64 5 42 5ZM38 60C30 60 24 54 24 46C24 38 30 32 38 32C46 32 52 38 52 46C52 54 46 60 38 60Z" fill="#D90A2C"/>
+  </g>
+  <text x="100" y="68" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="58" fill="#D90A2C">B</text>
+  <text x="138" y="68" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="58" fill="#D90A2C">ex</text>
+  <text x="202" y="68" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="58" fill="#161519">&lt;</text>
+  <text x="238" y="68" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="58" fill="#161519">code</text>
+  <text x="372" y="68" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="58" fill="#161519">&gt;</text>
+</svg>

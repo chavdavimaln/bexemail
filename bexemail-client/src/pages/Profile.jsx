@@ -72,10 +72,10 @@ const Profile = () => {
   };
 
   const planOptions = [
-    { code: 'free', name: 'Free Plan', price: '₹0/month', seats: '1 Seat (Admin only)', contacts: 'Up to 250 contacts' },
-    { code: 'essentials', name: 'Essentials Plan', price: '₹300/mo (then ₹550/mo)', seats: '3 Seats (1 Admin + 2 Associates/Developers)', contacts: 'Up to 50,000 contacts' },
-    { code: 'standard', name: 'Standard Plan', price: '₹525/mo (then ₹800/mo)', seats: '5 Seats (1 Admin + 4 Associates/Developers)', contacts: 'Up to 100,000 contacts' },
-    { code: 'premium', name: 'Premium Plan', price: '₹10,000/mo (then ₹15,000/mo)', seats: '10 Seats (1 Admin + 9 Associates/Developers)', contacts: 'Up to 150,000 contacts' }
+    { code: 'free', name: 'Free Plan', price: '₹0/month', seats: '1 Seat (1 Leader)', contacts: 'Up to 250 contacts' },
+    { code: 'essentials', name: 'Essentials Plan', price: '₹300/mo (then ₹550/mo)', seats: '3 Seats (1 Leader + 2 Manager/Team Member)', contacts: 'Up to 50,000 contacts' },
+    { code: 'standard', name: 'Standard Plan', price: '₹525/mo (then ₹800/mo)', seats: '5 Seats (1 Leader + 4 Manager/Team Member)', contacts: 'Up to 100,000 contacts' },
+    { code: 'premium', name: 'Premium Plan', price: '₹10,000/mo (then ₹15,000/mo)', seats: '10 Seats (1 Leader + 9 Manager/Team Member)', contacts: 'Up to 150,000 contacts' }
   ];
 
   useEffect(() => {
@@ -465,12 +465,12 @@ const Profile = () => {
                   <div className="text-slate-400 uppercase text-[10px] font-bold">Role-Based Seats</div>
                   <div className="text-sm font-black text-slate-900 mt-0.5">
                     {currentActivePlanCode === 'free'
-                      ? '1 Seat (Admin only)'
+                      ? '1 Seat (1 Leader)'
                       : currentActivePlanCode === 'essentials'
-                      ? '3 Seats (1 Admin + 2 Associates/Developers)'
+                      ? '3 Seats (1 Leader + 2 Manager/Team Member)'
                       : currentActivePlanCode === 'standard'
-                      ? '5 Seats (1 Admin + 4 Associates/Developers)'
-                      : `${activeSub.seats_limit || 10} Seats (1 Admin + ${(activeSub.seats_limit || 10) - 1} Associates/Developers)`}
+                      ? '5 Seats (1 Leader + 4 Manager/Team Member)'
+                      : `${activeSub.seats_limit || 10} Seats (1 Leader + ${(activeSub.seats_limit || 10) - 1} Manager/Team Member)`}
                   </div>
                 </div>
                 <div>

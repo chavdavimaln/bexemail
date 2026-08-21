@@ -38,8 +38,10 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 animate-in fade-in duration-500">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 className="text-4xl font-extrabold text-primary-600 tracking-tight mb-2">BexEmail</h1>
-        <h2 className="mt-4 text-3xl font-bold text-gray-900 tracking-tight">
+        <div className="flex justify-center mb-4">
+          <img src="/bexcode-logo.png" alt="BexCode CRM" className="h-12 object-contain" />
+        </div>
+        <h2 className="text-2xl font-bold text-secondary tracking-tight">
           Sign in to your account
         </h2>
         <p className="mt-2 text-xs sm:text-sm text-gray-600">
@@ -51,7 +53,7 @@ const Login = () => {
         <div className="bg-white py-8 px-4 shadow-xl shadow-gray-200/50 sm:rounded-2xl sm:px-10 border border-gray-100">
           <form className="space-y-6" onSubmit={handleLogin}>
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm border border-red-100">
+              <div className="bg-red-50 text-[#d90a2c] p-3 rounded-xl text-sm border border-red-200 font-medium">
                 {error}
               </div>
             )}
@@ -71,7 +73,7 @@ const Login = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-all"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#d90a2c] focus:border-[#d90a2c] sm:text-sm transition-all text-secondary"
                   placeholder="you@example.com"
                 />
               </div>
@@ -93,7 +95,7 @@ const Login = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-all"
+                  className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#d90a2c] focus:border-[#d90a2c] sm:text-sm transition-all text-secondary"
                   placeholder="••••••••"
                 />
                 <button
@@ -114,16 +116,16 @@ const Login = () => {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
+                  className="h-4 w-4 text-[#d90a2c] focus:ring-[#d90a2c] border-gray-300 rounded cursor-pointer"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 cursor-pointer font-medium">
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-secondary cursor-pointer font-medium">
                   Remember me
                 </label>
               </div>
 
               <div className="text-sm">
-                <Link to={`/reset-password?email=${encodeURIComponent(email || '')}`} className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
-                  Forgot your password?
+                <Link to="/reset-password" className="font-semibold text-[#d90a2c] hover:underline">
+                  Forgot password?
                 </Link>
               </div>
             </div>
@@ -131,9 +133,9 @@ const Login = () => {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all active:scale-[0.98]"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-[#d90a2c] hover:bg-[#b91c1c] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#d90a2c] transition-all transform active:scale-[0.99]"
               >
-                <LogIn className="mr-2 h-5 w-5" />
+                <LogIn className="w-5 h-5 mr-2" />
                 Sign in
               </button>
             </div>

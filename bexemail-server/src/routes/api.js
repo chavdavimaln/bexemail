@@ -26,6 +26,13 @@ router.post('/admin/merge-data', async (req, res) => {
   }
 });
 
+// Roles Management Endpoints
+const rolesController = require('../controllers/rolesController');
+router.get('/roles', rolesController.getRoles);
+router.post('/roles', rolesController.createRole);
+router.put('/roles/:id', rolesController.updateRole);
+router.delete('/roles/:id', rolesController.deleteRole);
+
 // Plan Limit & SMTP Validation Middleware
 const { checkDomainLimit, checkSmtpLimit, checkSeatLimit, checkSmtpExists } = require('../middleware/planCheck');
 

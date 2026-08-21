@@ -39,13 +39,16 @@ const checkRole = (allowedRoles) => {
 module.exports = {
   checkRole,
   ROLES: {
-    SUPER_ADMIN: 'Super Admin',
-    SUB_ADMIN: 'Sub Admin',
-    ADMIN: 'Admin',
-    DEVELOPER: 'Developer',
-    CAMPAIGN_MANAGER: 'Campaign Manager',
-    ASSOCIATES: 'Associates',
-    USER: 'User',
-    SUBSCRIBER: 'Subscriber'
+    LEADER: 'Leader',
+    MANAGER: 'Manager',
+    TEAM_MEMBER: 'Team Member',
+    SUPER_ADMIN: 'Leader',
+    ADMIN: 'Leader',
+    SUB_ADMIN: 'Manager',
+    ASSOCIATES: 'Manager',
+    DEVELOPER: 'Team Member',
+    CAMPAIGN_MANAGER: 'Manager',
+    USER: 'Team Member',
+    SUBSCRIBER: 'Manager'
   }
 };

@@ -98,14 +98,14 @@ exports.createAdmin = async (req, res) => {
     return res.status(400).json({ error: 'Name, email, password, and role are required' });
   }
 
-  // Role validation: Non-Super-Admins CANNOT create another Admin
-  if ((role === 'Admin' || role === 'Super Admin') && currentUser.role !== 'Super Admin') {
+  // Role validation: Non-Super-Admins CANNOT create another Leader
+  if ((role === 'Leader' || role === 'Admin' || role === 'Super Admin') && currentUser.role !== 'Super Admin') {
     return res.status(400).json({
-      error: 'Subscription plans allow only 1 Admin account per subscription. Additional team seats must be added as Associates or Developer roles.'
+      error: 'Subscription plans allow only 1 Leader account per subscription. Additional team seats must be added as Manager or Team Member roles.'
     });
   }
 
-  const allowedAdminRoles = ['Super Admin', 'Admin', 'Sub Admin', 'Campaign Manager', 'Developer', 'Associates'];
+  const allowedAdminRoles = ['Leader', 'Manager', 'Team Member', 'Super Admin', 'Admin', 'Sub Admin', 'Campaign Manager', 'Developer', 'Associates'];
   if (!allowedAdminRoles.includes(currentUser.role)) {
     return res.status(403).json({ error: 'Forbidden: You do not have permission to create users' });
   }
@@ -130,7 +130,7 @@ exports.createAdmin = async (req, res) => {
       FROM admin_users au
       LEFT JOIN user_subscriptions us ON au.id = us.user_id
       LEFT JOIN plans p ON (us.plan_id = p.id OR (us.plan_code IS NOT NULL AND p.plan_code = us.plan_code))
-      WHERE au.id = ? OR au.role IN ('Super Admin', 'Admin')
+      WHERE au.id = ? OR au.role IN ('Leader', 'Super Admin', 'Admin')
       ORDER BY us.id DESC LIMIT 1
     `, [targetTenantAdminId]);
 
@@ -138,18 +138,18 @@ exports.createAdmin = async (req, res) => {
     const maxSeats = userLimits.maxAdmins || activeSub.user_custom_seats || activeSub.custom_seats_limit || activeSub.sub_seats_limit || activeSub.plan_seats_limit || 1;
     const targetDomain = activeSub.domain || (currentUser.email ? currentUser.email.split('@')[1] : null);
 
-    // If role is Associates, check associate limit
-    if (role === 'Associates' && activeSub.custom_associates_limit) {
-      const [assocCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role = "Associates" AND (id = ? OR admin_id = ?)', [targetTenantAdminId, targetTenantAdminId]);
+    // If role is Manager, check custom manager limit if present
+    if ((role === 'Manager' || role === 'Associates') && activeSub.custom_associates_limit) {
+      const [assocCountRows] = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE role IN ("Manager", "Associates") AND (id = ? OR admin_id = ?)', [targetTenantAdminId, targetTenantAdminId]);
       if ((assocCountRows[0]?.count || 0) >= activeSub.custom_associates_limit) {
-        return res.status(400).json({ error: `Associates seat limit reached. Maximum allowed Associates configured in database is ${activeSub.custom_associates_limit}.` });
+        return res.status(400).json({ error: `Manager seat limit reached. Maximum allowed Managers configured in database is ${activeSub.custom_associates_limit}.` });
       }
     }
 
     // Enforce overall seat limit
     if (userCount >= maxSeats && currentUser.role !== 'Super Admin') {
       return res.status(400).json({
-        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active ${userLimits.planName} allows up to ${maxSeats} seats (1 Admin + ${maxSeats - 1} Associates/Developers). Upgrade your plan to add more team members.`
+        error: `Seat capacity limit reached (${userCount}/${maxSeats} seats used). Your active ${userLimits.planName} allows up to ${maxSeats} seats (1 Leader + ${maxSeats - 1} Manager/Team Member). Upgrade your plan to add more team members.`
       });
     }
 

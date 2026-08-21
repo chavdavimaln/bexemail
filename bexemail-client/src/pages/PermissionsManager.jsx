@@ -114,10 +114,10 @@ const PermissionsManager = () => {
     if (!userObj) return;
     setSelectedUserId(userObj.id);
 
-    let normalizedRole = 'Developer';
-    if (userObj.role === 'Super Admin' || userObj.role === 'Admin') normalizedRole = 'Admin';
-    else if (userObj.role === 'Associates' || userObj.role === 'Subscriber' || userObj.role === 'Sub Admin') normalizedRole = 'Associates';
-    else normalizedRole = 'Developer';
+    let normalizedRole = 'Team Member';
+    if (userObj.role === 'Super Admin' || userObj.role === 'Admin' || userObj.role === 'Leader') normalizedRole = 'Leader';
+    else if (userObj.role === 'Associates' || userObj.role === 'Subscriber' || userObj.role === 'Sub Admin' || userObj.role === 'Manager') normalizedRole = 'Manager';
+    else normalizedRole = 'Team Member';
     setUserRole(normalizedRole);
 
     let perms = {};
@@ -345,11 +345,11 @@ const PermissionsManager = () => {
                         <p className="text-[11px] text-gray-500 break-all">{u.email}</p>
                       </div>
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
-                        u.role === 'Super Admin' || u.role === 'Admin' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                        u.role === 'Associates' || u.role === 'Subscriber' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                        u.role === 'Leader' || u.role === 'Super Admin' || u.role === 'Admin' ? 'bg-red-100 text-[#d90a2c] border-red-200' :
+                        u.role === 'Manager' || u.role === 'Associates' || u.role === 'Subscriber' ? 'bg-blue-100 text-blue-800 border-blue-200' :
                         'bg-emerald-100 text-emerald-800 border-emerald-200'
                       }`}>
-                        {u.role === 'Super Admin' ? 'Admin' : (u.role === 'Subscriber' ? 'Associates' : (u.role === 'User' ? 'Developer' : u.role))}
+                        {u.role === 'Super Admin' || u.role === 'Admin' ? 'Leader' : (u.role === 'Subscriber' || u.role === 'Associates' ? 'Manager' : (u.role === 'User' || u.role === 'Developer' ? 'Team Member' : u.role))}
                       </span>
                     </div>
                   </div>
@@ -364,13 +364,13 @@ const PermissionsManager = () => {
 
           <div className="p-3.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-2xl text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-xs">
             <div className="flex items-center gap-2">
-              <ShieldCheck size={18} className="text-primary-600 flex-shrink-0" />
+              <ShieldCheck size={18} className="text-[#d90a2c] flex-shrink-0" />
               <span>
-                Active Subscription Plan: <strong className="uppercase text-primary-700">{activePlanCode} Plan</strong> ({displayUsers.length} / {maxSeats} Seats Configured)
+                Active Subscription Plan: <strong className="uppercase text-[#d90a2c]">{activePlanCode} Plan</strong> ({displayUsers.length} / {maxSeats} Seats Configured)
               </span>
             </div>
-            <span className="px-2.5 py-1 bg-primary-100 text-primary-800 rounded-lg text-[10px] uppercase font-black flex-shrink-0">
-              {activePlanCode === 'free' ? '1 Admin Seat (Self Access Only)' : `${maxSeats} Seats (1 Mandatory Admin + ${maxSeats - 1} Team Members)`}
+            <span className="px-2.5 py-1 bg-red-100 text-[#d90a2c] rounded-lg text-[10px] uppercase font-black flex-shrink-0">
+              {activePlanCode === 'free' ? '1 Leader Seat (Self Access Only)' : `${maxSeats} Seats (1 Mandatory Leader + ${maxSeats - 1} Manager/Team Member)`}
             </span>
           </div>
 
@@ -393,11 +393,11 @@ const PermissionsManager = () => {
                   <select
                     value={userRole}
                     onChange={e => setUserRole(e.target.value)}
-                    className="px-3.5 py-2 bg-slate-800 border border-slate-700 text-white font-bold text-xs rounded-xl outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-800 border border-slate-700 text-white font-bold text-xs rounded-xl outline-none focus:ring-2 focus:ring-red-400 cursor-pointer"
                   >
-                    <option value="Admin">Admin</option>
-                    <option value="Associates">Associates</option>
-                    <option value="Developer">Developer</option>
+                    <option value="Leader">Leader</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Team Member">Team Member</option>
                   </select>
                 </div>
               </div>

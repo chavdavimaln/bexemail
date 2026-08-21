@@ -10,7 +10,7 @@ const ComparePlans = () => {
       title: 'Core Plan Specifications (PDF Specs)',
       features: [
         { name: 'Monthly Price', free: '0/month', essentials: '300/mo for 12 mos\n(Then ₹550/mo)', standard: '525/mo for 12 mos\n(Then ₹800/mo)', premium: '10,000/mo for 12 mos\n(Then ₹15,000/mo)' },
-        { name: 'Role-based Access', free: '1 Seat - admin only', essentials: '3 Seats (admin/associates)', standard: '5 Seats (admin/associates)', premium: '10 role (admin/associates)' },
+        { name: 'Role-based Access', free: '1 Seat (1 Leader)', essentials: '3 Seats (1 Leader + 2 Manager/Team Member)', standard: '5 Seats (1 Leader + 4 Manager/Team Member)', premium: '10 Seats (1 Leader + 9 Manager/Team Member)' },
         { name: 'Maximum Contact Count', free: 'Up to 250 contacts', essentials: 'Up to 50,000 contacts ($300/mo tier)', standard: 'Up to 100,000 contacts ($800/mo tier)', premium: 'Contact us for a custom plan' },
         { name: 'Monthly Email Sending Limit', free: '1,000 / mo', essentials: '5,000 / mo', standard: '6,000 / mo', premium: '150,000 / mo' }
       ]

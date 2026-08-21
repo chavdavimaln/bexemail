@@ -215,14 +215,72 @@ async function setupDB() {
       )
     `);
 
+    // Create roles table matching roles_table.jpg specifications
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id VARCHAR(64) PRIMARY KEY,
+        company_id INT NULL,
+        name VARCHAR(100) NOT NULL,
+        description TEXT NULL,
+        color VARCHAR(20) DEFAULT '#d90a2c',
+        is_system TINYINT(1) DEFAULT 1,
+        is_active TINYINT(1) DEFAULT 1,
+        system_key VARCHAR(50) NOT NULL,
+        created_by INT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default system roles if not present
+    const defaultRoles = [
+      {
+        id: '5cf9166f-483f-4883-b6dd-6e15eda9c00a',
+        name: 'Leader',
+        description: 'Full workspace administrator.',
+        color: '#DE350B',
+        is_system: 1,
+        is_active: 1,
+        system_key: 'leader'
+      },
+      {
+        id: '118844d7-87ce-4f19-9ae1-debb5a1b3cf5',
+        name: 'Manager',
+        description: 'Manages projects and team members.',
+        color: '#0079BF',
+        is_system: 1,
+        is_active: 1,
+        system_key: 'manager'
+      },
+      {
+        id: '7b370a0a-3b89-44d8-ad06-12b98e74a402',
+        name: 'Team Member',
+        description: 'Contributes to assigned tasks.',
+        color: '#519839',
+        is_system: 1,
+        is_active: 1,
+        system_key: 'team'
+      }
+    ];
+
+    for (const r of defaultRoles) {
+      const [ex] = await pool.query('SELECT id FROM roles WHERE system_key = ? OR name = ?', [r.system_key, r.name]);
+      if (ex.length === 0) {
+        await pool.query(
+          'INSERT INTO roles (id, name, description, color, is_system, is_active, system_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [r.id, r.name, r.description, r.color, r.is_system, r.is_active, r.system_key]
+        );
+      }
+    }
+
     // Profile & User Management & CRM Domain & Plan migrations
     const migrationQueries = [
       "ALTER TABLE admin_users ADD COLUMN username VARCHAR(255) NULL",
       "ALTER TABLE admin_users ADD COLUMN permissions JSON NULL",
-      "ALTER TABLE admin_users MODIFY COLUMN role VARCHAR(255) DEFAULT 'Developer'",
-      "UPDATE admin_users SET role = 'Admin' WHERE role = 'Super Admin'",
-      "UPDATE admin_users SET role = 'Associates' WHERE role IN ('Sub Admin', 'Subscriber')",
-      "UPDATE admin_users SET role = 'Developer' WHERE role IN ('User', 'user')",
+      "ALTER TABLE admin_users MODIFY COLUMN role VARCHAR(255) DEFAULT 'Team Member'",
+      "UPDATE admin_users SET role = 'Leader' WHERE role IN ('Admin', 'Super Admin')",
+      "UPDATE admin_users SET role = 'Manager' WHERE role IN ('Associates', 'Sub Admin', 'Subscriber')",
+      "UPDATE admin_users SET role = 'Team Member' WHERE role IN ('Developers', 'Developer', 'User', 'user')",
       "ALTER TABLE admin_users ADD COLUMN admin_id INT NULL DEFAULT NULL",
       "ALTER TABLE senders ADD COLUMN admin_id INT NULL",
       "ALTER TABLE lists ADD COLUMN admin_id INT NULL",

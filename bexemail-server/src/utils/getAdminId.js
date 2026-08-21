@@ -34,12 +34,12 @@ function getAdminId(req) {
     const headerAdminId = req.headers ? (req.headers['x-admin-id'] || req.headers['X-Admin-Id']) : null;
 
     const userId = (user && user.id) ? Number(user.id) : (headerUserId ? Number(headerUserId) : null);
-    const role = (user && user.role) ? user.role : (headerRole || 'Admin');
+    const role = (user && user.role) ? user.role : (headerRole || 'Leader');
     const adminId = (user && user.admin_id) ? Number(user.admin_id) : (headerAdminId ? Number(headerAdminId) : null);
 
     if (!userId) return 1;
 
-    if (role === 'Admin' || role === 'Super Admin') {
+    if (role === 'Leader' || role === 'Admin' || role === 'Super Admin') {
       return adminId || userId;
     }
     return adminId || userId;

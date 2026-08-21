@@ -1,10 +1,10 @@
 const pool = require('../config/db');
 
 // Plan limits definition per tier:
-// Free Plan: 1 seat (1 Admin), 1 domain, 1 SMTP server
-// Essentials Plan: 3 seats (1 Admin + 2 Associates/Developers), 3 domains, 3 SMTP servers
-// Standard Plan: 5 seats (1 Admin + 4 Associates/Developers), 5 domains, 5 SMTP servers
-// Premium Plan: 10 seats (1 Admin + 9 Associates/Developers), 10 domains, 10 SMTP servers
+// Free Plan: 1 seat (1 Leader), 1 domain, 1 SMTP server
+// Essentials Plan: 3 seats (1 Leader + 2 Manager/Team Member), 3 domains, 3 SMTP servers
+// Standard Plan: 5 seats (1 Leader + 4 Manager/Team Member), 5 domains, 5 SMTP servers
+// Premium Plan: 10 seats (1 Leader + 9 Manager/Team Member), 10 domains, 10 SMTP servers
 
 const PLAN_LIMITS_MAP = {
   free: { admins: 1, domains: 1, smtps: 1, name: 'Free Plan' },
@@ -104,7 +104,7 @@ async function getSystemLimitsStatus(userId, companyId = null) {
     } else {
       [senderRows] = await pool.query('SELECT COUNT(*) as count FROM senders');
       [domainRows] = await pool.query('SELECT COUNT(*) as count FROM registered_domains');
-      [adminRows] = await pool.query("SELECT COUNT(*) as count FROM admin_users WHERE role IN ('Admin', 'Super Admin')");
+      [adminRows] = await pool.query("SELECT COUNT(*) as count FROM admin_users WHERE role IN ('Leader', 'Admin', 'Super Admin')");
     }
 
     const smtpCount = senderRows[0]?.count || 0;

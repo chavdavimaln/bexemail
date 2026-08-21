@@ -465,7 +465,7 @@ const PlanManagement = () => {
                     <span>Plan Specifications: {selectedPlanObj.name}</span>
                     <span className="text-amber-700 font-black">{selectedPlanObj.price_detail || 'Standard Rate'}</span>
                   </div>
-                  <div className="text-slate-700">Role-based Seat Limit: <strong>{selectedPlanObj.seats_limit || 1} Seats (1 Admin + {(selectedPlanObj.seats_limit || 1) - 1} Associates/Developers)</strong></div>
+                  <div className="text-slate-700">Role-based Seat Limit: <strong>{selectedPlanObj.seats_limit || 1} Seats (1 Leader + {(selectedPlanObj.seats_limit || 1) - 1} Manager/Team Member)</strong></div>
                   <div className="text-slate-700">Contact Limit: <strong>{selectedPlanObj.contacts_limit_info || selectedPlanObj.contacts_limit?.toLocaleString()}</strong></div>
                   <div className="text-slate-700">Email Send Limit: <strong>{selectedPlanObj.emails_limit?.toLocaleString()} sends</strong></div>
                 </div>
